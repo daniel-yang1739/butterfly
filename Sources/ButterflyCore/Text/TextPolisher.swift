@@ -149,7 +149,18 @@ public final class TextPolisher {
             ("拍森|拍省", "Python"),
             ("達克", "Docker"),
             ("一到兩輪", "1 到 2 輪"),
-            ("做次分析", "做一次分析")
+            ("做次分析", "做一次分析"),
+            
+            // Real Spoken Acoustic Error Homophone Self-Healing
+            ("(?i)雪[風|豐|峰]\\s*效應|出入\\s*雪風|出入\\s*雪崩", "出現雪崩效應"),
+            ("(?i)(?:com|con|come|sister|season|犧牲)\\s*Prom(?:pt)?", "System Prompt"),
+            ("(?i)(?:Maro|Marlo|Mro|Model|Mdl)\\s*(?:動至|凍至|動字|等詞彙|等字)", "Model 等詞彙"),
+            ("(?i)\\b(?:Maro|Marlo|Mro)\\b", "Model"),
+            ("(?i)(?:列印|列成|寫成|做成)?\\s*(?:怎麼當|買當|馬克當|麥當|末當|默當|Mark\\s*down)\\s*(?:清單|列表|語法|格式)?", "列成 Markdown 清單"),
+            ("希望\\s*(?:大陸|斷落|大路)\\s*(?:不要|太碎|太細|分段)?", "希望段落不要太碎"),
+            ("我們家把它|我們家把", "我們要把它"),
+            ("第三個\\s*(?:智能|只能|智力|智慧)\\s*是", "第三個是"),
+            ("這樣拿\\s*謝謝|這樣拿|這樣啦", "這樣，謝謝。")
         ]
         
         for item in tokenPatterns {
@@ -482,7 +493,7 @@ public final class TextPolisher {
         guard text.count > 15 else { return text }
         
         // 1. Check for enumerated list indicators (e.g. 第一點... 第二點...)
-        let listPattern = "(?:(?<=[。！？\n，、\\s])|^|(?<=[^第0-9一二三四五六七八九十]))(第一種模式|第二種模式|第\\s*[一二三四五六七八九十0-9]+\\s*[點個項件、，事]|首先|一來|其次|二來|再來|最後[一點項事]?|總結來說|總結[：:]?|另外[一點項件事]?|此外[一點項件事]?)"
+        let listPattern = "(?:(?<=[。！？\n，、\\s])|^|(?<=[^第0-9一二三四五六七八九十]))(第一種模式|第二種模式|第\\s*[一二三四五六七八九十0-9]+\\s*[點個項件、，事]|一個是|第一個[是]?|第二個[是]?|第三個[是]?|第四個[是]?|首先|一來|其次|二來|再來[是]?|最後[一點項事]?|總結來說|總結[：:]?|另外[一點項件事]?|此外[一點項件事]?)"
         
         if let regex = try? NSRegularExpression(pattern: listPattern, options: []) {
             let nsString = text as NSString

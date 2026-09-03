@@ -103,6 +103,11 @@ public enum TestRunner {
         let boundaryOut = polisher.polish(boundaryInput, mode: .structuredNote)
         assertTrue((boundaryOut.contains("- 第一個") || boundaryOut.contains("- 第 1 個")) && boundaryOut.contains("錯字會自癒") && boundaryOut.contains("修到好") && !boundaryOut.contains("又又"), "TC-C11: Boundary-free bullet extraction & homophone healing ('錯字為治癒' -> '錯字會自癒')")
         
+        // TC-C12: Real spoken acoustic errors self-healing (com Prom, Maro, 雪風, 大陸, 怎麼當)
+        let realAcousticInput = "我想說我們今天開會主要討論了三件事情，然後一個是關於前端游標注入的邏輯，我們要確保說輸入框不會出入雪風效應，然後。再來是錯字要修復像是 com Prom 或者 Maro 動至我們家把它修復。第三個智能是排版的部分希望大陸不要太碎適當的幫我列印怎麼當清單整理好這樣拿謝謝。"
+        let realAcousticOut = polisher.polish(realAcousticInput, mode: .structuredNote)
+        assertTrue(realAcousticOut.contains("雪崩效應") && realAcousticOut.contains("System Prompt") && realAcousticOut.contains("Model") && realAcousticOut.contains("Markdown 清單") && realAcousticOut.contains("希望段落不要太碎") && realAcousticOut.contains("- 一個是") && realAcousticOut.contains("- 再來是"), "TC-C12: Real acoustic errors self-healing ('com Prom' -> 'System Prompt', '雪風' -> '雪崩', '怎麼當' -> 'Markdown')")
+        
         // MARK: - 4. SystemPrompt Tests
         print("\n📦 Suite 4: SystemPrompt (Dynamic Loading & Fallbacks)")
         let sysPrompt = SystemPrompt.shared
