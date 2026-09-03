@@ -21,49 +21,6 @@ public struct TechDictionary: Sendable {
         return parseVocabulary(from: content)
     }
     
-    /// Dynamically loads official open-source Rime tech & developer vocabulary from upstream dict files
-    public static func loadBundledVocabulary() -> [String] {
-        var results: [String] = []
-        
-        // 1. Official upstream Rime English & IT extensions (rime_en_ext.dict.yaml)
-        if let url = Bundle.module.url(forResource: "rime_en_ext", withExtension: "dict.yaml"),
-           let content = try? String(contentsOf: url, encoding: .utf8) {
-            results.append(contentsOf: parseRimeDict(from: content))
-        }
-        
-        // 2. Official upstream Rime Chinese-English mixed lexicon (rime_cn_en.txt)
-        if let url = Bundle.module.url(forResource: "rime_cn_en", withExtension: "txt"),
-           let content = try? String(contentsOf: url, encoding: .utf8) {
-            results.append(contentsOf: parseVocabulary(from: content))
-        }
-        
-        return results
-    }
-    
-    /// Parse official Rime tab-separated .dict.yaml format
-    private static func parseRimeDict(from content: String) -> [String] {
-        var words: [String] = []
-        var inHeader = false
-        
-        for line in content.components(separatedBy: .newlines) {
-            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.isEmpty || trimmed.hasPrefix("#") { continue }
-            if trimmed == "---" { inHeader = true; continue }
-            if trimmed == "..." { inHeader = false; continue }
-            if inHeader { continue }
-            
-            // First column in Rime is the actual target word
-            let parts = trimmed.components(separatedBy: "\t")
-            if let first = parts.first?.trimmingCharacters(in: .whitespacesAndNewlines), !first.isEmpty {
-                // Ignore html entities like &nbsp;
-                if !first.hasPrefix("&") && first.count > 1 {
-                    words.append(first)
-                }
-            }
-        }
-        return words
-    }
-    
     /// Clean and parse text content into deduplicated word tokens
     private static func parseVocabulary(from content: String) -> [String] {
         return content
@@ -77,12 +34,12 @@ public struct TechDictionary: Sendable {
             }
     }
     
-    /// Combined, deduplicated vocabulary loaded from user dictionary (~/.config/butterfly/dictionary.txt) and bundled resource
+    /// Combined, deduplicated vocabulary loaded strictly from user dictionary (~/.config/butterfly/dictionary.txt)
     public static var allVocabulary: [String] {
         var set = Set<String>()
         var result: [String] = []
         
-        for term in loadUserVocabulary() + loadBundledVocabulary() {
+        for term in loadUserVocabulary() {
             if !set.contains(term) {
                 set.insert(term)
                 result.append(term)
