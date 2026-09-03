@@ -24,7 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var isRecording: Bool = false
     private var isDownloadingModel: Bool = false
     private var activeMode: ButterflyMode = .liveStreaming
-    private var activeModelSpec: ModelSpec = ModelManager.defaultModels[0] // Default: Apple Speech Native On-Device
+    private var activeModelSpec: ModelSpec = ModelManager.shared.getBestAvailableModel()
     
     private var streamingInjectedText: String = ""
     private var latestTranscript: String = ""
@@ -320,7 +320,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         do {
             try ModelManager.shared.deleteModel(spec)
             if activeModelSpec.id == spec.id {
-                activeModelSpec = ModelManager.defaultModels[0] // Revert to Apple Speech Native
+                activeModelSpec = ModelManager.shared.getBestAvailableModel()
             }
             updateMenu()
             print("Butterfly: Deleted model \(spec.displayName)")
@@ -332,7 +332,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func clearAllModelCache() {
         do {
             try ModelManager.shared.clearAllCache()
-            activeModelSpec = ModelManager.defaultModels[0] // Revert to Apple Speech Native
+            activeModelSpec = ModelManager.shared.getBestAvailableModel()
             updateMenu()
             print("Butterfly: Cleared all model cache")
         } catch {

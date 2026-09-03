@@ -24,7 +24,7 @@ public struct ModelSpec: Identifiable, Equatable, Hashable, Sendable {
         self.displayName = displayName
         self.parameterCount = parameterCount
         self.sizeBytes = sizeBytes
-        self.formattedSize = ByteCountFormatter.string(fromByteCount: sizeBytes, countStyle: .file)
+        self.formattedSize = sizeBytes > 0 ? ByteCountFormatter.string(fromByteCount: sizeBytes, countStyle: .file) : "Built-in"
         self.downloadURL = downloadURL
         self.recommendedHardware = recommendedHardware
         self.description = description
@@ -35,43 +35,8 @@ public struct ModelSpec: Identifiable, Equatable, Hashable, Sendable {
 public final class ModelManager: @unchecked Sendable {
     public static let shared = ModelManager()
     
-    public static let defaultModels: [ModelSpec] = [
-        ModelSpec(
-            id: "apple-speech-native",
-            displayName: "Apple Speech (Native On-Device)",
-            parameterCount: "Built-in",
-            sizeBytes: 0,
-            downloadURL: nil,
-            recommendedHardware: .appleNeuralEngine,
-            description: "Apple Silicon built-in on-device dictation engine (0 MB, instantaneous)"
-        ),
-        ModelSpec(
-            id: "whisper-tiny",
-            displayName: "Whisper Tiny (OpenAI)",
-            parameterCount: "39M",
-            sizeBytes: 75 * 1024 * 1024,
-            downloadURL: URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin"),
-            recommendedHardware: .metalGPU,
-            description: "Ultra lightweight (75 MB), ideal for fast commands and low latency"
-        ),
-        ModelSpec(
-            id: "whisper-base",
-            displayName: "Whisper Base (OpenAI)",
-            parameterCount: "74M",
-            sizeBytes: 142 * 1024 * 1024,
-            downloadURL: URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin"),
-            recommendedHardware: .metalGPU,
-            description: "Lightweight (142 MB), balanced for everyday dictation and phrases"
-        ),
-        ModelSpec(
-            id: "whisper-small",
-            displayName: "Whisper Small (OpenAI - Code-Switching)",
-            parameterCount: "244M",
-            sizeBytes: 466 * 1024 * 1024,
-            downloadURL: URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin"),
-            recommendedHardware: .appleNeuralEngine,
-            description: "High accuracy (466 MB), excellent for mixed Chinese-English programming jargon"
-        ),
+    /// Whitelist sorted by strength from STRONGEST (Rank 1) to WEAKEST fallback (Rank 6)
+    public static let prioritizedWhitelist: [ModelSpec] = [
         ModelSpec(
             id: "whisper-large-v3-turbo",
             displayName: "Whisper Large-v3-Turbo (Flagship)",
@@ -79,7 +44,16 @@ public final class ModelManager: @unchecked Sendable {
             sizeBytes: 809 * 1024 * 1024,
             downloadURL: URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin"),
             recommendedHardware: .appleNeuralEngine,
-            description: "Top-tier flagship accuracy (809 MB), state-of-the-art multilingual recognition"
+            description: "Rank 1: State-of-the-art flagship accuracy (809 MB), highest precision for complex speech"
+        ),
+        ModelSpec(
+            id: "whisper-small",
+            displayName: "Whisper Small (Code-Switching)",
+            parameterCount: "244M",
+            sizeBytes: 466 * 1024 * 1024,
+            downloadURL: URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin"),
+            recommendedHardware: .appleNeuralEngine,
+            description: "Rank 2: High accuracy (466 MB), optimized for mixed Chinese-English programming jargon"
         ),
         ModelSpec(
             id: "sensevoice-small",
@@ -88,9 +62,40 @@ public final class ModelManager: @unchecked Sendable {
             sizeBytes: 220 * 1024 * 1024,
             downloadURL: URL(string: "https://huggingface.co/FunAudioLLM/SenseVoiceSmall/resolve/main/model.onnx"),
             recommendedHardware: .metalGPU,
-            description: "Ultra-low latency (<0.03s, 220 MB) multilingual fast speech recognition"
+            description: "Rank 3: Ultra-low latency (<0.03s, 220 MB) fast Chinese/English speech recognition"
+        ),
+        ModelSpec(
+            id: "whisper-base",
+            displayName: "Whisper Base (Balanced)",
+            parameterCount: "74M",
+            sizeBytes: 142 * 1024 * 1024,
+            downloadURL: URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin"),
+            recommendedHardware: .metalGPU,
+            description: "Rank 4: Balanced everyday dictation (142 MB)"
+        ),
+        ModelSpec(
+            id: "whisper-tiny",
+            displayName: "Whisper Tiny (Lightweight)",
+            parameterCount: "39M",
+            sizeBytes: 75 * 1024 * 1024,
+            downloadURL: URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin"),
+            recommendedHardware: .metalGPU,
+            description: "Rank 5: Ultra lightweight (75 MB), low latency"
+        ),
+        ModelSpec(
+            id: "apple-speech-native",
+            displayName: "Apple Speech (Native Fallback)",
+            parameterCount: "Built-in",
+            sizeBytes: 0,
+            downloadURL: nil,
+            recommendedHardware: .appleNeuralEngine,
+            description: "Rank 6: Apple Silicon built-in baseline fallback (0 MB, instantaneous)"
         )
     ]
+    
+    public static var defaultModels: [ModelSpec] {
+        return prioritizedWhitelist
+    }
     
     public let cacheDirectory: URL
     
@@ -103,6 +108,21 @@ public final class ModelManager: @unchecked Sendable {
         }
         
         try? FileManager.default.createDirectory(at: self.cacheDirectory, withIntermediateDirectories: true)
+    }
+    
+    /// Returns the highest-ranked (strongest) model available locally in the cache.
+    /// Scans the whitelist from Rank 1 down to Rank 6.
+    public func getBestAvailableModel() -> ModelSpec {
+        for model in ModelManager.prioritizedWhitelist {
+            if model.id == "apple-speech-native" {
+                continue
+            }
+            if isModelDownloaded(model) {
+                return model
+            }
+        }
+        // Baseline fallback (Apple Speech Native)
+        return ModelManager.prioritizedWhitelist.last!
     }
     
     /// Get the local cache file path for a model specification
@@ -129,61 +149,63 @@ public final class ModelManager: @unchecked Sendable {
             throw ButterflyError.modelNotFound("No download URL provided for model \(spec.id)")
         }
         
-        let destination = localPath(for: spec)
-        if isModelDownloaded(spec) {
-            progress?(1.0)
-            return destination
-        }
+        let destinationURL = localPath(for: spec)
+        let temporaryURL = cacheDirectory.appendingPathComponent("\(destinationURL.lastPathComponent).downloading")
         
-        let session = URLSession.shared
-        let (asyncBytes, response) = try await session.bytes(from: downloadURL)
+        // Remove existing temp file if any
+        try? FileManager.default.removeItem(at: temporaryURL)
+        
+        var request = URLRequest(url: downloadURL)
+        request.timeoutInterval = 300 // 5 minute timeout for large models
+        
+        let (bytes, response) = try await URLSession.shared.bytes(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
-            throw ButterflyError.networkError("Failed to download model from \(downloadURL)")
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+            throw ButterflyError.networkError("Server returned HTTP \(statusCode)")
         }
         
-        let totalBytes = response.expectedContentLength > 0 ? response.expectedContentLength : spec.sizeBytes
-        let tempDestination = destination.deletingLastPathComponent().appendingPathComponent("\(spec.id).downloading")
+        let expectedLength = response.expectedContentLength
+        var receivedLength: Int64 = 0
         
-        try? FileManager.default.removeItem(at: tempDestination)
-        FileManager.default.createFile(atPath: tempDestination.path, contents: nil)
+        FileManager.default.createFile(atPath: temporaryURL.path, contents: nil)
+        let fileHandle = try FileHandle(forWritingTo: temporaryURL)
         
-        guard let fileHandle = try? FileHandle(forWritingTo: tempDestination) else {
-            throw ButterflyError.networkError("Failed to create temporary file for \(spec.displayName)")
-        }
-        
-        var bytesWritten: Int64 = 0
         var buffer = Data()
-        buffer.reserveCapacity(65536)
+        buffer.reserveCapacity(64 * 1024)
         
-        for try await byte in asyncBytes {
+        for try await byte in bytes {
             buffer.append(byte)
-            if buffer.count >= 65536 {
-                try fileHandle.write(contentsOf: buffer)
-                bytesWritten += Int64(buffer.count)
+            receivedLength += 1
+            
+            if buffer.count >= 64 * 1024 {
+                fileHandle.write(buffer)
                 buffer.removeAll(keepingCapacity: true)
                 
-                if totalBytes > 0 {
-                    let currentProgress = min(Double(bytesWritten) / Double(totalBytes), 1.0)
-                    progress?(currentProgress)
+                if expectedLength > 0 {
+                    let progressFraction = Double(receivedLength) / Double(expectedLength)
+                    progress?(progressFraction)
                 }
             }
         }
         
         if !buffer.isEmpty {
-            try fileHandle.write(contentsOf: buffer)
-            bytesWritten += Int64(buffer.count)
+            fileHandle.write(buffer)
         }
+        
         try fileHandle.close()
         
-        try? FileManager.default.removeItem(at: destination)
-        try FileManager.default.moveItem(at: tempDestination, to: destination)
+        // Atomically replace destination file
+        if FileManager.default.fileExists(atPath: destinationURL.path) {
+            try FileManager.default.removeItem(at: destinationURL)
+        }
+        try FileManager.default.moveItem(at: temporaryURL, to: destinationURL)
         
         progress?(1.0)
-        return destination
+        return destinationURL
     }
     
-    /// Delete / Uninstall a cached model from local disk
+    /// Delete a downloaded model from the cache directory
     public func deleteModel(_ spec: ModelSpec) throws {
         guard spec.id != "apple-speech-native" else { return }
         let path = localPath(for: spec)
@@ -192,7 +214,7 @@ public final class ModelManager: @unchecked Sendable {
         }
     }
     
-    /// Clear all downloaded models in the cache directory
+    /// Clear all cached models from disk
     public func clearAllCache() throws {
         let contents = try FileManager.default.contentsOfDirectory(at: cacheDirectory, includingPropertiesForKeys: nil)
         for file in contents {
@@ -200,35 +222,26 @@ public final class ModelManager: @unchecked Sendable {
         }
     }
     
-    /// Calculate the total size of all cached models
+    /// Calculate total bytes of all cached models
     public func getTotalCacheSizeBytes() -> Int64 {
         guard let contents = try? FileManager.default.contentsOfDirectory(at: cacheDirectory, includingPropertiesForKeys: [.fileSizeKey]) else {
             return 0
         }
         var total: Int64 = 0
-        for file in contents {
-            if let attrs = try? FileManager.default.attributesOfItem(atPath: file.path),
-               let size = attrs[.size] as? Int64 {
-                total += size
+        for url in contents {
+            if let resources = try? url.resourceValues(forKeys: [.fileSizeKey]), let size = resources.fileSize {
+                total += Int64(size)
             }
         }
         return total
     }
     
-    /// Detect the current operating platform and optimal hardware accelerator
+    /// Detect available Apple Silicon / hardware accelerators
     public func detectPlatformHardware() -> HardwareAccelerator {
-        #if os(macOS)
         #if arch(arm64)
-        return .appleNeuralEngine // Apple Silicon M-series with ANE and Metal GPU
+        return .appleNeuralEngine
         #else
-        return .cpuFallback // Intel Mac
-        #endif
-        #elseif os(Windows)
-        return .directML // Windows DirectML / QNN
-        #elseif os(Linux)
-        return .cpuFallback
-        #else
-        return .cpuFallback
+        return .cpu
         #endif
     }
 }
