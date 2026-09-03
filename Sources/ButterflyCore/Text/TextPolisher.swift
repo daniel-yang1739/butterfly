@@ -401,7 +401,7 @@ public final class TextPolisher {
     public func structureIntoTypelessNotes(_ text: String) -> String {
         guard text.count > 15 else { return text }
         
-        // 1. Check for enumerated list indicators
+        // 1. Check for enumerated list indicators (e.g. 第一點... 第二點...)
         let listPattern = "(?:^|[。！？\n，])\\s*(第一種模式|第二種模式|第\\s*[一二三四五六七八九十0-9]+\\s*[點個項件、，事]|首先|一來|其次|二來|再來|最後[一點項事]?|總結來說|總結[：:]?|另外[一點項件事]?|此外[一點項件事]?)"
         
         if let regex = try? NSRegularExpression(pattern: listPattern, options: []) {
@@ -412,14 +412,14 @@ public final class TextPolisher {
             if matches.count >= 2 {
                 var sections: [String] = []
                 
-                // A. Introductory paragraph (everything before the first list item)
+                // A. Introductory cohesive paragraph (everything before the first list item)
                 let firstMatchLoc = matches[0].range.location
                 if firstMatchLoc > 0 {
                     let intro = nsString.substring(with: NSRange(location: 0, length: firstMatchLoc))
                         .trimmingCharacters(in: .whitespacesAndNewlines)
                         .trimmingCharacters(in: CharacterSet(charactersIn: "，、。；"))
                     if !intro.isEmpty {
-                        sections.append(formatAsParagraphs(intro))
+                        sections.append(intro.hasSuffix("。") || intro.hasSuffix("！") || intro.hasSuffix("？") ? intro : intro + "。")
                     }
                 }
                 
@@ -451,45 +451,7 @@ public final class TextPolisher {
             }
         }
         
-        // 2. Default: Split into clean, logical paragraphs (2-3 sentences each)
-        return formatAsParagraphs(text)
-    }
-    
-    /// Break monologue into clean logical paragraphs
-    public func formatAsParagraphs(_ text: String) -> String {
-        let sentences = text.components(separatedBy: CharacterSet(charactersIn: "。！？\n"))
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        
-        guard sentences.count > 1 else {
-            return text.hasSuffix("。") || text.hasSuffix("！") || text.hasSuffix("？") ? text : text + "。"
-        }
-        
-        var paragraphs: [String] = []
-        var currentParagraph: [String] = []
-        
-        let transitionKeywords = ["另外", "此外", "不過", "但是", "然而", "因此", "總結來說", "總之", "總結", "最後", "也就是", "而且", "你看像", "所以", "因為"]
-        
-        for sentence in sentences {
-            let cleanSentence = sentence.hasSuffix("。") || sentence.hasSuffix("！") || sentence.hasSuffix("？") ? sentence : sentence + "。"
-            let isTransition = transitionKeywords.contains { cleanSentence.hasPrefix($0) }
-            
-            if isTransition && !currentParagraph.isEmpty {
-                paragraphs.append(currentParagraph.joined())
-                currentParagraph = [cleanSentence]
-            } else {
-                currentParagraph.append(cleanSentence)
-                if currentParagraph.count >= 2 {
-                    paragraphs.append(currentParagraph.joined())
-                    currentParagraph = []
-                }
-            }
-        }
-        
-        if !currentParagraph.isEmpty {
-            paragraphs.append(currentParagraph.joined())
-        }
-        
-        return paragraphs.joined(separator: "\n\n")
+        // 2. Default: Maintain large, cohesive thematic paragraphs without arbitrary sentence fragmentation
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

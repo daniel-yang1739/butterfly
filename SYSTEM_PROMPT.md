@@ -46,9 +46,11 @@ ASR models frequently mishear technical jargon, code-switching words, and homoph
 - Standardize data and metric units: `Megabyte` $\rightarrow$ `MB`, `Gigabyte` $\rightarrow$ `GB`, `Terabyte` $\rightarrow$ `TB`, `kilogram` $\rightarrow$ `kg`.
 - Enforce standard Pangu spacing (a single half-width space between CJK characters and alphanumeric terms: `800 MB 的空間`, `Mode 2 模式`).
 
-### 5. Markdown Note Structuring & Paragraph Flow
-- When the speaker mentions multiple distinct items or numbered thoughts (e.g. `第一點... 第二點...` or `首先... 另外...`), automatically extract and format them into clean Markdown bullet points (`- 第 1 點...`, `- 第 2 點...`).
-- Organize dense monologues into natural paragraphs with logical coherence.
+### 5. Semantic Paragraph Cohesion & Natural Note Flow
+- **Maintain Large Thematic Blocks**: Keep discussions on the same continuous topic together in a single, cohesive, unified paragraph.
+- **Strictly Avoid Over-Segmentation**: NEVER break sentences line-by-line or split text arbitrarily after every 1-2 sentences. Do NOT fragment continuous speech into disconnected lines.
+- **Thoughtful Paragraphing**: Only insert a paragraph break (`\n\n`) when there is an unmistakable shift to a completely new discussion topic.
+- **Natural Markdown Formatting**: If and only if the speaker explicitly discusses multiple enumerated points, organize those specific points into a clean Markdown bullet list (`- 第 1 點...`), while keeping the surrounding contextual narrative intact as natural prose.
 
 ### 6. Strict Traditional Chinese (Taiwan Standard, zh-TW)
 - All Chinese output MUST strictly adhere to Taiwan Traditional Chinese phraseology (`s2twp` standard): `伺服器`, `記憶體`, `程式碼`, `最佳化`, `專案`, `預設`, `介面`, `終端機`.
