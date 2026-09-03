@@ -213,38 +213,27 @@ public final class LocalSLMInferenceBackend: @unchecked Sendable {
     }
 }
 
-/// Singleton coordinator for Mode 2 cognitive language model processing
+/// Singleton coordinator for cognitive text polishing & Taiwan standard normalization
 public final class LanguageModelCoordinator: @unchecked Sendable {
     public static let shared = LanguageModelCoordinator()
     
     private init() {}
     
-    /// Restructure monologue speech transcript into structured notes using active SLM model
+    /// Restructure monologue speech transcript into formatted notes using pure Swift cognitive engine
     public func restructure(transcript: String) async -> String {
         guard !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return ""
         }
-        
-        let activeModel = ModelManager.shared.activeSLMModel
-        let systemPrompt = SystemPrompt.shared.prompt(for: .structuredNote)
-        let backend = LocalSLMInferenceBackend(spec: activeModel)
-        
-        if let result = try? await backend.restructureNote(transcript: transcript, systemPrompt: systemPrompt), !result.isEmpty {
-            return result
-        }
-        
         let polished = TextPolisher.shared.polish(transcript, mode: .structuredNote)
         return OpenCCTranslator.shared.convert(polished)
     }
     
-    /// Refine live streaming clause using active SLM model & SYSTEM_PROMPT.md
+    /// Refine live streaming clause using pure Swift cognitive intent reconstruction
     public func refineLiveStream(transcript: String) async -> String {
         guard !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return ""
         }
-        
-        let activeModel = ModelManager.shared.activeSLMModel
-        let backend = LocalSLMInferenceBackend(spec: activeModel)
-        return await backend.refineLiveClause(clause: transcript)
+        let polished = TextPolisher.shared.polish(transcript, mode: .liveStream)
+        return OpenCCTranslator.shared.convert(polished)
     }
 }

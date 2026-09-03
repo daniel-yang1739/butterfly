@@ -110,34 +110,8 @@ public final class ModelManager: @unchecked Sendable {
         )
     ]
     
-    // MARK: - Track B: Smart Note Language Models (SLM) Whitelist
-    
-    /// Whitelist sorted from STRONGEST (Rank 1) to LIGHTEST (Rank 2)
-    public static let defaultSLMModels: [ModelSpec] = [
-        ModelSpec(
-            id: "qwen2.5-0.5b-instruct",
-            displayName: "Qwen2.5-0.5B-Instruct",
-            category: .languageModel,
-            parameterCount: "644 MB",
-            sizeBytes: 675_840_000,
-            downloadURL: URL(string: "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q8_0.gguf"),
-            recommendedHardware: .appleNeuralEngine,
-            description: "Rank 1: State-of-the-art Chinese & English note restructuring, summaries, and action points (~644 MB)"
-        ),
-        ModelSpec(
-            id: "llama-3.2-1b-instruct",
-            displayName: "Llama-3.2-1B-Instruct",
-            category: .languageModel,
-            parameterCount: "807 MB",
-            sizeBytes: 807 * 1024 * 1024,
-            downloadURL: URL(string: "https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf"),
-            recommendedHardware: .appleNeuralEngine,
-            description: "Rank 2: High-speed reasoning and deep structural outline generation (~807 MB)"
-        )
-    ]
-    
     public static var defaultModels: [ModelSpec] {
-        return defaultASRModels + defaultSLMModels
+        return defaultASRModels
     }
     
     public static var prioritizedWhitelist: [ModelSpec] {
@@ -146,9 +120,8 @@ public final class ModelManager: @unchecked Sendable {
     
     public let cacheDirectory: URL
     
-    // User active model overrides
+    // User active model override
     private let activeASRKey = "butterfly_active_asr_model"
-    private let activeSLMKey = "butterfly_active_slm_model"
     
     public init(customCacheDir: URL? = nil) {
         if let customCacheDir = customCacheDir {
@@ -178,21 +151,6 @@ public final class ModelManager: @unchecked Sendable {
         }
     }
     
-    /// Get the active SLM Model (User selected or best available fallback)
-    public var activeSLMModel: ModelSpec {
-        get {
-            if let savedId = UserDefaults.standard.string(forKey: activeSLMKey),
-               let found = ModelManager.defaultSLMModels.first(where: { $0.id == savedId }),
-               isModelDownloaded(found) {
-                return found
-            }
-            return getBestAvailableSLMModel()
-        }
-        set {
-            UserDefaults.standard.set(newValue.id, forKey: activeSLMKey)
-        }
-    }
-    
     /// Returns the highest-ranked ASR model available locally in the cache.
     public func getBestAvailableASRModel() -> ModelSpec {
         for model in ModelManager.defaultASRModels {
@@ -205,16 +163,6 @@ public final class ModelManager: @unchecked Sendable {
         }
         // Baseline fallback (Apple Speech Native)
         return ModelManager.defaultASRModels.last!
-    }
-    
-    /// Returns the highest-ranked SLM model available locally in the cache.
-    public func getBestAvailableSLMModel() -> ModelSpec {
-        for model in ModelManager.defaultSLMModels {
-            if isModelDownloaded(model) {
-                return model
-            }
-        }
-        return ModelManager.defaultSLMModels.first!
     }
     
     public func getBestAvailableModel() -> ModelSpec {

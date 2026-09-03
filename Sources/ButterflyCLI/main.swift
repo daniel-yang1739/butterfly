@@ -12,7 +12,7 @@ case "test", "test-all", "test-logic":
     exit(0)
 
 case "models":
-    print("\n🎙️ Track A: Speech Recognition Models (ASR):")
+    print("\n🎙️ Speech Recognition Models (ASR Whitelist):")
     for model in ModelManager.defaultASRModels {
         let isSelected = model.id == ModelManager.shared.activeASRModel.id ? " [Active ✓]" : ""
         let downloaded = ModelManager.shared.isModelDownloaded(model) ? "Downloaded" : "Not Downloaded"
@@ -20,18 +20,9 @@ case "models":
         print("    ID: \(model.id)")
         print("    Description: \(model.description)\n")
     }
-    
-    print("🧠 Track B: Smart Note Language Models (SLM):")
-    for model in ModelManager.defaultSLMModels {
-        let isSelected = model.id == ModelManager.shared.activeSLMModel.id ? " [Active ✓]" : ""
-        let downloaded = ModelManager.shared.isModelDownloaded(model) ? "Downloaded" : "Not Downloaded"
-        print("  • \(model.displayName) [\(model.parameterCount), \(model.formattedSize)] - \(downloaded)\(isSelected)")
-        print("    ID: \(model.id)")
-        print("    Description: \(model.description)\n")
-    }
 
 case "download":
-    let modelId = args.count > 2 ? args[2] : "whisper-small"
+    let modelId = args.count > 2 ? args[2] : "whisper-large-v3-turbo"
     guard let spec = ModelManager.defaultModels.first(where: { $0.id == modelId }) else {
         print("Model '\(modelId)' not found. Run 'butterfly-cli models' to view available IDs.")
         exit(1)
@@ -90,6 +81,7 @@ case "cache", "info":
     print("  • Recommended Accelerator: \(hardware.rawValue)")
     print("  • Model Cache Directory: \(ModelManager.shared.cacheDirectory.path)")
     print("  • Total Cache Used: \(formattedTotal)")
+    print("  • Active Speech Model: \(ModelManager.shared.activeASRModel.displayName)")
     print("  • Traditional Chinese Standard: OpenCC s2twp (Taiwan standard)")
 
 case "test-convert":
@@ -108,34 +100,15 @@ case "test-convert":
 
 case "test-polish":
     let inputText = args.dropFirst(2).joined(separator: " ")
-    let testString = inputText.isEmpty ? "呃我想說就是說，我們現在有兩種模式需求，第一點就是希望像voice一樣可以即時live streaming講話邊講邊出字，然後呢第二點就是可以錄一段長音，然後按下結束之後，它會幫我把呃啊哦那些贅詞去掉，然後自動分段跟列點整理好。" : inputText
+    let testString = inputText.isEmpty ? "好我們今天開會主要討論了三件事情，一個是關於前端游標注入的邏輯，我們要確保說輸入框不會出現雪崩效應。再來是錯字要修復像是 System Prompt 或者 Model 等詞彙我們要把它修復。第三個是排版的部分希望段落不要太碎適當的幫我列成 Markdown 清單整理好這樣謝謝。" : inputText
     
     print("\n[Spoken Input]:\n\(testString)")
     let liveResult = TextPolisher.shared.polish(testString, mode: .liveStream)
-    print("\n[Mode 1: Live Dictation Polished]:\n\(liveResult)")
-    let polishResult = TextPolisher.shared.polish(testString, mode: .structuredNote)
-    print("\n[Mode 2: Smart Note Polished (Paragraphs / Bullet Points)]:\n\(polishResult)")
+    print("\n[Live Dictation Polished]:\n\(liveResult)")
     print("--------------------------------------------------")
 
-case "test-slm":
-    let inputText = args.dropFirst(2).joined(separator: " ")
-    let testString = inputText.isEmpty ? "好，那我現在來試一下就是 Mode 2 的結果，你 README 啊，還有 AGENTS.md 等等的我們整個 Source Code 裡面改更新的一些東西把它更新一下。架構寫清楚，我們中間做了滿多的修改嘛，第一點是新增雙軌模型白名單，第二點是升級 System Prompt 給小語言模型。把它改一改謝謝。" : inputText
-    
-    print("\n[Input Transcript]:\n\(testString)\n")
-    print("Active SLM Model: \(ModelManager.shared.activeSLMModel.displayName)")
-    print("Executing LanguageModelCoordinator restructuring with external SYSTEM_PROMPT.md...\n")
-    
-    Task {
-        let structuredResult = await LanguageModelCoordinator.shared.restructure(transcript: testString)
-        print("[SLM Structured Markdown Output]:\n--------------------------------------------------\n\(structuredResult)\n--------------------------------------------------")
-        exit(0)
-    }
-    RunLoop.main.run()
-
 case "listen":
-    let isPolishMode = args.contains("--polish")
-    let modeTitle = isPolishMode ? "Mode 2: Record & Smart Polish (Paragraphs / Bullets / Filler Removal)" : "Mode 1: Live Streaming Dictation"
-    print("\nStarting \(modeTitle)...")
+    print("\nStarting Butterfly Real-Time Voice Dictation...")
     let liveEngine = LiveSpeechEngine.shared
     
     Task {
@@ -146,7 +119,7 @@ case "listen":
         
         do {
             liveEngine.onTranscriptUpdate = { transcript in
-                let display = isPolishMode ? transcript : TextPolisher.shared.polish(transcript, mode: .liveStream)
+                let display = TextPolisher.shared.polish(transcript, mode: .liveStream)
                 print("\r  Transcribing: \(display)                    ", terminator: "")
                 fflush(stdout)
             }
@@ -164,10 +137,7 @@ case "listen":
             let fullTranscript = await liveEngine.stopLiveListening()
             
             if !fullTranscript.isEmpty {
-                let finalText = isPolishMode
-                    ? TextPolisher.shared.polish(fullTranscript, mode: .structuredNote)
-                    : TextPolisher.shared.polish(fullTranscript, mode: .liveStream)
-                
+                let finalText = TextPolisher.shared.polish(fullTranscript, mode: .liveStream)
                 print("\n\nFinal Polished Result:\n--------------------------------------------------\n\(finalText)\n--------------------------------------------------")
                 print("Injecting into active window...")
                 await InputInjector.shared.inject(text: finalText)
@@ -189,12 +159,12 @@ default:
     print("""
     
     Usage:
-      butterfly-cli listen            - Start Mode 1: Live streaming dictation
-      butterfly-cli listen --polish   - Start Mode 2: Record & smart note polishing
-      butterfly-cli test-polish       - Test text polishing, filler removal & bullet structuring
+      butterfly-cli listen            - Start real-time live voice dictation
+      butterfly-cli test              - Run complete 36-assertion automated test suite
+      butterfly-cli test-polish       - Test real-time acoustic typo restoration
       butterfly-cli test-convert      - Test Simplified-to-Traditional conversion
-      butterfly-cli models            - List supported local models and download status
-      butterfly-cli download <id>     - Download a model to local cache (e.g. whisper-small)
+      butterfly-cli models            - List supported local speech recognition models
+      butterfly-cli download <id>     - Download a model to local cache (e.g. whisper-large-v3-turbo)
       butterfly-cli delete <id>       - Delete a downloaded model from cache
       butterfly-cli clean             - Clear all downloaded model cache
       butterfly-cli info              - Display system hardware accelerator and storage info

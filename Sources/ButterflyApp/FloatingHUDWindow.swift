@@ -84,13 +84,12 @@ public final class FloatingHUDWindow: NSPanel {
     }
     
     /// Show Floating HUD with smooth fade-in
-    public func show(mode: ButterflyMode) {
+    public func show(mode: ButterflyMode = .liveStreaming) {
         reposition()
         self.alphaValue = 0.0
         self.orderFrontRegardless()
         
-        let modeIcon = (mode == .liveStreaming) ? "🎙️ Live Streaming" : "🔴 Smart Recording"
-        statusLabel.stringValue = "\(modeIcon) [00:00]"
+        statusLabel.stringValue = "🎙️ Live Voice Dictation [00:00]"
         
         let emptyAttr = NSAttributedString(string: "Listening...", attributes: [
             .foregroundColor: NSColor.systemGray,
@@ -109,11 +108,10 @@ public final class FloatingHUDWindow: NSPanel {
     /// - `frozenText` -> ⚪ Bright White (100% Locked & confirmed)
     /// - `polishedText` -> 🟡 Amber Gold (AI Refined in active wave)
     /// - `activeTail` -> 🔘 Subtle Gray (Raw incoming speech)
-    public func update(frozenText: String, polishedText: String, activeTail: String, timeStr: String, mode: ButterflyMode) {
+    public func update(frozenText: String, polishedText: String, activeTail: String, timeStr: String, mode: ButterflyMode = .liveStreaming) {
         guard isVisibleOnScreen else { return }
         
-        let modeIcon = (mode == .liveStreaming) ? "🎙️ Live Streaming" : "🔴 Smart Recording"
-        statusLabel.stringValue = "\(modeIcon) \(timeStr)"
+        statusLabel.stringValue = "🎙️ Live Voice Dictation \(timeStr)"
         
         let attributedString = NSMutableAttributedString()
         

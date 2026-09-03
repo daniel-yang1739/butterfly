@@ -114,19 +114,16 @@ public enum TestRunner {
         assertTrue(!sysPrompt.content.isEmpty, "TC-D1: System Prompt content loaded")
         assertTrue(sysPrompt.content.contains("Butterfly"), "TC-D2: System Prompt contains Butterfly role definition")
         
-        // MARK: - 5. ModelManager Dual-Track & SLM Tests
-        print("\n📦 Suite 5: ModelManager Dual-Track (ASR & SLM Whitelists)")
+        // MARK: - 5. ModelManager Speech Recognition (ASR) Whitelist Tests
+        print("\n📦 Suite 5: ModelManager Speech Models (ASR Whitelist)")
         let asrModels = ModelManager.defaultASRModels
         assertEqual(asrModels[0].id, "whisper-large-v3-turbo", "TC-E1: ASR whitelist Rank 1 is Whisper Large-v3-Turbo")
         assertEqual(asrModels[0].formattedSize, "1.62 GB", "TC-E2: Whisper Large-v3-Turbo formatted size")
-        
-        let slmModels = ModelManager.defaultSLMModels
-        assertEqual(slmModels[0].id, "qwen2.5-0.5b-instruct", "TC-E3: SLM whitelist Rank 1 is Qwen2.5-0.5B-Instruct")
-        assertEqual(slmModels[1].id, "llama-3.2-1b-instruct", "TC-E4: SLM whitelist Rank 2 is Llama-3.2-1B-Instruct")
+        assertEqual(asrModels[1].id, "whisper-small", "TC-E3: ASR whitelist Rank 2 is Whisper Small")
+        assertEqual(asrModels[2].id, "sensevoice-small", "TC-E4: ASR whitelist Rank 3 is SenseVoice Small")
         
         let bestASR = ModelManager.shared.getBestAvailableASRModel()
-        let bestSLM = ModelManager.shared.getBestAvailableSLMModel()
-        assertTrue(!bestASR.id.isEmpty && !bestSLM.id.isEmpty, "TC-E5: Dual-track best available model auto-discovery")
+        assertTrue(!bestASR.id.isEmpty, "TC-E5: Best available speech model auto-discovery")
         
         // MARK: - 6. InputInjector Tests
         print("\n📦 Suite 6: InputInjector (Streaming In-Place Delta)")

@@ -63,18 +63,15 @@ butterfly/
 
 ---
 
-## 🎙️ Dual-Mode Operating Model & Global Hotkeys
+## 🎙️ Operating Model & Global Hotkeys
 
-Butterfly supports two core input modes and a dedicated stop hotkey:
+Butterfly provides a pure, zero-latency real-time voice dictation experience powered by Whisper ASR and a pure Swift in-place refinement engine:
 
-1. **Start Live Streaming Dictation (`Option + Space`)**:
+1. **Toggle Real-Time Voice Dictation (`Option + Space`)**:
    - 100% faithful real-time speech-to-text with continuous streaming directly into your active cursor.
-   - 1~2 second sliding window in-place refinement (revises tech terms, numbers, and units without disturbing earlier text).
-   - Preserves all natural spoken repetitions and punctuation.
-2. **Start Record & Smart Polish (`Option + Shift + Space`)**:
-   - Continuous audio recording for long-form thoughts, meetings, or monologues.
-   - Upon completion, executes deep filler removal (`呃`, `啊`, `哦`, `那個那個`, `就是說`), stutter cleaning, intelligent paragraph structuring, and Markdown bullet point extraction (`- ...`).
-3. **Stop & Commit Recording (`Enter` / `Esc`)**:
+   - 0.8-second pause-gated in-place refinement (revises tech terms, numbers, and units without disturbing earlier text).
+   - Preserves natural spoken narrative flow and punctuate accurately.
+2. **Stop & Commit Dictation (`Enter` / `Esc`)**:
    - Monitored via macOS low-level `CGEventTap` (`.headInsertEventTap`).
    - The first `Enter` stops recording and is **swallowed at the OS level to prevent accidental chat/agent message submission**.
    - The second `Enter` passes through normally to submit your message.

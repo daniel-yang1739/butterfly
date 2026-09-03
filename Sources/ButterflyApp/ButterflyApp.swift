@@ -124,12 +124,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Look for the Butterfly icon in your top menu bar.
         
         Global Hotkeys:
-          • [Option + Space]         -> Start Live Streaming Dictation (type live as you speak)
-          • [Option + Shift + Space] -> Start Record & Smart Polish (auto-structured notes)
-          • [Enter] / [Esc]          -> Stop & Finalize (First Enter stops recording, Second Enter sends)
+          • [Option + Space]         -> Toggle Live Voice Dictation (types live as you speak)
+          • [Enter] / [Esc]          -> Stop Dictation (swallows first Enter key safely)
         
-        Active ASR Model: \(ModelManager.shared.activeASRModel.displayName)
-        Active SLM Model: \(ModelManager.shared.activeSLMModel.displayName)
+        Active Speech Model: \(ModelManager.shared.activeASRModel.displayName)
         Model Cache Path: \(ModelManager.shared.cacheDirectory.path)
         Click the Butterfly menu bar icon to switch or manage models.
         --------------------------------------------------
