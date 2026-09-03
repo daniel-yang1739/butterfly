@@ -33,6 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var recordingTimer: Timer?
     private var recordingStartTime: Date?
     private var animationIndex: Int = 0
+    private var mode2PlaceholderText: String = ""
     
     static func main() {
         let app = NSApplication.shared
@@ -436,6 +437,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.statusItem.button?.title = " 🎙️ [00:00] 聆聽中 ·"
             } else {
                 self.statusItem.button?.title = " 🔴 [00:00] 思考錄音中 ·"
+                // Type dynamic placeholder indicator directly into user's focused input box
+                let placeholder = " 🔴 [思考錄音中... 按 Enter 產出筆記]"
+                InputInjector.shared.typeUnicodeString(placeholder)
+                mode2PlaceholderText = placeholder
             }
             self.updateMenu()
             
@@ -463,6 +468,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } catch {
             print("Failed to start recording: \(error.localizedDescription)")
             isRecording = false
+            if !mode2PlaceholderText.isEmpty {
+                InputInjector.shared.sendBackspaces(count: mode2PlaceholderText.utf16.count)
+                mode2PlaceholderText = ""
+            }
             recordingTimer?.invalidate()
             recordingTimer = nil
             self.statusItem.button?.title = ""
@@ -485,8 +494,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let fullRawTranscript = await liveEngine.stopLiveListening()
         
         if mode == .recordAndPolish {
+            // 1. Instantly erase the placeholder text from active cursor using backspaces
+            if !mode2PlaceholderText.isEmpty {
+                let charCount = mode2PlaceholderText.utf16.count
+                InputInjector.shared.sendBackspaces(count: charCount)
+                mode2PlaceholderText = ""
+                try? await Task.sleep(nanoseconds: 40_000_000)
+            }
+            
             print("\n[Mode 2: Full Monologue Captured (\(fullRawTranscript.count) chars)]:\n\(fullRawTranscript)")
-            // Mode 2: Record & Smart Polish via Dual-Track SLM Coordinator
+            // 2. Mode 2: Record & Smart Polish via Dual-Track SLM Coordinator
             let polishedText = await LanguageModelCoordinator.shared.restructure(transcript: fullRawTranscript)
             if !polishedText.isEmpty {
                 print("\n[Mode 2: Polished Note Result]:\n\(polishedText)\n")
