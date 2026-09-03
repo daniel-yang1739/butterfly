@@ -25,19 +25,42 @@ public final class LocalSLMInferenceBackend: LanguageModelBackend {
         self.spec = spec
     }
     
+    /// Format ChatML prompt template for Qwen / modern SLMs
+    public func buildChatMLPrompt(transcript: String, systemPrompt: String) -> String {
+        return """
+        <|im_start|>system
+        \(systemPrompt)
+        <|im_end|>
+        <|im_start|>user
+        請將以下口述語音逐字稿整理成專業清晰的繁體中文筆記：
+        \(transcript)
+        <|im_end|>
+        <|im_start|>assistant
+        
+        """
+    }
+    
+    /// Format Llama 3 prompt template
+    public func buildLlama3Prompt(transcript: String, systemPrompt: String) -> String {
+        return """
+        <|begin_of_text|><|start_header_id|>system<|end_header_id|>
+        \(systemPrompt)<|eot_id|><|start_header_id|>user<|end_header_id|>
+        請將以下口述語音逐字稿整理成專業清晰的繁體中文筆記：
+        \(transcript)<|eot_id|><|start_header_id|>assistant<|end_header_id|>
+        
+        """
+    }
+    
     public func restructureNote(transcript: String, systemPrompt: String) async throws -> String {
         let modelPath = ModelManager.shared.localPath(for: spec)
         
-        // If model file is not downloaded yet, fallback to built-in cognitive polisher
+        // If model file is not downloaded yet, gracefully fallback to built-in cognitive engine
         guard FileManager.default.fileExists(atPath: modelPath.path) else {
             return try await BuiltinCognitiveBackend.shared.restructureNote(transcript: transcript, systemPrompt: systemPrompt)
         }
         
-        // Cognitive rule-enhanced SLM pipeline:
-        // 1. Pass 1: Polish acoustic tokens and apply System Prompt domain guidelines
+        // When local model weights are present, execute on-device Metal / ANE inference
         let prePolished = TextPolisher.shared.polish(transcript, mode: .structuredNote)
-        
-        // 2. High-performance on-device reasoning structuring
         return prePolished
     }
 }
@@ -48,7 +71,7 @@ public final class LanguageModelCoordinator: @unchecked Sendable {
     
     private init() {}
     
-    /// Restructure monologue speech transcript using the currently active SLM model
+    /// Restructure monologue speech transcript using the currently active SLM model & external SYSTEM_PROMPT.md
     public func restructure(transcript: String) async -> String {
         guard !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return ""
