@@ -62,9 +62,11 @@ public final class TextFormatter {
             ("(?i)\\bone\\s+thousand\\b", "1000"),
             ("(?i)\\btwo\\s+thousand\\b", "2000"),
             ("(?i)\\bthree\\s+thousand\\b", "3000"),
-            ("(?i)\\bmode\\s+one\\b", "Mode 1"),
-            ("(?i)\\bmode\\s+two\\b", "Mode 2"),
-            ("(?i)\\bmode\\s+three\\b", "Mode 3")
+            ("(?i)\\bv\\s*(?:one|1)\\b", "V1"),
+            ("(?i)\\bv\\s*(?:two|2)\\b", "V2"),
+            ("(?i)\\bv\\s*(?:three|3)\\b", "V3"),
+            ("(?i)\\bv\\s*(?:four|4)\\b", "V4"),
+            ("(?i)\\bv\\s*(?:five|5)\\b", "V5")
         ]
         for item in enHundreds {
             if let regex = try? NSRegularExpression(pattern: item.pattern, options: []) {
@@ -146,7 +148,21 @@ public final class TextFormatter {
             result = result.replacingOccurrences(of: unit, with: replacement)
         }
         
-        // 2. Unit regexes (Digital, Metric, Time, Frequency)
+        // 2. Common Spoken Dev Acoustic Slips & Phonetic Jargon
+        let devAcousticSlips: [(pattern: String, replacement: String)] = [
+            ("(?i)\\b(?:V\\s*1|V\\s*one|B\\s*one|B1)\\s*(?:Chuck\\s*later|can\\s*later|chance\\s*later)\\b", "V1 Translator"),
+            ("(?i)\\b(?:com\\s*meet|com\\s*mit|co\\s*meet)\\b", "Commit"),
+            ("(?i)\\b(?:get\\s*hub|get\\s*hop|gget\\s*hop|gget\\s*top)\\b", "GitHub"),
+            ("(?i)\\b(?:brandes|branchs)\\b", "Branches")
+        ]
+        for slip in devAcousticSlips {
+            if let regex = try? NSRegularExpression(pattern: slip.pattern, options: []) {
+                let range = NSRange(location: 0, length: result.utf16.count)
+                result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: slip.replacement)
+            }
+        }
+        
+        // 3. Unit regexes (Digital, Metric, Time, Frequency)
         let unitPatterns: [(pattern: String, replacement: String)] = [
             ("(?i)\\b(megabytes?|mega\\s*bytes?)\\b", "MB"),
             ("(?i)\\b(gigabytes?|giga\\s*bytes?)\\b", "GB"),

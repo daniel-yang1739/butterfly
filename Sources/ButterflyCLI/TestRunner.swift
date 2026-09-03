@@ -44,6 +44,7 @@ public enum TestRunner {
         assertEqual(formatter.format("我們大概需要八百多 MB 的空間還有兩千行程式碼第一點"), "我們大概需要 800 多 MB 的空間還有 2000 行程式碼第 1 點", "TC-B2: Spoken numbers to Arabic digits with Pangu spacing")
         assertEqual(formatter.normalizeUnitsAndTechTerms("500 Mega bite 還有 2 Tara bite 以及 5 kilogram"), "500 MB 還有 2 TB 以及 5 kg", "TC-B3: Data & metric units normalization")
         assertEqual(formatter.deduplicateStutter("我我我覺得這這這個可以"), "我覺得這個可以", "TC-B4: Stutter pronoun deduplication")
+        assertEqual(formatter.normalizeUnitsAndTechTerms("切換到 V one can later 然後執行 com meet 到 get hop 的 brandes"), "切換到 V1 Translator 然後執行 Commit 到 GitHub 的 Branches", "TC-B5: Developer acoustic slips normalization (V1 Translator, Commit, GitHub, Branches)")
         
         // MARK: - 3. TextPolisher Clean Native Formatting Tests
         print("\n📦 Suite 3: TextPolisher (Clean Algorithmic Formatting & Natural Punctuation)")
