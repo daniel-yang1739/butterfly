@@ -112,6 +112,9 @@ public final class TextPolisher {
             ("(?i)\\b(?:Voice\\s*command|voice)\\s*那個\\b", "/voice 那個"),
             ("(?i)\\b(?:Poozenn|Poozen|frozen)\\s*(?:thek|Take|talk|Text)\\b", "Frozen Text"),
             ("(?i)\\bDynamic\\s*Windows?\\b", "Dynamic Window"),
+            ("(?i)\\b(?:Traegler|treater|triger|triegle|trig)\\b", "Trigger"),
+            ("(?i)\\bS\\s*L\\s*M\\b", "SLM"),
+            ("(?i)\\bL\\s*L\\s*M\\b", "LLM"),
             
             // Acoustic Trailing Homophone Repairs ('世界/是界' -> '試一下')
             ("(?<=[再來測])\\s*(?:世界|是界|視界|試界)", "試一下"),
@@ -174,6 +177,13 @@ public final class TextPolisher {
             ("(?i)是[。]+(?=\\s*(?:這個符號|這個標點|這兩個字))", "是「句號」"),
             ("(?i)顯示\\s*(?:\\[\\]|，|。|、|「」)?\\s*(?:這兩個字|兩個字)", "顯示「逗號」兩個字"),
             ("(?i)判斷\\s*[，、]+\\s*的", "判斷「逗號」的"),
+            
+            // Trigger Disambiguation (處罰 -> 觸發)
+            ("處罰(?=\\s*(?:這件事情|機制|條件|點|時間|就是|要把|SLM|LLM|Model|事件|動作|發送|流程|邏輯|這個|一次|現在))", "觸發"),
+            ("(?<=(?:什麼時候會|會不會|怎麼|如何|去|來|要|再次|重新|自動|何時會|會))\\s*處罰", "觸發"),
+            ("處罰這件事情", "觸發這件事情"),
+            ("處罰就是", "觸發就是"),
+            ("處罰現在", "觸發現在"),
             
             // General Semantic Intent & Disambiguation
             ("羽翼(?=如果|明顯|表達|理解|上下文|順序|判定|變得|非常|很|清|正)", "語意"),
