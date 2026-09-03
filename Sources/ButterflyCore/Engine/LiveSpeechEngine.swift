@@ -1,9 +1,8 @@
 import Foundation
-import os
 @preconcurrency import AVFoundation
 @preconcurrency import Speech
 
-/// Real-time live microphone speech recognition engine with monotonic transcript accumulation
+/// Real-time live microphone speech recognition engine with multi-pass contextual biasing
 public final class LiveSpeechEngine: NSObject, @unchecked Sendable, SFSpeechRecognizerDelegate {
     public static let shared = LiveSpeechEngine()
     
@@ -13,7 +12,7 @@ public final class LiveSpeechEngine: NSObject, @unchecked Sendable, SFSpeechReco
     private var recognitionTask: SFSpeechRecognitionTask?
     
     public private(set) var isListening: Bool = false
-    public private(set) var latestFullTranscript: String = ""
+    public var latestFullTranscript: String = ""
     
     public var onTranscriptUpdate: (@Sendable (String) -> Void)?
     public var onFullTranscriptUpdate: (@Sendable (String) -> Void)?
@@ -26,17 +25,29 @@ public final class LiveSpeechEngine: NSObject, @unchecked Sendable, SFSpeechReco
         self.speechRecognizer?.delegate = self
     }
     
-    /// Request microphone and speech recognition permissions
+    /// Request microphone and speech recognition permissions safely
     public func requestPermissions() async -> Bool {
-        let speechAuth = await withCheckedContinuation { continuation in
-            SFSpeechRecognizer.requestAuthorization { status in
-                continuation.resume(returning: status == .authorized)
+        let speechStatus = SFSpeechRecognizer.authorizationStatus()
+        let speechAuth: Bool
+        if speechStatus == .authorized {
+            speechAuth = true
+        } else {
+            speechAuth = await withCheckedContinuation { continuation in
+                SFSpeechRecognizer.requestAuthorization { status in
+                    continuation.resume(returning: status == .authorized)
+                }
             }
         }
         
-        let micAuth = await withCheckedContinuation { continuation in
-            AVCaptureDevice.requestAccess(for: .audio) { granted in
-                continuation.resume(returning: granted)
+        let micStatus = AVCaptureDevice.authorizationStatus(for: .audio)
+        let micAuth: Bool
+        if micStatus == .authorized {
+            micAuth = true
+        } else {
+            micAuth = await withCheckedContinuation { continuation in
+                AVCaptureDevice.requestAccess(for: .audio) { granted in
+                    continuation.resume(returning: granted)
+                }
             }
         }
         
@@ -53,7 +64,14 @@ public final class LiveSpeechEngine: NSObject, @unchecked Sendable, SFSpeechReco
         recognitionTask?.cancel()
         recognitionTask = nil
         
+        if audioEngine.isRunning {
+            audioEngine.stop()
+        }
+        
         let inputNode = audioEngine.inputNode
+        inputNode.removeTap(onBus: 0)
+        audioEngine.reset()
+        
         let recordingFormat = inputNode.outputFormat(forBus: 0)
         
         recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
@@ -74,9 +92,6 @@ public final class LiveSpeechEngine: NSObject, @unchecked Sendable, SFSpeechReco
         }
         
         recognitionRequest.shouldReportPartialResults = true
-        if speechRecognizer?.supportsOnDeviceRecognition == true {
-            recognitionRequest.requiresOnDeviceRecognition = true
-        }
         
         recognitionTask = speechRecognizer?.recognitionTask(with: recognitionRequest) { [weak self] result, error in
             guard let self = self else { return }
@@ -138,8 +153,8 @@ public final class LiveSpeechEngine: NSObject, @unchecked Sendable, SFSpeechReco
         
         recognitionRequest?.endAudio()
         
-        // 150ms grace period for final recognition callback
-        try? await Task.sleep(nanoseconds: 150_000_000)
+        // 200ms grace period for final recognition callback
+        try? await Task.sleep(nanoseconds: 200_000_000)
         
         recognitionRequest = nil
         recognitionTask?.cancel()

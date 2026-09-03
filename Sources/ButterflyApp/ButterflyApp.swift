@@ -427,44 +427,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.updateMenu()
     }
     
-    /// Register global system-wide hotkeys
+    /// Register global and local system-wide hotkeys
     private func setupGlobalHotkey() {
-        globalEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self = self else { return }
+        let eventHandler: (NSEvent) -> NSEvent? = { [weak self] event in
+            guard let self = self else { return event }
             
             // 53: Escape keycode (Esc) -> Immediately stop and commit recording
             if event.keyCode == 53 && self.isRecording {
+                print("\n[Hotkey Event: Esc] -> Finalizing and injecting text...")
                 Task { @MainActor in
                     await self.stopAndInject()
                 }
-                return
+                return nil
             }
             
             // 49: Space keycode
-            guard event.keyCode == 49 else { return }
-            
-            let flags = event.modifierFlags
-            let isOptionPressed = flags.contains(.option)
-            let isShiftPressed = flags.contains(.shift)
-            
-            if isOptionPressed {
-                Task { @MainActor in
-                    if self.isRecording {
-                        // If already recording, stop and commit
-                        await self.stopAndInject()
-                    } else {
-                        // Switch mode based on Shift modifier
-                        if isShiftPressed {
-                            // Option + Shift + Space: Mode 2 (Record & Smart Polish)
-                            await self.startListening(mode: .recordAndPolish)
+            if event.keyCode == 49 {
+                let flags = event.modifierFlags
+                let isOptionPressed = flags.contains(.option)
+                let isShiftPressed = flags.contains(.shift)
+                
+                if isOptionPressed {
+                    Task { @MainActor in
+                        if self.isRecording {
+                            print("\n[Hotkey Event: Stop Toggle] -> Finalizing...")
+                            await self.stopAndInject()
                         } else {
-                            // Option + Space: Mode 1 (Live Streaming Dictation)
-                            await self.startListening(mode: .liveStreaming)
+                            if isShiftPressed {
+                                print("\n[Hotkey Event: Option + Shift + Space] -> Starting Mode 2 (Record & Smart Polish)...")
+                                await self.startListening(mode: .recordAndPolish)
+                            } else {
+                                print("\n[Hotkey Event: Option + Space] -> Starting Mode 1 (Live Streaming)...")
+                                await self.startListening(mode: .liveStreaming)
+                            }
                         }
                     }
+                    return nil
                 }
             }
+            return event
         }
+        
+        globalEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in
+            _ = eventHandler(event)
+        }
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: eventHandler)
     }
     
     @objc private func quitApp() {
