@@ -20,11 +20,15 @@ let package = Package(
             targets: ["ButterflyApp"]
         )
     ],
-    dependencies: [],
+    dependencies: [
+        .package(url: "https://github.com/ddddxxx/SwiftyOpenCC.git", from: "1.0.0")
+    ],
     targets: [
         .target(
             name: "ButterflyCore",
-            dependencies: [],
+            dependencies: [
+                .product(name: "OpenCC", package: "SwiftyOpenCC")
+            ],
             path: "Sources/ButterflyCore",
             resources: [
                 .process("Resources")

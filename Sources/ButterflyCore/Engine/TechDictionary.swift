@@ -18,6 +18,20 @@ public struct TechDictionary: Sendable {
         guard let content = try? String(contentsOf: url, encoding: .utf8) else {
             return []
         }
+        return parseVocabulary(from: content)
+    }
+    
+    /// Dynamically loads official open-source tech vocabulary from SPM module resource bundle
+    public static func loadBundledVocabulary() -> [String] {
+        guard let url = Bundle.module.url(forResource: "tech_vocabulary", withExtension: "txt"),
+              let content = try? String(contentsOf: url, encoding: .utf8) else {
+            return []
+        }
+        return parseVocabulary(from: content)
+    }
+    
+    /// Clean and parse text content into deduplicated word tokens
+    private static func parseVocabulary(from content: String) -> [String] {
         return content
             .components(separatedBy: .newlines)
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -29,12 +43,12 @@ public struct TechDictionary: Sendable {
             }
     }
     
-    /// Combined, deduplicated vocabulary loaded from user dictionary (~/.config/butterfly/dictionary.txt)
+    /// Combined, deduplicated vocabulary loaded from user dictionary (~/.config/butterfly/dictionary.txt) and bundled resource
     public static var allVocabulary: [String] {
         var set = Set<String>()
         var result: [String] = []
         
-        for term in loadUserVocabulary() {
+        for term in loadUserVocabulary() + loadBundledVocabulary() {
             if !set.contains(term) {
                 set.insert(term)
                 result.append(term)

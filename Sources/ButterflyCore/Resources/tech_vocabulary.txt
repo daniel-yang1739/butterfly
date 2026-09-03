@@ -1,0 +1,363 @@
+# ==============================================================================
+# 🦋 Butterfly Core Developer & Software Engineering Lexicon
+# Sourced from Open-Source Developer Glossaries, Rime IT Lexicon & GitHub Awesome
+# ==============================================================================
+
+# --- AI & Machine Learning ---
+AI
+LLM
+SLM
+GPT
+Claude
+Gemini
+DeepSeek
+Llama
+Mistral
+Qwen
+Whisper
+WhisperKit
+SenseVoice
+Agent
+Subagent
+Prompt
+System Prompt
+Prompting
+Context
+Context Window
+Token
+Tokenizer
+Embedding
+Vector Database
+Fine-tune
+Fine-tuning
+RAG
+LoRA
+Few-shot
+Zero-shot
+Multimodal
+Inference
+Transformer
+Speech-to-Text
+ASR
+TTS
+VAD
+Antigravity
+Slash Command
+Frozen Text
+Dynamic Window
+Trigger
+
+# --- Cloud & DevOps ---
+Docker
+Dockerfile
+Container
+Kubernetes
+K8s
+Pod
+Helm
+Terraform
+Ansible
+CI/CD
+Pipeline
+GitHub Actions
+GitLab CI
+AWS
+GCP
+Google Cloud
+Azure
+Cloudflare
+Vercel
+Netlify
+Supabase
+Firebase
+S3
+EC2
+Lambda
+Cloud Run
+Serverless
+IAM
+KMS
+CDN
+Load Balancer
+Nginx
+Envoy
+Traefik
+
+# --- Networking & Protocols ---
+API
+Endpoint
+RESTful
+GraphQL
+gRPC
+Protobuf
+WebSocket
+HTTP
+HTTPS
+TCP
+UDP
+IP
+DNS
+Domain
+Proxy
+Reverse Proxy
+VPN
+Gateway
+Router
+Firewall
+SSL
+TLS
+Token
+Auth
+OAuth
+JWT
+Session
+Cookie
+Cache
+Redis
+Memcached
+Payload
+Response
+Request
+Status Code
+JSON
+YAML
+XML
+CSV
+Base64
+UUID
+Regex
+
+# --- Databases & Storage ---
+SQL
+NoSQL
+MySQL
+PostgreSQL
+Postgres
+SQLite
+MongoDB
+Cassandra
+DynamoDB
+Redis
+Pinecone
+Milvus
+Chroma
+Qdrant
+Index
+Query
+Schema
+Migration
+ORM
+Prisma
+TypeORM
+Drizzle
+SQLAlchemy
+
+# --- Languages & Runtimes ---
+Rust
+Go
+Golang
+Python
+PyPI
+Conda
+JavaScript
+TypeScript
+Node
+Node.js
+NPM
+Yarn
+PNPM
+Bun
+Deno
+Swift
+SwiftUI
+UIKit
+AppKit
+Objective-C
+Xcode
+Java
+Kotlin
+Android
+C
+C++
+C#
+.NET
+PHP
+Ruby
+Elixir
+Scala
+Haskell
+WebAssembly
+WASM
+
+# --- Frontend & UI Frameworks ---
+React
+React Native
+Next.js
+Vue
+Vue.js
+Nuxt
+Angular
+Svelte
+SvelteKit
+Tailwind
+Tailwind CSS
+CSS
+HTML
+DOM
+Vite
+Webpack
+Babel
+ESBuild
+Turbopack
+Electron
+Tauri
+Flutter
+Dart
+PWA
+Component
+Layout
+Container
+Modal
+Dialog
+Popup
+Dropdown
+Menu
+Toolbar
+Status Bar
+Sidebar
+Navbar
+Header
+Footer
+Button
+Input
+Form
+Card
+Table
+List
+Grid
+Flex
+Flexbox
+Margin
+Padding
+Border
+Shadow
+Icon
+SVG
+Asset
+State
+Props
+Hook
+Reducer
+Dispatch
+Middleware
+Service
+Controller
+View
+
+# --- Git & Engineering Workflow ---
+Git
+GitHub
+GitLab
+Bitbucket
+Repository
+Repo
+Commit
+Branch
+Merge
+Rebase
+Pull Request
+PR
+Issue
+Fork
+Stash
+Cherry-pick
+Release
+Deploy
+Deployment
+Rollback
+Staging
+Production
+Prod
+Dev
+Debug
+Refactor
+Lint
+Linter
+Test
+Unit Test
+Integration Test
+E2E
+Benchmark
+Performance
+Whitelist
+Blacklist
+Allowlist
+Blocklist
+Threat Modeling
+STRIDE
+Zero Trust
+Vulnerability
+CVE
+Exploit
+Penetration Test
+Pen Test
+SAML
+SSO
+RBAC
+ABAC
+Encryption
+Hashing
+Salt
+HMAC
+Bcrypt
+
+# --- Hardware & Apple Silicon ---
+Apple Silicon
+Neural Engine
+ANE
+Metal
+GPU
+M1
+M2
+M3
+M4
+M1 Pro
+M2 Max
+M3 Ultra
+M4 Max
+MacBook
+MacBook Pro
+Mac Studio
+Mac mini
+Homebrew
+Brew
+Terminal
+Zsh
+Bash
+VS Code
+Cursor
+Zed
+IntelliJ
+Vim
+Neovim
+Emacs
+
+# --- Units & Metrics ---
+MB
+GB
+TB
+PB
+KB
+Bytes
+Byte
+bit
+Mbps
+Gbps
+ms
+FPS
+Hz
+kHz
+MHz
+GHz
+800 MB
+1.6 GB
