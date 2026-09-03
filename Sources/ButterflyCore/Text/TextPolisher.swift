@@ -509,6 +509,22 @@ public final class TextPolisher {
             }
         }
         
+        // 3. Natural transitional comma insertion (prevents giant unpunctuated run-on sentences)
+        let transitionalRules = [
+            ("(?<=[\u{4e00}-\u{9fa5}A-Za-z0-9]{3,20})\\s+(然後|所以說|所以|但是|不過|另外|此外|而且|也就是說|比如說|例如|第一點|第二點|第三點)(?=[\\s\u{4e00}-\u{9fa5}A-Za-z0-9])", "，$1"),
+            ("^(好|對|是|沒錯|OK|Ok)\\s*(?=我們|我|再來|接下來|看一下|試一下|測一下)", "$1，")
+        ]
+        for (pattern, template) in transitionalRules {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
+                let range = NSRange(location: 0, length: result.utf16.count)
+                result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: template)
+            }
+        }
+        
+        result = result.replacingOccurrences(of: "，，", with: "，")
+        result = result.replacingOccurrences(of: "。，", with: "。")
+        result = result.replacingOccurrences(of: "，。", with: "。")
+        
         return result
     }
 }

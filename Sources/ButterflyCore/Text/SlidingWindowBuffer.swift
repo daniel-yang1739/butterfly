@@ -205,10 +205,36 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
             action = .noChange
         }
         
-        // 3. Tri-Color Pointer Progression:
-        // - The previous polished boundary (polishedIndex) promotes to permanent ⚪ White (frozenIndex)!
-        // - The newly polished segment becomes 🟡 Amber Gold (polishedIndex)!
-        let newFrozenIndex = min(polishedIndex, targetFull.count)
+        // 3. Mathematical Tri-Color Overlapping Progression:
+        // - Active span evaluated by the Model: previousFrozen ..< targetFull.count
+        // - First 50% of the active span (aligned to punctuation) is locked to ⚪ White (frozenIndex)!
+        // - Second 50% of the active span remains in 🟡 Amber Gold (polishedIndex = targetFull.count)!
+        // - The Gold segment is STILL within the active window (screenText[frozenIndex...])
+        //   and will be sent to the Model again in the next cycle to be re-evaluated alongside new speech!
+        let previousFrozen = frozenIndex
+        let activeSpan = targetFull.count - previousFrozen
+        let newFrozenIndex: Int
+        if activeSpan > 8 {
+            let rawMid = previousFrozen + (activeSpan / 2)
+            var aligned = rawMid
+            let chars = Array(targetFull)
+            let puncts: [Character] = ["，", "。", "！", "？", "；", "\n"]
+            for offset in 0...min(6, activeSpan / 3) {
+                let r = rawMid + offset
+                if r < chars.count && puncts.contains(chars[r]) {
+                    aligned = r + 1
+                    break
+                }
+                let l = rawMid - offset
+                if l > previousFrozen && puncts.contains(chars[l]) {
+                    aligned = l + 1
+                    break
+                }
+            }
+            newFrozenIndex = max(previousFrozen, min(aligned, targetFull.count))
+        } else {
+            newFrozenIndex = previousFrozen
+        }
         let newPolishedIndex = targetFull.count
         
         isCursorInjecting = true
