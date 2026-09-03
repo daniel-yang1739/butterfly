@@ -30,6 +30,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var latestTranscript: String = ""
     private let liveEngine = LiveSpeechEngine.shared
     private var globalEventMonitor: Any?
+    private var recordingTimer: Timer?
+    private var recordingStartTime: Date?
+    private var animationIndex: Int = 0
     
     static func main() {
         let app = NSApplication.shared
@@ -49,6 +52,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self = self, self.isRecording else { return }
                 self.latestTranscript = formattedText
                 
+                let elapsed = Int(Date().timeIntervalSince(self.recordingStartTime ?? Date()))
+                let minutes = String(format: "%02d", elapsed / 60)
+                let seconds = String(format: "%02d", elapsed % 60)
+                let timeStr = "[\(minutes):\(seconds)]"
+                
                 if self.activeMode == .liveStreaming {
                     // Mode 1: Direct real-time streaming typing into active focused cursor (Append-Only)
                     InputInjector.shared.injectStreamingDelta(
@@ -56,12 +64,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         previousText: &self.streamingInjectedText
                     )
                     
-                    let preview = formattedText.count > 12 ? "..." + String(formattedText.suffix(12)) : formattedText
-                    self.statusItem.button?.title = " 🎙️ \(preview)"
+                    let preview = formattedText.count > 10 ? "..." + String(formattedText.suffix(10)) : formattedText
+                    self.statusItem.button?.title = " 🎙️ \(timeStr) \(preview)"
                 } else {
-                    // Mode 2: Record audio quietly and display preview in menu bar
-                    let preview = formattedText.count > 12 ? "..." + String(formattedText.suffix(12)) : formattedText
-                    self.statusItem.button?.title = " 🔴 \(preview)"
+                    // Mode 2: Live feedback in menu bar showing recording timer & live words
+                    let preview = formattedText.count > 10 ? "..." + String(formattedText.suffix(10)) : formattedText
+                    self.statusItem.button?.title = " 🔴 \(timeStr) \(preview)"
                 }
             }
         }
@@ -421,19 +429,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             streamingInjectedText = ""
             activeMode = mode
             isRecording = true
+            recordingStartTime = Date()
+            animationIndex = 0
             
             if mode == .liveStreaming {
-                self.statusItem.button?.title = " 🎙️ Streaming..."
+                self.statusItem.button?.title = " 🎙️ [00:00] 聆聽中 ·"
             } else {
-                self.statusItem.button?.title = " 🔴 Recording..."
+                self.statusItem.button?.title = " 🔴 [00:00] 思考錄音中 ·"
             }
             self.updateMenu()
+            
+            recordingTimer?.invalidate()
+            recordingTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self = self, self.isRecording else { return }
+                    self.animationIndex = (self.animationIndex + 1) % 4
+                    let dots = String(repeating: "·", count: self.animationIndex + 1)
+                    let elapsed = Int(Date().timeIntervalSince(self.recordingStartTime ?? Date()))
+                    let timeStr = String(format: "[%02d:%02d]", elapsed / 60, elapsed % 60)
+                    
+                    if self.latestTranscript.isEmpty {
+                        if self.activeMode == .recordAndPolish {
+                            self.statusItem.button?.title = " 🔴 \(timeStr) 思考錄音中 \(dots)"
+                        } else {
+                            self.statusItem.button?.title = " 🎙️ \(timeStr) 聆聽中 \(dots)"
+                        }
+                    }
+                }
+            }
             
             try liveEngine.startLiveListening()
             print("Butterfly: Started \(mode.title) [ASR: \(ModelManager.shared.activeASRModel.displayName), SLM: \(ModelManager.shared.activeSLMModel.displayName)]...")
         } catch {
             print("Failed to start recording: \(error.localizedDescription)")
             isRecording = false
+            recordingTimer?.invalidate()
+            recordingTimer = nil
             self.statusItem.button?.title = ""
             self.updateMenu()
         }
@@ -443,9 +474,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func stopAndInject() async {
         guard isRecording else { return }
         isRecording = false
+        recordingTimer?.invalidate()
+        recordingTimer = nil
         
         let mode = activeMode
-        self.statusItem.button?.title = (mode == .recordAndPolish) ? " ⏳ Polishing..." : " ⏳ Finalizing..."
+        self.statusItem.button?.title = (mode == .recordAndPolish) ? " 🧠 筆記深度重構中..." : " ⏳ Finalizing..."
         self.updateMenu()
         
         // Asynchronously flush audio buffers and retrieve full finalized transcript
