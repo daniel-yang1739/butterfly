@@ -21,7 +21,7 @@ public final class LocalSLMInferenceBackend: @unchecked Sendable {
         case .liveStream:
             rolePrompt = "你是繁體中文即時語音修正助手。請將使用者的口述語音片段修復錯字並加上繁體中文標點符號。規則：直接輸出修正後的繁體中文句子，絕不重複指令、絕不輸出多餘問候。"
         case .structuredNote, .conciseSummary:
-            rolePrompt = "你是專業的繁體中文語音筆記整理助手。請將使用者的口述文字整理成乾淨、條理分明的繁體中文 Markdown 條列式筆記（以 - 開頭）。規則：直接輸出筆記內容，絕不重複指令、絕不輸出問候語、絕不包含閒聊贅詞。"
+            rolePrompt = "你是專業的技術筆記秘書。請將使用者的口述語音整理為乾淨、條理分明的繁體中文 Markdown 條列筆記（每點以 - 開頭）。規則：直接輸出繁體中文筆記內容，絕不輸出問候語、絕不包含閒聊贅詞。"
         }
         
         return """
@@ -30,26 +30,28 @@ public final class LocalSLMInferenceBackend: @unchecked Sendable {
         <|im_start|>user
         \(transcript)<|im_end|>
         <|im_start|>assistant
-        
+        - 
         """
     }
     
-    /// Format Llama 3 prompt template with strict anti-echo directives
+    /// Format Llama 3 prompt template with strict anti-echo and direct prefix guidance
     public func buildLlama3Prompt(transcript: String, mode: TextPolisher.PolishMode) -> String {
-        let rolePrompt: String
         switch mode {
         case .liveStream:
-            rolePrompt = "你是繁體中文即時語音修正助手。請將使用者的口述語音片段修復錯字並加上繁體中文標點符號。規則：直接輸出修正後的繁體中文句子，絕不重複指令、絕不輸出多餘問候。"
+            return """
+            <|begin_of_text|><|start_header_id|>system<|end_header_id|>
+            你是繁體中文即時語音修正助手。請將使用者的口述文字修正錯字並加上繁體中文標點符號。規則：直接輸出修正後的繁體中文句子，絕不輸出任何問候語或額外文字。<|eot_id|><|start_header_id|>user<|end_header_id|>
+            \(transcript)<|eot_id|><|start_header_id|>assistant
+            
+            """
         case .structuredNote, .conciseSummary:
-            rolePrompt = "你是專業的繁體中文語音筆記整理助手。請將使用者的口述文字整理成乾淨、條理分明的繁體中文 Markdown 條列式筆記（以 - 開頭）。規則：直接輸出筆記內容，絕不重複指令、絕不輸出問候語、絕不包含閒聊贅詞。"
+            return """
+            <|begin_of_text|><|start_header_id|>system<|end_header_id|>
+            你是專業的技術架構與筆記秘書。請將使用者的口述語音直接提煉整理為條理清晰的繁體中文 Markdown 條列筆記（每點以 - 開頭）。規則：直接輸出繁體中文筆記，絕不輸出問候語、絕不聊天、絕不重複使用者整段問題。<|eot_id|><|start_header_id|>user<|end_header_id|>
+            \(transcript)<|eot_id|><|start_header_id|>assistant
+            - 
+            """
         }
-        
-        return """
-        <|begin_of_text|><|start_header_id|>system<|end_header_id|>
-        \(rolePrompt)<|eot_id|><|start_header_id|>user<|end_header_id|>
-        \(transcript)<|eot_id|><|start_header_id|>assistant
-        
-        """
     }
     
     /// Restructure monologue transcript using true local SLM inference on Metal GPU with full telemetry
@@ -70,8 +72,11 @@ public final class LocalSLMInferenceBackend: @unchecked Sendable {
                 let receiveTimeStr = Self.timeFormatter.string(from: Date())
                 let elapsedMs = Double(endTime.uptimeNanoseconds - startTime.uptimeNanoseconds) / 1_000_000.0
                 
-                let cleaned = cleanSLMOutput(output)
+                var cleaned = cleanSLMOutput(output)
                 if !cleaned.isEmpty {
+                    if !cleaned.hasPrefix("- ") && !cleaned.hasPrefix("1. ") && !cleaned.hasPrefix("#") {
+                        cleaned = "- " + cleaned
+                    }
                     let traditional = OpenCCTranslator.shared.convert(cleaned)
                     
                     let samplePreview = transcript.count > 50 ? String(transcript.prefix(50)) + "..." : transcript
@@ -150,7 +155,7 @@ public final class LocalSLMInferenceBackend: @unchecked Sendable {
                     "-n", "\(maxTokens)",
                     "-ngl", "99",
                     "--temp", "0.1",
-                    "--repeat-penalty", "1.2",
+                    "--repeat-penalty", "1.3",
                     "--simple-io",
                     "--no-display-prompt",
                     "--single-turn"
@@ -195,16 +200,27 @@ public final class LocalSLMInferenceBackend: @unchecked Sendable {
         var lines = text.components(separatedBy: .newlines)
         lines.removeAll { line in
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.hasPrefix("# 🦋 Butterfly") ||
+            return trimmed.hasPrefix("# 🦋") ||
                    trimmed.hasPrefix("<system_instructions>") ||
                    trimmed.hasPrefix("</system_instructions>") ||
+                   trimmed.hasPrefix("<|begin_of_text|>") ||
+                   trimmed.hasPrefix("<|start_header_id|>") ||
                    trimmed.hasPrefix("我想你可能是在問") ||
                    trimmed.hasPrefix("你可能是在問") ||
-                   trimmed.hasPrefix("好的，以下是") ||
-                   trimmed.hasPrefix("這裡是用戶的口述")
+                   trimmed.hasPrefix("好的，以下是")
         }
         
-        let result = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        // Deduplicate consecutive duplicate lines
+        var deduplicatedLines: [String] = []
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            if deduplicatedLines.last?.trimmingCharacters(in: .whitespacesAndNewlines) != trimmed {
+                deduplicatedLines.append(line)
+            }
+        }
+        
+        let result = deduplicatedLines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
         return result
     }
 }
