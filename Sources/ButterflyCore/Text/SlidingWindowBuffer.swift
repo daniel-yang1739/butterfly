@@ -17,6 +17,18 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
     /// Exact cumulative text that has physically been typed into the active OS cursor
     public private(set) var injectedCumulativeText: String = ""
     
+    /// Confirmed historical text locked on pauses
+    public private(set) var frozenText: String = ""
+    
+    /// Active unfrozen text currently being spoken
+    public var activeTail: String {
+        guard !frozenText.isEmpty && injectedCumulativeText.hasPrefix(frozenText) else {
+            return injectedCumulativeText
+        }
+        let suffixIdx = injectedCumulativeText.index(injectedCumulativeText.startIndex, offsetBy: frozenText.count)
+        return String(injectedCumulativeText[suffixIdx...])
+    }
+    
     /// Maximum allowed backspaces in a single refinement to prevent screen jitter
     public let maxBackspaceLimit: Int
     
@@ -29,6 +41,7 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         injectedCumulativeText = ""
+        frozenText = ""
     }
     
     /// Returns the complete transcribed text
@@ -88,18 +101,20 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
         
         // Refine with Mode 1 live dictation polisher (Pangu spacing, numbers, tech terms like Context)
         let refined = TextPolisher.shared.polish(injectedCumulativeText, mode: .liveStream)
-        guard refined != injectedCumulativeText else { return .noChange }
         
         let (backspaces, replacement) = computeMinimalDelta(from: injectedCumulativeText, to: refined)
         
         // Only apply if the change is within safe backspace limits
         if backspaces <= maxBackspaceLimit {
             injectedCumulativeText = refined
+            frozenText = refined
             if backspaces == 0 && !replacement.isEmpty {
                 return .append(text: replacement)
             } else if backspaces > 0 {
                 return .replaceTail(backspaces: backspaces, replacement: replacement)
             }
+        } else {
+            frozenText = injectedCumulativeText
         }
         
         return .noChange

@@ -65,6 +65,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     let action = self.slidingWindowBuffer.appendStreamingText(formattedText)
                     InputInjector.shared.applySlidingDelta(action)
                     
+                    // Update Floating HUD with Two-Tone Coloring (White: Frozen, Gray: Active Tail)
+                    FloatingHUDWindow.shared.update(
+                        frozenText: self.slidingWindowBuffer.frozenText,
+                        activeTail: self.slidingWindowBuffer.activeTail,
+                        timeStr: timeStr,
+                        mode: .liveStreaming
+                    )
+                    
                     // Mode 1 Phase 2: Reset 350ms Pause-Gated Refinement Timer
                     self.pauseTimer?.invalidate()
                     self.pauseTimer = Timer.scheduledTimer(withTimeInterval: 0.35, repeats: false) { [weak self] _ in
@@ -72,13 +80,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             guard let self = self, self.isRecording, self.activeMode == .liveStreaming else { return }
                             let pauseAction = self.slidingWindowBuffer.onPauseTriggered()
                             InputInjector.shared.applySlidingDelta(pauseAction)
+                            
+                            // Re-sync Floating HUD with new frozen boundary
+                            FloatingHUDWindow.shared.update(
+                                frozenText: self.slidingWindowBuffer.frozenText,
+                                activeTail: self.slidingWindowBuffer.activeTail,
+                                timeStr: timeStr,
+                                mode: .liveStreaming
+                            )
                         }
                     }
                     
                     let preview = formattedText.count > 10 ? "..." + String(formattedText.suffix(10)) : formattedText
                     self.statusItem.button?.title = " 🎙️ \(timeStr) \(preview)"
                 } else {
-                    // Mode 2: Live feedback in menu bar showing recording timer & live words
+                    // Mode 2: Live feedback in floating HUD and menu bar
+                    FloatingHUDWindow.shared.update(
+                        frozenText: "",
+                        activeTail: formattedText,
+                        timeStr: timeStr,
+                        mode: .recordAndPolish
+                    )
                     let preview = formattedText.count > 10 ? "..." + String(formattedText.suffix(10)) : formattedText
                     self.statusItem.button?.title = " 🔴 \(timeStr) \(preview)"
                 }
@@ -477,10 +499,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             
             try liveEngine.startLiveListening()
+            FloatingHUDWindow.shared.show(mode: mode)
             print("Butterfly: Started \(mode.title) [ASR: \(ModelManager.shared.activeASRModel.displayName), SLM: \(ModelManager.shared.activeSLMModel.displayName)]...")
         } catch {
             print("Failed to start recording: \(error.localizedDescription)")
             isRecording = false
+            FloatingHUDWindow.shared.hide()
             if !mode2PlaceholderText.isEmpty {
                 InputInjector.shared.sendBackspaces(count: mode2PlaceholderText.utf16.count)
                 mode2PlaceholderText = ""
@@ -498,6 +522,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func stopAndInject() async {
         guard isRecording else { return }
         isRecording = false
+        FloatingHUDWindow.shared.hide()
         recordingTimer?.invalidate()
         recordingTimer = nil
         pauseTimer?.invalidate()
