@@ -4,7 +4,7 @@ import ButterflyCore
 /// Comprehensive Zero-Dependency Unit Test Runner for Butterfly Core Engine
 public enum TestRunner {
     public static func runAllTests() {
-        print("\n🧪 Running Butterfly Core Test Suite (26 Core Logic Assertions)...\n" + String(repeating: "=", count: 60))
+        print("\n🧪 Running Butterfly Core Test Suite...\n" + String(repeating: "=", count: 60))
         
         var passed = 0
         var failed = 0
@@ -97,28 +97,49 @@ public enum TestRunner {
         let injector = InputInjector.shared
         
         var prev1 = "你好"
-        injector.injectStreamingDelta(newText: "你好世界", previousText: &prev1)
+        _ = injector.prepareStreamingDelta(newText: "你好世界", previousText: &prev1)
         assertEqual(prev1, "你好世界", "TC-F1: Streaming forward append delta")
         
         var prev2 = "你好是界"
-        injector.injectStreamingDelta(newText: "你好世界", previousText: &prev2)
+        _ = injector.prepareStreamingDelta(newText: "你好世界", previousText: &prev2)
         assertEqual(prev2, "你好世界", "TC-F2: Streaming in-place backspace refinement delta")
         
         var prev3 = ""
-        injector.injectStreamingDelta(newText: "第一步", previousText: &prev3)
+        _ = injector.prepareStreamingDelta(newText: "第一步", previousText: &prev3)
         assertEqual(prev3, "第一步", "TC-F3: Initial empty string forward typing")
         
-        injector.injectStreamingDelta(newText: "第一步第二步", previousText: &prev3)
+        _ = injector.prepareStreamingDelta(newText: "第一步第二步", previousText: &prev3)
         assertEqual(prev3, "第一步第二步", "TC-F4: Multi-step incremental typing")
         
-        injector.injectStreamingDelta(newText: "第一步第二步", previousText: &prev3)
+        _ = injector.prepareStreamingDelta(newText: "第一步第二步", previousText: &prev3)
         assertEqual(prev3, "第一步第二步", "TC-F5: Idempotent duplicate update (no spurious keystrokes)")
+
+        // MARK: - 7. Sliding Transcript Reconciliation Tests
+        print("\n📦 Suite 7: Sliding Transcript Reconciliation")
+        let accumulator = TranscriptAccumulator()
+        assertEqual(
+            accumulator.appendSlidingWindow(rawText: "今天要測試語音辨識", windowStartSample: 0),
+            "今天要測試語音辨識",
+            "TC-G1: Initial active window"
+        )
+        assertEqual(
+            accumulator.appendSlidingWindow(rawText: "測試語音辨識是否正常", windowStartSample: 8_000),
+            "今天要測試語音辨識是否正常",
+            "TC-G2: Overlapping window commits only expired prefix"
+        )
+        let revisionAccumulator = TranscriptAccumulator()
+        _ = revisionAccumulator.appendSlidingWindow(rawText: "這是一個錯吳", windowStartSample: 0)
+        assertEqual(
+            revisionAccumulator.appendSlidingWindow(rawText: "這是一個錯誤", windowStartSample: 0),
+            "這是一個錯誤",
+            "TC-G3: Active window revision replaces provisional text"
+        )
         
         // MARK: - Final Summary
         print("\n" + String(repeating: "=", count: 60))
         print("🎯 Test Summary: \(passed) Passed, \(failed) Failed (Total: \(passed + failed) Assertions)")
         if failed == 0 {
-            print("✨ ALL 34 CORE LOGIC TESTS PASSED WITH 100% SUCCESS!\n")
+            print("✨ ALL CORE LOGIC TESTS PASSED WITH 100% SUCCESS!\n")
         } else {
             print("⚠️ Some tests failed. Please review the output above.\n")
             exit(1)

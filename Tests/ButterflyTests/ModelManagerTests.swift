@@ -34,4 +34,14 @@ final class ModelManagerTests: XCTestCase {
         XCTAssertFalse(best.id.isEmpty)
         XCTAssertFalse(best.displayName.isEmpty)
     }
+
+    func testRuntimeModelSupportMatchesImplementedBackends() {
+        let whisper = ModelManager.defaultModels.first { $0.id == "whisper-large-v3-turbo" }!
+        let senseVoice = ModelManager.defaultModels.first { $0.id == "sensevoice-small" }!
+        let appleSpeech = ModelManager.defaultModels.first { $0.id == "apple-speech-native" }!
+
+        XCTAssertTrue(ModelManager.isRuntimeSupported(whisper))
+        XCTAssertFalse(ModelManager.isRuntimeSupported(senseVoice))
+        XCTAssertTrue(ModelManager.isRuntimeSupported(appleSpeech))
+    }
 }

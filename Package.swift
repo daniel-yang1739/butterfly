@@ -25,8 +25,29 @@ let package = Package(
     ],
     targets: [
         .target(
+            name: "CButterflyWhisper",
+            path: "Sources/CButterflyWhisper",
+            publicHeadersPath: "include",
+            cSettings: [
+                .unsafeFlags([
+                    "-I/opt/homebrew/include",
+                    "-I/usr/local/include"
+                ])
+            ],
+            linkerSettings: [
+                .unsafeFlags([
+                    "-L/opt/homebrew/lib",
+                    "-L/usr/local/lib"
+                ]),
+                .linkedLibrary("whisper"),
+                .linkedLibrary("ggml"),
+                .linkedLibrary("ggml-base")
+            ]
+        ),
+        .target(
             name: "ButterflyCore",
             dependencies: [
+                "CButterflyWhisper",
                 .product(name: "OpenCC", package: "SwiftyOpenCC")
             ],
             path: "Sources/ButterflyCore",

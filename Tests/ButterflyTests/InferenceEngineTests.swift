@@ -33,6 +33,79 @@ final class InferenceEngineTests: XCTestCase {
         
         XCTAssertEqual(resampled.count, 3)
     }
+
+    func testCoreMLEncoderPathUsesWhisperNamingConvention() {
+        let path = "/tmp/models/ggml-large-v3-turbo.bin"
+        let encoderURL = AppleSiliconInferenceBackend.coreMLEncoderURL(forModelPath: path)
+
+        XCTAssertEqual(
+            encoderURL.path,
+            "/tmp/models/ggml-large-v3-turbo-encoder.mlmodelc"
+        )
+    }
+
+    func testHardwareDetectionRequiresRuntimeEvidence() {
+        XCTAssertEqual(
+            AppleSiliconInferenceBackend.detectHardware(
+                fromWhisperDiagnostics: "Core ML model loaded\nuse gpu = 1\nMetal initialized"
+            ),
+            .appleNeuralEngineAndMetalGPU
+        )
+        XCTAssertEqual(
+            AppleSiliconInferenceBackend.detectHardware(
+                fromWhisperDiagnostics: "Core ML model loaded\nuse gpu = 0"
+            ),
+            .appleNeuralEngine
+        )
+        XCTAssertEqual(
+            AppleSiliconInferenceBackend.detectHardware(
+                fromWhisperDiagnostics: "use gpu = 1\nMetal initialized"
+            ),
+            .metalGPU
+        )
+        XCTAssertEqual(
+            AppleSiliconInferenceBackend.detectHardware(
+                fromWhisperDiagnostics: "use gpu = 0"
+            ),
+            .cpuFallback
+        )
+    }
+
+    func testTranscriptAccumulatorMergesSlidingWindowOverlap() {
+        let accumulator = TranscriptAccumulator()
+        XCTAssertEqual(accumulator.append(rawText: "今天要測試語音辨識"), "今天要測試語音辨識")
+        XCTAssertEqual(
+            accumulator.append(rawText: "語音辨識是否正常"),
+            "今天要測試語音辨識是否正常"
+        )
+    }
+
+    func testTranscriptAccumulatorReplacesActiveWindowRevision() {
+        let accumulator = TranscriptAccumulator()
+        XCTAssertEqual(accumulator.append(rawText: "這是一個錯吳"), "這是一個錯吳")
+        XCTAssertEqual(accumulator.append(rawText: "這是一個錯誤"), "這是一個錯誤")
+    }
+
+    func testSlidingTranscriptFreezesTextLeavingTheAudioWindow() {
+        let accumulator = TranscriptAccumulator()
+        XCTAssertEqual(
+            accumulator.appendSlidingWindow(rawText: "今天要測試語音辨識", windowStartSample: 0),
+            "今天要測試語音辨識"
+        )
+        XCTAssertEqual(
+            accumulator.appendSlidingWindow(rawText: "測試語音辨識是否正常", windowStartSample: 8_000),
+            "今天要測試語音辨識是否正常"
+        )
+    }
+
+    func testSlidingTranscriptAllowsRevisionBeforeWindowAdvances() {
+        let accumulator = TranscriptAccumulator()
+        _ = accumulator.appendSlidingWindow(rawText: "這是一個錯吳", windowStartSample: 0)
+        XCTAssertEqual(
+            accumulator.appendSlidingWindow(rawText: "這是一個錯誤", windowStartSample: 0),
+            "這是一個錯誤"
+        )
+    }
     
     // TC-C3: Voice Activity Detection (VAD) state events test
     func testVADSilenceDetection() {

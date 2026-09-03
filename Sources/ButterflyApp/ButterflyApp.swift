@@ -23,6 +23,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var streamingInjectedText: String = ""
     private var latestTranscript: String = ""
     private let liveEngine = LiveSpeechEngine.shared
+    private let localWhisperEngine = LocalWhisperStreamEngine.shared
+    private var isUsingLocalWhisper = false
     private var globalEventMonitor: Any?
     private var recordingTimer: Timer?
     private var recordingStartTime: Date?
@@ -43,31 +45,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Listen for live speech recognition updates
         liveEngine.onTranscriptUpdate = { [weak self] formattedText in
             Task { @MainActor in
-                guard let self = self, self.isRecording else { return }
-                self.latestTranscript = formattedText
-                
-                let elapsed = Int(Date().timeIntervalSince(self.recordingStartTime ?? Date()))
-                let minutes = String(format: "%02d", elapsed / 60)
-                let seconds = String(format: "%02d", elapsed % 60)
-                let timeStr = "[\(minutes):\(seconds)]"
-                
-                // Direct streaming delta injection into focused cursor (zero-latency, no sliding window overhead)
-                InputInjector.shared.injectStreamingDelta(newText: formattedText, previousText: &self.streamingInjectedText)
-                
-                // Update Floating HUD with active transcript
-                FloatingHUDWindow.shared.update(
-                    text: formattedText,
-                    timeStr: timeStr
-                )
-                
-                let preview = formattedText.count > 10 ? "..." + String(formattedText.suffix(10)) : formattedText
-                self.statusItem.button?.title = " 🎙️ \(timeStr) \(preview)"
+                self?.handleTranscriptUpdate(formattedText)
+            }
+        }
+        localWhisperEngine.onTranscriptUpdate = { [weak self] formattedText in
+            Task { @MainActor in
+                self?.handleTranscriptUpdate(formattedText)
             }
         }
         
         liveEngine.onError = { error in
             Task { @MainActor in
                 print("Recognition Engine Info: \(error.localizedDescription)")
+            }
+        }
+        localWhisperEngine.onError = { error in
+            Task { @MainActor [weak self] in
+                print("Local Whisper Engine Error: \(error.localizedDescription)")
+                if let self, self.isRecording, self.isUsingLocalWhisper {
+                    await self.stopAndInject()
+                }
             }
         }
         
@@ -172,6 +169,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             modelItem.target = self
             modelItem.representedObject = model
+            modelItem.isEnabled = !isRecording && ModelManager.isRuntimeSupported(model)
             asrMenu.addItem(modelItem)
         }
         let asrParentItem = NSMenuItem(title: "🎙️ Speech Model: \(ModelManager.shared.activeASRModel.displayName)", action: nil, keyEquivalent: "")
@@ -238,6 +236,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     
     @objc private func selectASRModelSpec(_ sender: NSMenuItem) {
         guard let spec = sender.representedObject as? ModelSpec else { return }
+        guard ModelManager.isRuntimeSupported(spec) else { return }
         
         if ModelManager.shared.isModelDownloaded(spec) {
             ModelManager.shared.activeASRModel = spec
@@ -325,10 +324,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Start listening with live streaming dictation
     private func startListening(mode: ButterflyMode = .liveStreaming) async {
         guard !isRecording else { return }
-        
-        let granted = await liveEngine.requestPermissions()
+
+        let activeModel = ModelManager.shared.activeASRModel
+        isUsingLocalWhisper = activeModel.id.hasPrefix("whisper-")
+        let granted: Bool
+        if isUsingLocalWhisper {
+            granted = await localWhisperEngine.requestMicrophonePermission()
+        } else {
+            granted = await liveEngine.requestPermissions()
+        }
         guard granted else {
-            print("Warning: Microphone or Speech Recognition permission not granted")
+            print("Warning: Required microphone or speech recognition permission not granted")
             return
         }
         
@@ -358,9 +364,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
             
-            try liveEngine.startLiveListening()
+            if isUsingLocalWhisper {
+                let modelPath = ModelManager.shared.localPath(for: activeModel).path
+                try await localWhisperEngine.startListening(modelPath: modelPath)
+            } else {
+                try liveEngine.startLiveListening()
+            }
             FloatingHUDWindow.shared.show(mode: .liveStreaming)
-            print("Butterfly: Started Live Voice Dictation [ASR: \(ModelManager.shared.activeASRModel.displayName)]...")
+            print("Butterfly: Started Live Voice Dictation [ASR: \(activeModel.displayName)]...")
         } catch {
             print("Failed to start recording: \(error.localizedDescription)")
             isRecording = false
@@ -384,13 +395,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.updateMenu()
         
         // Asynchronously flush audio buffers and retrieve full finalized transcript
-        let fullRawTranscript = await liveEngine.stopLiveListening()
+        let fullRawTranscript = isUsingLocalWhisper
+            ? await localWhisperEngine.stopListening()
+            : await liveEngine.stopLiveListening()
         
         print("\n[Butterfly: Live Dictation Completed]: \(fullRawTranscript)")
         
         streamingInjectedText = ""
         self.statusItem.button?.title = ""
         self.updateMenu()
+    }
+
+    private func handleTranscriptUpdate(_ formattedText: String) {
+        guard isRecording else { return }
+        latestTranscript = formattedText
+
+        let elapsed = Int(Date().timeIntervalSince(recordingStartTime ?? Date()))
+        let minutes = String(format: "%02d", elapsed / 60)
+        let seconds = String(format: "%02d", elapsed % 60)
+        let timeStr = "[\(minutes):\(seconds)]"
+
+        let injectionAction = InputInjector.shared.prepareStreamingDelta(
+            newText: formattedText,
+            previousText: &streamingInjectedText
+        )
+        FloatingHUDWindow.shared.update(text: formattedText, timeStr: timeStr)
+
+        let preview = formattedText.count > 10
+            ? "..." + String(formattedText.suffix(10))
+            : formattedText
+        statusItem.button?.title = " 🎙️ \(timeStr) \(preview)"
+        InputInjector.shared.enqueueSlidingDelta(injectionAction)
     }
     
     private var eventTapPort: CFMachPort?
@@ -402,11 +437,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let port = eventTapPort {
                 CGEvent.tapEnable(tap: port, enable: true)
             }
-            return Unmanaged.passRetained(event)
+            return Unmanaged.passUnretained(event)
         }
         
         guard type == .keyDown else {
-            return Unmanaged.passRetained(event)
+            return Unmanaged.passUnretained(event)
         }
         
         let keyCode = Int(event.getIntegerValueField(.keyboardEventKeycode))
@@ -436,7 +471,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return nil // Swallow Space key so it doesn't type a space
         }
         
-        return Unmanaged.passRetained(event)
+        return Unmanaged.passUnretained(event)
     }
     
     /// Register global and local system-wide hotkeys
@@ -476,7 +511,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return event
         }
-        NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: fallbackHandler)
+        globalEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: fallbackHandler)
     }
     
     @objc private func quitApp() {

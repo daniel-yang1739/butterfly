@@ -13,9 +13,10 @@ A lightweight, privacy-focused, zero-cloud-dependency local speech-to-text syste
 ## ✨ Key Features
 
 1. **🎙️ Direct Real-Time Streaming Voice Dictation (`Option + Space`)**:
-   - 100% faithful real-time speech-to-text with continuous live typing directly into your focused cursor via `InputInjector.injectStreamingDelta`.
-   - Zero-latency character streaming: Words appear on screen the instant you speak.
-   - Preserves natural spoken narrative flow without artificial delays.
+   - Downloaded Whisper models use app-owned microphone capture and the local whisper.cpp inference backend; Apple Speech is used only when explicitly selected.
+   - Uses a persistent whisper.cpp context and a bounded rolling audio window instead of reloading the model or retranscribing the full recording.
+   - Updates the active transcript continuously and types only cursor deltas into the focused input.
+   - Preserves natural spoken narrative flow while allowing Whisper to revise the active window.
 2. **🛑 Chat-Safe Accidental Send Protection (`Enter` / `Esc`)**:
    - Press <kbd>Enter</kbd> (or <kbd>Esc</kbd>) to stop voice dictation.
    - The first <kbd>Enter</kbd> is intercepted and swallowed at the macOS OS level by a low-level `CGEventTap` (`.headInsertEventTap`), ensuring you **never accidentally submit half-finished messages in Slack, Discord, ChatGPT, Claude, or Cursor**!
@@ -103,8 +104,11 @@ butterfly/
 
 ### 1. Build the Project
 ```bash
+brew install whisper-cpp
 swift build
 ```
+
+Butterfly links directly to the local whisper.cpp library so the model stays resident during dictation. The Homebrew package provides the required headers, native library, and Metal backend.
 
 ### 2. Run CLI Commands
 ```bash
@@ -125,6 +129,35 @@ swift run butterfly-cli info
 ```bash
 swift run ButterflyApp
 ```
+
+### 4. Enable Whisper Core ML / Apple Neural Engine Acceleration
+
+The local whisper.cpp backend uses Metal by default. Homebrew's standard build does not currently include Core ML encoder support. To run the Whisper encoder on the Apple Neural Engine while keeping the decoder on Metal, both the native library and model asset must support Core ML:
+
+1. Build and link whisper.cpp with Core ML support instead of the standard Homebrew library:
+
+   ```bash
+   cmake -B build -DWHISPER_COREML=1
+   cmake --build build -j --config Release
+   ```
+
+2. Generate and compile the Core ML encoder that matches the GGML model. For `ggml-large-v3-turbo.bin`, the expected sibling directory is:
+
+   ```text
+   ggml-large-v3-turbo-encoder.mlmodelc/
+   ```
+
+3. Place both artifacts in the same model cache directory:
+
+   ```text
+   ~/.cache/butterfly/models/
+   ├── ggml-large-v3-turbo.bin
+   └── ggml-large-v3-turbo-encoder.mlmodelc/
+   ```
+
+4. Run `swift run butterfly-cli info` to verify that the encoder asset is detected. The asset alone is not sufficient: Butterfly must also be linked to the Core ML-enabled whisper.cpp build.
+
+For the fastest hybrid configuration, keep GPU support enabled so the Core ML encoder can use ANE while the decoder uses Metal.
 
 Once launched, the 🦋 icon will appear in your macOS menu bar:
 - Press <kbd>Option</kbd> + <kbd>Space</kbd> to toggle **Live Voice Dictation**.

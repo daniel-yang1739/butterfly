@@ -79,10 +79,17 @@ case "cache", "info":
     let formattedTotal = ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
     let userVocab = TechDictionary.loadUserVocabulary()
     print("\nSystem Hardware & Storage Information:")
-    print("  • Recommended Accelerator: \(hardware.rawValue)")
+    print("  • Default Whisper Accelerator: \(hardware.rawValue)")
     print("  • Model Cache Directory: \(ModelManager.shared.cacheDirectory.path)")
     print("  • Total Cache Used: \(formattedTotal)")
     print("  • Active Speech Model: \(ModelManager.shared.activeASRModel.displayName)")
+    if ModelManager.shared.activeASRModel.id != "apple-speech-native" {
+        let modelPath = ModelManager.shared.localPath(for: ModelManager.shared.activeASRModel).path
+        let encoderURL = AppleSiliconInferenceBackend.coreMLEncoderURL(forModelPath: modelPath)
+        let encoderStatus = AppleSiliconInferenceBackend.hasCoreMLEncoder(forModelPath: modelPath) ? "Ready" : "Missing"
+        print("  • Core ML ANE Encoder: \(encoderStatus)")
+        print("  • Expected Encoder Path: \(encoderURL.path)")
+    }
     print("  • Custom Dictionary Path: \(TechDictionary.userDictionaryURL.path)")
     print("  • Custom Dictionary Words Loaded: \(userVocab.count) terms (\(userVocab.prefix(5).joined(separator: ", "))...)")
     print("  • Total Recognition Vocabulary: \(TechDictionary.allVocabulary.count) terms")

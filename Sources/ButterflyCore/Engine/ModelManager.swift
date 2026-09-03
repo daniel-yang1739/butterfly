@@ -141,6 +141,7 @@ public final class ModelManager: @unchecked Sendable {
         get {
             if let savedId = UserDefaults.standard.string(forKey: activeASRKey),
                let found = ModelManager.defaultASRModels.first(where: { $0.id == savedId }),
+               ModelManager.isRuntimeSupported(found),
                isModelDownloaded(found) {
                 return found
             }
@@ -154,7 +155,7 @@ public final class ModelManager: @unchecked Sendable {
     /// Returns the highest-ranked ASR model available locally in the cache.
     public func getBestAvailableASRModel() -> ModelSpec {
         for model in ModelManager.defaultASRModels {
-            if model.id == "apple-speech-native" {
+            if model.id == "apple-speech-native" || !ModelManager.isRuntimeSupported(model) {
                 continue
             }
             if isModelDownloaded(model) {
@@ -163,6 +164,11 @@ public final class ModelManager: @unchecked Sendable {
         }
         // Baseline fallback (Apple Speech Native)
         return ModelManager.defaultASRModels.last!
+    }
+
+    /// Models that have an executable recognition backend in the current app.
+    public static func isRuntimeSupported(_ spec: ModelSpec) -> Bool {
+        spec.id == "apple-speech-native" || spec.id.hasPrefix("whisper-")
     }
     
     public func getBestAvailableModel() -> ModelSpec {
@@ -285,7 +291,7 @@ public final class ModelManager: @unchecked Sendable {
     /// Detect available Apple Silicon / hardware accelerators
     public func detectPlatformHardware() -> HardwareAccelerator {
         #if arch(arm64)
-        return .appleNeuralEngine
+        return .metalGPU
         #else
         return .cpuFallback
         #endif

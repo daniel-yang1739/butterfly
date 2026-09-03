@@ -16,6 +16,7 @@ public enum SlidingDeltaAction: Equatable, Sendable {
 /// Active window text injector and clipboard protection proxy
 public final class InputInjector: @unchecked Sendable {
     public static let shared = InputInjector()
+    private let injectionQueue = DispatchQueue(label: "com.butterfly.input-injector", qos: .userInteractive)
     
     public init() {}
     
@@ -49,7 +50,7 @@ public final class InputInjector: @unchecked Sendable {
         
         return true
     }
-    
+
     /// Live incremental Unicode typing directly into cursor via CGEvent (chunked safely to respect macOS 20-char limit)
     public func typeUnicodeString(_ string: String) {
         let utf16Chars = Array(string.utf16)
@@ -109,62 +110,60 @@ public final class InputInjector: @unchecked Sendable {
             break
         }
     }
-    
-    /// Utterance-Aware Real-time Live Stream Typing
-    public func injectStreamingDelta(newText: String, previousText: inout String) {
+
+    /// Queue cursor events away from the main thread while preserving transcript order.
+    public func enqueueSlidingDelta(_ action: SlidingDeltaAction) {
+        guard action != .noChange else { return }
+        injectionQueue.async { [self] in
+            applySlidingDelta(action)
+        }
+    }
+
+    /// Calculate and record the next cursor change without posting keyboard events.
+    public func prepareStreamingDelta(newText: String, previousText: inout String) -> SlidingDeltaAction {
         var currentNewText = newText
         if previousText.isEmpty {
             currentNewText = newText.trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        guard currentNewText != previousText else { return }
-        
-        // 1. Direct forward append (fast path)
+        guard currentNewText != previousText else { return .noChange }
+
         if currentNewText.hasPrefix(previousText) {
             let suffixIndex = currentNewText.index(currentNewText.startIndex, offsetBy: previousText.count)
             let delta = String(currentNewText[suffixIndex...])
-            guard !delta.isEmpty else { return }
-            typeUnicodeString(delta)
             previousText = currentNewText
-            return
+            return delta.isEmpty ? .noChange : .append(text: delta)
         }
-        
-        // 2. Find common prefix length
-        let newChars = Array(currentNewText)
-        let oldChars = Array(previousText)
+
+        let newCharacters = Array(currentNewText)
+        let oldCharacters = Array(previousText)
         var commonPrefixCount = 0
-        let minLen = min(newChars.count, oldChars.count)
-        
-        while commonPrefixCount < minLen && newChars[commonPrefixCount] == oldChars[commonPrefixCount] {
+        let sharedLength = min(newCharacters.count, oldCharacters.count)
+        while commonPrefixCount < sharedLength,
+              newCharacters[commonPrefixCount] == oldCharacters[commonPrefixCount] {
             commonPrefixCount += 1
         }
-        
-        let backspaceCount = oldChars.count - commonPrefixCount
-        
-        // 3. Clean in-place refinement for active utterance
-        if backspaceCount > 0 && backspaceCount <= 25 {
-            sendBackspaces(count: backspaceCount)
-            let deltaNew = String(newChars[commonPrefixCount...])
-            if !deltaNew.isEmpty {
-                typeUnicodeString(deltaNew)
-            }
-            previousText = currentNewText
-            return
-        } else if backspaceCount > 25 {
-            // If the shift is larger than 25 chars, avoid destructive backspacing; only append trailing difference
-            if newChars.count > oldChars.count {
-                let extraCount = newChars.count - oldChars.count
-                let extraSuffix = String(newChars.suffix(extraCount))
-                typeUnicodeString(extraSuffix)
-            }
-            previousText = currentNewText
-            return
-        }
-        
-        let deltaNew = String(newChars[commonPrefixCount...])
-        if !deltaNew.isEmpty {
-            typeUnicodeString(deltaNew)
-        }
+
+        let backspaceCount = oldCharacters.count - commonPrefixCount
         previousText = currentNewText
+
+        if backspaceCount > 0 && backspaceCount <= 25 {
+            return .replaceTail(
+                backspaces: backspaceCount,
+                replacement: String(newCharacters[commonPrefixCount...])
+            )
+        }
+        if backspaceCount > 25 {
+            guard newCharacters.count > oldCharacters.count else { return .noChange }
+            return .append(text: String(newCharacters.suffix(newCharacters.count - oldCharacters.count)))
+        }
+
+        let delta = String(newCharacters[commonPrefixCount...])
+        return delta.isEmpty ? .noChange : .append(text: delta)
+    }
+
+    /// Utterance-Aware Real-time Live Stream Typing
+    public func injectStreamingDelta(newText: String, previousText: inout String) {
+        applySlidingDelta(prepareStreamingDelta(newText: newText, previousText: &previousText))
     }
     
     /// Simulate Cmd + V keyboard shortcut

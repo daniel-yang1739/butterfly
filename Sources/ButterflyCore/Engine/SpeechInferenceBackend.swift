@@ -2,6 +2,7 @@ import Foundation
 
 /// Supported hardware accelerator chip architectures
 public enum HardwareAccelerator: String, Codable, CaseIterable, Sendable {
+    case appleNeuralEngineAndMetalGPU = "Apple Neural Engine + Metal GPU"
     case appleNeuralEngine = "Apple Neural Engine (ANE)"
     case metalGPU          = "Apple Metal GPU"
     case qualcommNPU       = "Qualcomm Hexagon NPU"
