@@ -73,17 +73,19 @@ public final class TextPolisher {
             ("第二個\\s*(?:ml|mode|毛|Mo)\\s*的?", "第二個 Mode "),
             ("第一個\\s*(?:ml|mode|毛|Mo)\\s*的?", "第一個 Mode "),
             
-            // System Prompt fuzzy variations (matches sister Prom, sister Pat, sister from, season from, season Pro, To Pro, System Promptpt, etc.)
-            ("(?i)\\bSystem\\s*Prompt(?:pt|t|p)+\\b", "System Prompt"),
+            // System Prompt fuzzy variations (matches sister Prom, sister Pat, sister from, season from, season Pro, To Pro, System Promptpt, System Promptm, etc.)
+            ("(?i)\\bSystem\\s*Prompt[a-zA-Z]*\\b", "System Prompt"),
             ("(?i)\\b(?:secret|system|sister|cister|season|the\\s*season|stone|sistema|sixteen|set)\\s*(?:stone|prom|prompt|pro|promt|pat|pad|from)\\b", "System Prompt"),
             ("(?i)\\b(?:To\\s*Pro|top\\s*To\\s*Pro)\\b", "System Prompt"),
             ("(?i)(?:sister\\s*Pat|set\\s*Pro|sister\\s*prom|sister\\s*prompt|stone\\s*prom|stone\\s*prompt|season\\s*from|season\\s*Pro)", "System Prompt"),
             ("塞\\s*(?:the\\s*season|season|system|sister)?\\s*(?:prom|prompt|pro|stone|pat|pad|from)", "塞 System Prompt"),
             ("Theakston\\s*Brown|Theakston|brown\\s*所以", "System Prompt"),
             
-            // Context & Token relations
-            ("(?:上下文|前後文|前後)\\s*康泰(?:\\s*克斯)?", "上下文 Context"),
-            ("康泰\\s*Token", "Context Token"),
+            // Context & Token relations (matches 上下文 Context, 翻成 Context, contact/contest in context)
+            ("(?i)\\bContext(?:t|x|ts|s)+\\b", "Context"),
+            ("(?i)(?:上下文|前後文|前後)\\s*(?:康泰(?:\\s*克斯)?|context[a-z]*|contact|contest|contex\\b)", "上下文 Context"),
+            ("(?i)(?:翻成|變成|轉成|翻譯成|看成)\\s*(?:context[a-z]*|contact|contest|contex\\b)", "翻成 Context"),
+            ("(?i)\\b(?:康泰|contact|contest|contex)\\s*Token\\b", "Context Token"),
             ("康泰(?=[可以|能夠|去做|分析|之間的關係|之間的|長度|視窗])", "Context"),
             
             // Speech-to-Text & Transcription mechanics
