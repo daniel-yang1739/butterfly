@@ -1,6 +1,6 @@
 import Foundation
 
-/// Action to apply to the focused OS cursor to synchronize with the sliding window
+/// Action to apply to the focused OS cursor to synchronize with the streaming buffer
 public enum SlidingDeltaAction: Equatable, Sendable {
     /// Pure forward character append (0 backspaces)
     case append(text: String)
@@ -10,33 +10,17 @@ public enum SlidingDeltaAction: Equatable, Sendable {
     case noChange
 }
 
-/// State snapshot of the SlidingWindowBuffer
-public struct SlidingWindowSnapshot: Equatable, Sendable {
-    public let frozenText: String
-    public let activeTail: String
-    public let injectedTail: String
-    public var fullText: String {
-        return frozenText + activeTail
-    }
-}
-
-/// Core sliding window buffer managing Frozen Prefix and Active Tail refinement for Mode 1
+/// Thread-safe Cumulative Streaming & Pause-Gated Refiner Buffer (Zero Avalanche Guarantee)
 public final class SlidingWindowBuffer: @unchecked Sendable {
     private let lock = NSLock()
     
-    /// Permanently committed text (never modified or backspaced)
-    public private(set) var frozenText: String = ""
-    
-    /// Active clause currently being spoken in the latest window
-    public private(set) var activeTail: String = ""
-    
-    /// Text that has physically been typed into the OS active cursor for the current active clause
-    public private(set) var injectedTail: String = ""
+    /// Exact cumulative text that has physically been typed into the active OS cursor
+    public private(set) var injectedCumulativeText: String = ""
     
     /// Maximum allowed backspaces in a single refinement to prevent screen jitter
     public let maxBackspaceLimit: Int
     
-    public init(maxBackspaceLimit: Int = 15) {
+    public init(maxBackspaceLimit: Int = 25) {
         self.maxBackspaceLimit = maxBackspaceLimit
     }
     
@@ -44,27 +28,14 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
     public func reset() {
         lock.lock()
         defer { lock.unlock() }
-        frozenText = ""
-        activeTail = ""
-        injectedTail = ""
+        injectedCumulativeText = ""
     }
     
-    /// Returns the complete transcribed text (frozen + active)
+    /// Returns the complete transcribed text
     public var fullTranscript: String {
         lock.lock()
         defer { lock.unlock() }
-        return frozenText + activeTail
-    }
-    
-    /// Current state snapshot
-    public var snapshot: SlidingWindowSnapshot {
-        lock.lock()
-        defer { lock.unlock() }
-        return SlidingWindowSnapshot(
-            frozenText: frozenText,
-            activeTail: activeTail,
-            injectedTail: injectedTail
-        )
+        return injectedCumulativeText
     }
     
     // MARK: - Phase 1: Continuous Acoustic Streaming (Append-Only Fast Path)
@@ -74,35 +45,27 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         
-        let trimmedFull = rawFullText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedFull.isEmpty else { return .noChange }
+        let trimmed = rawFullText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return .noChange }
         
-        // 1. Extract the active tail by stripping the frozen prefix if present
-        var newActiveTail = trimmedFull
-        if !frozenText.isEmpty && trimmedFull.hasPrefix(frozenText) {
-            let suffixIndex = trimmedFull.index(trimmedFull.startIndex, offsetBy: frozenText.count)
-            newActiveTail = String(trimmedFull[suffixIndex...])
-        }
+        // Mode 1: Convert to Taiwan Traditional Chinese and light tech formatting
+        let normalized = OpenCCTranslator.shared.convert(trimmed)
         
-        // Mode 1 Streaming: preserve acoustic tokens with basic Traditional Chinese conversion
-        newActiveTail = OpenCCTranslator.shared.convert(newActiveTail)
-        self.activeTail = newActiveTail
-        
-        // 2. Direct forward append fast-path (Append-Only)
-        if newActiveTail.hasPrefix(injectedTail) {
-            let suffixIndex = newActiveTail.index(newActiveTail.startIndex, offsetBy: injectedTail.count)
-            let delta = String(newActiveTail[suffixIndex...])
+        // 1. Direct forward append fast-path (Append-Only, 0 Backspaces)
+        if normalized.hasPrefix(injectedCumulativeText) {
+            let suffixIndex = normalized.index(normalized.startIndex, offsetBy: injectedCumulativeText.count)
+            let delta = String(normalized[suffixIndex...])
             if !delta.isEmpty {
-                injectedTail = newActiveTail
+                injectedCumulativeText = normalized
                 return .append(text: delta)
             }
             return .noChange
         }
         
-        // 3. Fallback: Calculate common prefix if acoustic model slightly revised active tail
-        let (backspaces, replacement) = computeMinimalDelta(from: injectedTail, to: newActiveTail)
+        // 2. In-place tail refinement when ASR adjusts acoustic homophones at the tail
+        let (backspaces, replacement) = computeMinimalDelta(from: injectedCumulativeText, to: normalized)
         if backspaces <= maxBackspaceLimit {
-            injectedTail = newActiveTail
+            injectedCumulativeText = normalized
             if backspaces == 0 && !replacement.isEmpty {
                 return .append(text: replacement)
             } else if backspaces > 0 {
@@ -116,32 +79,30 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
     // MARK: - Phase 2: Pause-Gated Refinement (Triggered on ~350ms Silence)
     
     /// Triggered when the speaker naturally pauses (e.g. 350ms silence)
-    /// Refines the active tail with domain vocabulary, Pangu spacing, numbers & units, then freezes the clause.
+    /// Refines the active text with domain vocabulary, Pangu spacing, numbers & units.
     public func onPauseTriggered() -> SlidingDeltaAction {
         lock.lock()
         defer { lock.unlock() }
         
-        guard !activeTail.isEmpty else { return .noChange }
+        guard !injectedCumulativeText.isEmpty else { return .noChange }
         
-        // 1. Refine active tail with Mode 1 formatting (Pangu spacing, numbers, tech terms like Context)
-        let refined = TextPolisher.shared.polish(activeTail, mode: .liveStream)
+        // Refine with Mode 1 live dictation polisher (Pangu spacing, numbers, tech terms like Context)
+        let refined = TextPolisher.shared.polish(injectedCumulativeText, mode: .liveStream)
+        guard refined != injectedCumulativeText else { return .noChange }
         
-        // 2. Calculate minimum delta between what is typed in cursor and the refined text
-        let (backspaces, replacement) = computeMinimalDelta(from: injectedTail, to: refined)
+        let (backspaces, replacement) = computeMinimalDelta(from: injectedCumulativeText, to: refined)
         
-        // Update state: commit this clause into frozenText
-        let finalClause = refined
-        self.frozenText += finalClause
-        self.activeTail = ""
-        self.injectedTail = ""
-        
-        if backspaces == 0 && replacement.isEmpty {
-            return .noChange
-        } else if backspaces == 0 && !replacement.isEmpty {
-            return .append(text: replacement)
-        } else {
-            return .replaceTail(backspaces: backspaces, replacement: replacement)
+        // Only apply if the change is within safe backspace limits
+        if backspaces <= maxBackspaceLimit {
+            injectedCumulativeText = refined
+            if backspaces == 0 && !replacement.isEmpty {
+                return .append(text: replacement)
+            } else if backspaces > 0 {
+                return .replaceTail(backspaces: backspaces, replacement: replacement)
+            }
         }
+        
+        return .noChange
     }
     
     // MARK: - Helper Delta Computation

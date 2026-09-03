@@ -130,7 +130,7 @@ public enum TestRunner {
         assertEqual(prev2, "你好世界", "TC-F2: Streaming in-place backspace refinement delta")
         
         // MARK: - 7. SlidingWindowBuffer Tests (Mode 1 Plan A Engine)
-        print("\n📦 Suite 7: SlidingWindowBuffer (Frozen Prefix + Pause-Gated Refinement)")
+        print("\n📦 Suite 7: SlidingWindowBuffer (Cumulative Streaming & Avalanche Prevention)")
         let buffer = SlidingWindowBuffer()
         buffer.reset()
         
@@ -145,11 +145,11 @@ public enum TestRunner {
         _ = buffer.appendStreamingText("上下文 contact")
         let pauseAction = buffer.onPauseTriggered()
         assertEqual(pauseAction, .replaceTail(backspaces: 7, replacement: "Context"), "TC-G3: Pause-gated phonetic self-healing ('contact' -> 'Context')")
-        assertTrue(buffer.frozenText.contains("Context"), "TC-G4: Clause committed and locked into Frozen Prefix")
+        assertEqual(buffer.injectedCumulativeText, "上下文 Context", "TC-G4: Cumulative mirror updated cleanly")
         
-        // TC-G5: Boundary non-regression (Next incoming speech does not alter frozen prefix)
-        let a3 = buffer.appendStreamingText(buffer.frozenText + "第二點是速度")
-        assertEqual(a3, .append(text: "第二點是速度"), "TC-G5: Next clause streams forward without touching frozen prefix")
+        // TC-G5: Avalanche Prevention Test (Continuous Cumulative ASR Updates)
+        let a3 = buffer.appendStreamingText("上下文 Context，現在是不是會突然出現一些雪崩效應")
+        assertEqual(a3, .append(text: "，現在是不是會突然出現一些雪崩效應"), "TC-G5: Avalanche prevention (appends only new suffix without repeating earlier text)")
         
         // TC-G6: Numbers & Units pause-gated normalization
         buffer.reset()
