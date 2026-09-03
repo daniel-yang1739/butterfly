@@ -41,10 +41,7 @@ public final class SystemPrompt: @unchecked Sendable {
     public var whisperInitialPrompt: String {
         let vocab = TechDictionary.allVocabulary
         let topKeywords = vocab.prefix(35).joined(separator: ", ")
-        if topKeywords.isEmpty {
-            return "以下是標準繁體中文（台灣）即時語音聽寫，請忠實記錄語音內容並保留正確標點符號。"
-        }
-        return "以下是繁體中文（台灣）即時語音聽寫，包含專業軟體與資安術語：\(topKeywords)。請忠實辨識並保持正確大小寫與標點符號。"
+        return topKeywords
     }
     
     /// Returns the active System Prompt directive for Speech-to-Text

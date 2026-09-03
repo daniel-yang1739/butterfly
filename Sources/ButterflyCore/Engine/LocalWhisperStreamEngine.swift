@@ -12,12 +12,16 @@ public final class LocalWhisperStreamEngine: @unchecked Sendable {
         var isListening = false
         var isTranscribing = false
         var lastTranscribedSampleCount = 0
+        var lastVoicedSampleCount = 0
+        var lastTranscribedVoicedSampleCount = 0
+        var noiseFloor: Float = 0.001
         var latestTranscript = ""
     }
 
     private struct AudioSnapshot: Sendable {
         let samples: [Float]
         let capturedSampleCount: Int
+        let lastVoicedSampleCount: Int
 
         var windowStartSample: Int {
             capturedSampleCount - samples.count
@@ -43,6 +47,7 @@ public final class LocalWhisperStreamEngine: @unchecked Sendable {
     private static let ringBufferTrimThreshold = ringBufferSampleCount + sampleRate
     private static let minimumInitialSampleCount = sampleRate
     private static let minimumNewSampleCount = sampleRate / 2
+    private static let minimumVoiceRMS: Float = 0.004
 
     public init(backend: AppleSiliconInferenceBackend = AppleSiliconInferenceBackend()) {
         self.backend = backend
@@ -79,6 +84,9 @@ public final class LocalWhisperStreamEngine: @unchecked Sendable {
             state.isListening = true
             state.isTranscribing = false
             state.lastTranscribedSampleCount = 0
+            state.lastVoicedSampleCount = 0
+            state.lastTranscribedVoicedSampleCount = 0
+            state.noiseFloor = 0.001
             state.latestTranscript = ""
         }
         accumulator.reset()
@@ -94,10 +102,17 @@ public final class LocalWhisperStreamEngine: @unchecked Sendable {
                 fromSampleRate: recordingFormat.sampleRate,
                 toSampleRate: AudioCaptureManager.targetSampleRate
             )
+            let rms = Self.calculateRMS(samples16k)
             self.stateLock.withLock { state in
                 guard state.isListening else { return }
                 state.samples.append(contentsOf: samples16k)
                 state.capturedSampleCount += samples16k.count
+                let voiceThreshold = max(Self.minimumVoiceRMS, state.noiseFloor * 3)
+                if rms >= voiceThreshold {
+                    state.lastVoicedSampleCount = state.capturedSampleCount
+                } else {
+                    state.noiseFloor = (state.noiseFloor * 0.95) + (rms * 0.05)
+                }
                 if state.samples.count > Self.ringBufferTrimThreshold {
                     state.samples.removeFirst(state.samples.count - Self.ringBufferSampleCount)
                 }
@@ -147,6 +162,8 @@ public final class LocalWhisperStreamEngine: @unchecked Sendable {
             state.samples.removeAll(keepingCapacity: false)
             state.capturedSampleCount = 0
             state.lastTranscribedSampleCount = 0
+            state.lastVoicedSampleCount = 0
+            state.lastTranscribedVoicedSampleCount = 0
             return text
         }
         backend.release()
@@ -159,13 +176,15 @@ public final class LocalWhisperStreamEngine: @unchecked Sendable {
             let minimumNewSamples = force ? 1 : Self.minimumNewSampleCount
             guard !state.isTranscribing,
                   (force || state.capturedSampleCount >= Self.minimumInitialSampleCount),
+                  state.lastVoicedSampleCount > state.lastTranscribedVoicedSampleCount,
                   newSampleCount >= minimumNewSamples else {
                 return nil
             }
             state.isTranscribing = true
             return AudioSnapshot(
                 samples: Array(state.samples.suffix(Self.inferenceWindowSampleCount)),
-                capturedSampleCount: state.capturedSampleCount
+                capturedSampleCount: state.capturedSampleCount,
+                lastVoicedSampleCount: state.lastVoicedSampleCount
             )
         }
         guard let snapshot else { return }
@@ -185,6 +204,7 @@ public final class LocalWhisperStreamEngine: @unchecked Sendable {
                 )
             let transcriptChanged = stateLock.withLock { state -> Bool in
                 state.lastTranscribedSampleCount = snapshot.capturedSampleCount
+                state.lastTranscribedVoicedSampleCount = snapshot.lastVoicedSampleCount
                 guard !fullTranscript.isEmpty, fullTranscript != state.latestTranscript else {
                     return false
                 }
@@ -196,5 +216,11 @@ public final class LocalWhisperStreamEngine: @unchecked Sendable {
         } catch {
             onError?(error)
         }
+    }
+
+    private static func calculateRMS(_ samples: [Float]) -> Float {
+        guard !samples.isEmpty else { return 0 }
+        let sum = samples.reduce(Float.zero) { $0 + ($1 * $1) }
+        return sqrt(sum / Float(samples.count))
     }
 }

@@ -75,10 +75,6 @@ public struct TechDictionary: Sendable {
     /// Formatted Whisper Initial Prompt (Prime attention for code-switching & technical speech)
     public static var whisperInitialPrompt: String {
         let vocab = allVocabulary
-        if vocab.isEmpty {
-            return "以下是標準繁體中文（台灣）語音聽寫對話，請忠實記錄語音內容。"
-        }
-        let topTerms = vocab.prefix(30).joined(separator: ", ")
-        return "以下是繁體中文（台灣）語音聽寫對話，包含詞彙：\(topTerms)。請忠實辨識。"
+        return vocab.prefix(30).joined(separator: ", ")
     }
 }
