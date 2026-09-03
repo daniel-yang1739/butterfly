@@ -11,7 +11,7 @@ public final class InputInjector: @unchecked Sendable {
     
     /// Inject a block of text into the active focused input using Cmd+V with clipboard preservation
     @discardableResult
-    public func inject(text: String, restoreClipboard: Bool = true) async -> Bool {
+    public func inject(text: String, restoreClipboard: Bool = false) async -> Bool {
         let cleanText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanText.isEmpty else { return false }
         
@@ -22,14 +22,19 @@ public final class InputInjector: @unchecked Sendable {
         pasteboard.clearContents()
         pasteboard.setString(cleanText, forType: .string)
         
-        // 2. Simulate Cmd + V paste keystroke
+        // Short pause to ensure pasteboard server commits data before keystroke
+        try? await Task.sleep(nanoseconds: 30_000_000) // 30ms
+        
+        // 2. Simulate Cmd + V paste keystroke with proper event source
         simulatePasteCommand()
         
-        // 3. Restore previous clipboard contents if requested
+        // 3. Optional clipboard restoration after a generous safety window (1.5s)
         if restoreClipboard, let original = previousString {
-            try? await Task.sleep(nanoseconds: 80_000_000) // 80ms delay to ensure target app reads pasteboard
-            pasteboard.clearContents()
-            pasteboard.setString(original, forType: .string)
+            Task {
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                pasteboard.clearContents()
+                pasteboard.setString(original, forType: .string)
+            }
         }
         
         return true
@@ -40,8 +45,10 @@ public final class InputInjector: @unchecked Sendable {
         let utf16Chars = Array(string.utf16)
         guard !utf16Chars.isEmpty else { return }
         
-        if let eventDown = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: true),
-           let eventUp = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: false) {
+        let source = CGEventSource(stateID: .combinedSessionState)
+        
+        if let eventDown = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
+           let eventUp = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) {
             eventDown.keyboardSetUnicodeString(stringLength: utf16Chars.count, unicodeString: utf16Chars)
             eventDown.post(tap: .cghidEventTap)
             
@@ -54,14 +61,15 @@ public final class InputInjector: @unchecked Sendable {
     public func sendBackspaces(count: Int) {
         guard count > 0 else { return }
         let deleteKeyCode: CGKeyCode = 51 // macOS Delete / Backspace keycode
+        let source = CGEventSource(stateID: .combinedSessionState)
         
         for _ in 0..<count {
-            if let eventDown = CGEvent(keyboardEventSource: nil, virtualKey: deleteKeyCode, keyDown: true),
-               let eventUp = CGEvent(keyboardEventSource: nil, virtualKey: deleteKeyCode, keyDown: false) {
+            if let eventDown = CGEvent(keyboardEventSource: source, virtualKey: deleteKeyCode, keyDown: true),
+               let eventUp = CGEvent(keyboardEventSource: source, virtualKey: deleteKeyCode, keyDown: false) {
                 eventDown.post(tap: .cghidEventTap)
                 eventUp.post(tap: .cghidEventTap)
             }
-            usleep(1200) // 1.2ms micro-delay to ensure target app event queues process every backspace reliably
+            usleep(1500) // 1.5ms delay to ensure event queues process each backspace
         }
     }
     
@@ -122,17 +130,21 @@ public final class InputInjector: @unchecked Sendable {
         previousText = currentNewText
     }
     
-    /// Simulate Cmd + V keyboard shortcut
+    /// Simulate Cmd + V keyboard shortcut using combinedSessionState
     public func simulatePasteCommand() {
         let vKeyCode: CGKeyCode = 9 // Virtual key code for 'v'
+        let source = CGEventSource(stateID: .combinedSessionState)
         
         // Command key down + V key down
-        let eventDown = CGEvent(keyboardEventSource: nil, virtualKey: vKeyCode, keyDown: true)
+        let eventDown = CGEvent(keyboardEventSource: source, virtualKey: vKeyCode, keyDown: true)
         eventDown?.flags = .maskCommand
         eventDown?.post(tap: .cghidEventTap)
         
+        // Short pause between down and up
+        usleep(15000) // 15ms
+        
         // V key up
-        let eventUp = CGEvent(keyboardEventSource: nil, virtualKey: vKeyCode, keyDown: false)
+        let eventUp = CGEvent(keyboardEventSource: source, virtualKey: vKeyCode, keyDown: false)
         eventUp?.flags = .maskCommand
         eventUp?.post(tap: .cghidEventTap)
     }
@@ -148,7 +160,7 @@ public final class InputInjector: @unchecked Sendable {
 public final class InputInjector: @unchecked Sendable {
     public static let shared = InputInjector()
     public init() {}
-    public func inject(text: String, restoreClipboard: Bool = true) async -> Bool {
+    public func inject(text: String, restoreClipboard: Bool = false) async -> Bool {
         return true
     }
     public func typeUnicodeString(_ string: String) {}
