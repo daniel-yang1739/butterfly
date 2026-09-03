@@ -64,7 +64,14 @@ public final class LiveSpeechEngine: NSObject, @unchecked Sendable, SFSpeechReco
     
     /// Start live microphone capture and continuous speech recognition
     public func startLiveListening() throws {
-        guard !isListening else { return }
+        // If already listening, stop first to ensure fresh session
+        if isListening {
+            audioEngine.stop()
+            audioEngine.inputNode.removeTap(onBus: 0)
+            recognitionRequest?.endAudio()
+            recognitionTask?.cancel()
+            isListening = false
+        }
         
         stateLock.withLock { state in
             state.committed.removeAll()
@@ -75,6 +82,7 @@ public final class LiveSpeechEngine: NSObject, @unchecked Sendable, SFSpeechReco
         
         recognitionTask?.cancel()
         recognitionTask = nil
+        recognitionRequest = nil
         
         if audioEngine.isRunning {
             audioEngine.stop()
@@ -84,7 +92,15 @@ public final class LiveSpeechEngine: NSObject, @unchecked Sendable, SFSpeechReco
         inputNode.removeTap(onBus: 0)
         audioEngine.reset()
         
+        if speechRecognizer == nil {
+            speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "zh-TW"))
+            speechRecognizer?.delegate = self
+        }
+        
         let recordingFormat = inputNode.outputFormat(forBus: 0)
+        guard recordingFormat.sampleRate > 0 else {
+            throw ButterflyError.audioCaptureFailed("Audio hardware returned invalid sample rate")
+        }
         
         recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
         guard let recognitionRequest = recognitionRequest else {
@@ -162,9 +178,15 @@ public final class LiveSpeechEngine: NSObject, @unchecked Sendable, SFSpeechReco
             }
         }
         
-        audioEngine.prepare()
-        try audioEngine.start()
-        isListening = true
+        do {
+            audioEngine.prepare()
+            try audioEngine.start()
+            isListening = true
+        } catch {
+            inputNode.removeTap(onBus: 0)
+            isListening = false
+            throw ButterflyError.audioCaptureFailed("Failed to start audio engine: \(error.localizedDescription)")
+        }
     }
     
     /// Stop microphone recording and return 100% complete accumulated transcript
@@ -175,8 +197,11 @@ public final class LiveSpeechEngine: NSObject, @unchecked Sendable, SFSpeechReco
         }
         isListening = false
         
-        audioEngine.stop()
+        if audioEngine.isRunning {
+            audioEngine.stop()
+        }
         audioEngine.inputNode.removeTap(onBus: 0)
+        audioEngine.reset()
         
         recognitionRequest?.endAudio()
         

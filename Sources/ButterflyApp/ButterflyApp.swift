@@ -426,53 +426,96 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.updateMenu()
     }
     
+    private var eventTapPort: CFMachPort?
+    private var runLoopSource: CFRunLoopSource?
+    
+    /// Handle low-level CGEvent from Event Tap to allow swallowing Enter/Esc and hotkeys
+    fileprivate func handleCGEvent(proxy: CGEventTapProxy, type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
+        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            if let port = eventTapPort {
+                CGEvent.tapEnable(tap: port, enable: true)
+            }
+            return Unmanaged.passRetained(event)
+        }
+        
+        guard type == .keyDown else {
+            return Unmanaged.passRetained(event)
+        }
+        
+        let keyCode = Int(event.getIntegerValueField(.keyboardEventKeycode))
+        let flags = event.flags
+        
+        // 1. Enter (36 / 76) or Esc (53) during active recording -> Stop recording & SWALLOW keypress
+        if (keyCode == 36 || keyCode == 76 || keyCode == 53) && isRecording {
+            print("\n[CGEventTap: Enter/Esc Intercepted] -> Stopping recording & SWALLOWING Enter key (chat safe)!")
+            Task { @MainActor in
+                await self.stopAndInject()
+            }
+            // RETURNING NIL SWALLOWS THE KEY EVENT SO TARGET APP NEVER SEES ENTER!
+            return nil
+        }
+        
+        // 2. Option + Space (49) or Option + Shift + Space
+        if keyCode == 49 && flags.contains(.maskAlternate) {
+            let isShift = flags.contains(.maskShift)
+            Task { @MainActor in
+                if self.isRecording {
+                    print("\n[CGEventTap: Toggle Stop]")
+                    await self.stopAndInject()
+                } else {
+                    if isShift {
+                        print("\n[CGEventTap: Option + Shift + Space] -> Starting Mode 2 (Record & Smart Polish)...")
+                        await self.startListening(mode: .recordAndPolish)
+                    } else {
+                        print("\n[CGEventTap: Option + Space] -> Starting Mode 1 (Live Streaming)...")
+                        await self.startListening(mode: .liveStreaming)
+                    }
+                }
+            }
+            return nil // Swallow Space key so it doesn't type a space
+        }
+        
+        return Unmanaged.passRetained(event)
+    }
+    
     /// Register global and local system-wide hotkeys
     private func setupGlobalHotkey() {
-        let eventHandler: (NSEvent) -> NSEvent? = { [weak self] event in
+        // 1. Setup high-level Event Tap for global swallowing
+        let eventMask = (1 << CGEventType.keyDown.rawValue)
+        let observer = Unmanaged.passUnretained(self).toOpaque()
+        
+        if let tap = CGEvent.tapCreate(
+            tap: .cgSessionEventTap,
+            place: .headInsertEventTap,
+            options: .defaultTap,
+            eventsOfInterest: CGEventMask(eventMask),
+            callback: { (proxy, type, event, refcon) -> Unmanaged<CGEvent>? in
+                guard let refcon = refcon else { return Unmanaged.passRetained(event) }
+                let appDelegate = Unmanaged<AppDelegate>.fromOpaque(refcon).takeUnretainedValue()
+                return appDelegate.handleCGEvent(proxy: proxy, type: type, event: event)
+            },
+            userInfo: observer
+        ) {
+            self.eventTapPort = tap
+            let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
+            self.runLoopSource = source
+            CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+            CGEvent.tapEnable(tap: tap, enable: true)
+            print("Butterfly: Low-level EventTap registered successfully (Enter swallowing active).")
+        }
+        
+        // 2. Local monitor for fallback
+        let fallbackHandler: (NSEvent) -> NSEvent? = { [weak self] event in
             guard let self = self else { return event }
-            
-            // 36: Return/Enter, 76: Keypad Enter, 53: Escape (Esc)
-            // When recording, the first Enter or Esc stops recording and finalizes text.
-            // Returning nil swallows the Enter event so it does NOT accidentally send chat messages!
             if (event.keyCode == 36 || event.keyCode == 76 || event.keyCode == 53) && self.isRecording {
-                print("\n[Hotkey Event: Enter / Esc] -> Stopping recording & injecting text (First Enter swallowed to protect message sending)...")
                 Task { @MainActor in
                     await self.stopAndInject()
                 }
                 return nil
             }
-            
-            // 49: Space keycode
-            if event.keyCode == 49 {
-                let flags = event.modifierFlags
-                let isOptionPressed = flags.contains(.option)
-                let isShiftPressed = flags.contains(.shift)
-                
-                if isOptionPressed {
-                    Task { @MainActor in
-                        if self.isRecording {
-                            print("\n[Hotkey Event: Stop Toggle] -> Finalizing...")
-                            await self.stopAndInject()
-                        } else {
-                            if isShiftPressed {
-                                print("\n[Hotkey Event: Option + Shift + Space] -> Starting Mode 2 (Record & Smart Polish)...")
-                                await self.startListening(mode: .recordAndPolish)
-                            } else {
-                                print("\n[Hotkey Event: Option + Space] -> Starting Mode 1 (Live Streaming)...")
-                                await self.startListening(mode: .liveStreaming)
-                            }
-                        }
-                    }
-                    return nil
-                }
-            }
             return event
         }
-        
-        globalEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in
-            _ = eventHandler(event)
-        }
-        NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: eventHandler)
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: fallbackHandler)
     }
     
     @objc private func quitApp() {
