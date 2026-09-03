@@ -73,15 +73,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         mode: .liveStreaming
                     )
                     
-                    // Mode 1 Phase 2: Reset 350ms Pause-Gated Refinement Timer
+                    // Mode 1 Phase 2: Reset 1.0s Pause-Gated Refinement Timer
                     self.pauseTimer?.invalidate()
-                    self.pauseTimer = Timer.scheduledTimer(withTimeInterval: 0.35, repeats: false) { [weak self] _ in
+                    self.pauseTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) { [weak self] _ in
                         Task { @MainActor [weak self] in
                             guard let self = self, self.isRecording, self.activeMode == .liveStreaming else { return }
                             let pauseAction = self.slidingWindowBuffer.onPauseTriggered()
                             InputInjector.shared.applySlidingDelta(pauseAction)
                             
-                            // Re-sync Floating HUD with new frozen boundary
+                            // Re-sync Floating HUD with new frozen boundary (Turn committed segment to Bright White)
                             FloatingHUDWindow.shared.update(
                                 frozenText: self.slidingWindowBuffer.frozenText,
                                 activeTail: self.slidingWindowBuffer.activeTail,

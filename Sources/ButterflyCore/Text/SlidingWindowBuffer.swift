@@ -10,8 +10,9 @@ public enum SlidingDeltaAction: Equatable, Sendable {
     case noChange
 }
 
-/// Thread-safe, Index-Based Single-Source-of-Truth Sliding Window Buffer
-/// Mathematically guarantees 0% Avalanche Duplication & 100% Screen Stability.
+/// Thread-safe, Index-Based Sliding Window Buffer with Full Context Awareness
+/// - Continuous speech: Streams forward smoothly in Active Gray without interruption
+/// - 1.0s Silence pause: Feeds full context to Polisher, refines only the active tail, and commits to Frozen White.
 public final class SlidingWindowBuffer: @unchecked Sendable {
     private let lock = NSLock()
     
@@ -47,7 +48,7 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
         return screenText
     }
     
-    /// Historical confirmed text locked on punctuation or pauses (Rendered in Bright White)
+    /// Historical confirmed text locked on 1.0s pauses (Rendered in Bright White)
     public var frozenText: String {
         lock.lock()
         defer { lock.unlock() }
@@ -65,7 +66,7 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
         return String(screenText[idx...])
     }
     
-    // MARK: - Phase 1: Continuous Acoustic Streaming (Append-Only Fast Path + Clause Auto-Freeze)
+    // MARK: - Phase 1: Continuous Acoustic Streaming (Append-Only Fast Path)
     
     /// Process incoming real-time acoustic text from ASR stream while user is speaking
     public func appendStreamingText(_ rawFullText: String) -> SlidingDeltaAction {
@@ -84,7 +85,6 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
             let delta = String(normalized[suffixIndex...])
             if !delta.isEmpty {
                 screenText = normalized
-                advanceFrozenIndexOnPunctuation()
                 return .append(text: delta)
             }
             return .noChange
@@ -94,50 +94,34 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
         let (backspaces, replacement) = computeTailDelta(from: screenText, to: normalized, protectedLength: frozenIndex)
         if backspaces <= maxBackspaceLimit {
             screenText = normalized
-            advanceFrozenIndexOnPunctuation()
             if backspaces == 0 && !replacement.isEmpty {
                 return .append(text: replacement)
             } else if backspaces > 0 {
                 return .replaceTail(backspaces: backspaces, replacement: replacement)
             }
         } else {
-            // Anti-freeze safety: If ASR changed historical text before frozenIndex,
-            // clamp backspaces to protected boundary so earlier text is NEVER deleted or repeated!
+            // Anti-freeze safety: Clamp backspaces to protected boundary so earlier text is NEVER deleted or repeated!
             if normalized.count > screenText.count {
                 let extraCount = normalized.count - screenText.count
                 let newSuffix = String(normalized.suffix(extraCount))
                 if !newSuffix.isEmpty {
                     screenText += newSuffix
-                    advanceFrozenIndexOnPunctuation()
                     return .append(text: newSuffix)
                 }
             } else {
                 screenText = normalized
-                advanceFrozenIndexOnPunctuation()
             }
         }
         
         return .noChange
     }
     
-    // MARK: - Clause Auto-Freeze on Punctuation
+    // MARK: - Phase 2: Serialized 1.0s Pause-Gated Refinement (Full Context Input -> Active Tail Output)
     
-    /// Advances frozenIndex when punctuation marks (，。？！；) are spoken
-    private func advanceFrozenIndexOnPunctuation() {
-        let delimiters: [Character] = ["，", "。", "！", "？", "；", "…", "\n"]
-        if let lastPunctuationIndex = screenText.lastIndex(where: { delimiters.contains($0) }) {
-            let nextIndex = screenText.index(after: lastPunctuationIndex)
-            let distance = screenText.distance(from: screenText.startIndex, to: nextIndex)
-            if distance > frozenIndex {
-                frozenIndex = distance
-            }
-        }
-    }
-    
-    // MARK: - Phase 2: Serialized Pause-Gated Refinement (Strict 1-at-a-time Model Queue)
-    
-    /// Triggered when the speaker naturally pauses (e.g. 350ms silence)
-    /// Refines ONLY the active unfrozen tail (screenText[frozenIndex...]) and advances frozenIndex.
+    /// Triggered when the speaker naturally pauses for >= 1.0 second.
+    /// - Sends FULL text (`screenText`) to the Polisher for comprehensive context disambiguation.
+    /// - Replaces ONLY the active tail (`screenText[frozenIndex...]`), leaving historical prefix 100% untouched.
+    /// - Advances `frozenIndex` to lock the finalized segment into Bright White.
     public func onPauseTriggered() -> SlidingDeltaAction {
         lock.lock()
         defer { lock.unlock() }
@@ -148,20 +132,29 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
         isPolishingActive = true
         defer { isPolishingActive = false }
         
-        // 1. Extract ONLY the active tail
         let splitIdx = screenText.index(screenText.startIndex, offsetBy: min(frozenIndex, screenText.count))
-        let prefix = String(screenText[..<splitIdx])
-        let tailToPolish = String(screenText[splitIdx...])
+        let frozenPrefix = String(screenText[..<splitIdx])
+        let activeTail = String(screenText[splitIdx...])
         
-        guard !tailToPolish.isEmpty else {
+        guard !activeTail.isEmpty else {
             frozenIndex = screenText.count
             return .noChange
         }
         
-        // 2. Refine ONLY the active tail
-        let refinedTail = TextPolisher.shared.polish(tailToPolish, mode: .liveStream)
-        let targetFull = prefix + refinedTail
+        // 1. Pass FULL text to Polisher for global contextual awareness
+        let refinedFull = TextPolisher.shared.polish(screenText, mode: .liveStream)
         
+        // 2. Extract ONLY the polished tail after the frozen prefix boundary
+        let refinedTail: String
+        if refinedFull.count >= frozenPrefix.count && refinedFull.hasPrefix(frozenPrefix) {
+            let tailIdx = refinedFull.index(refinedFull.startIndex, offsetBy: frozenPrefix.count)
+            refinedTail = String(refinedFull[tailIdx...])
+        } else {
+            // Fallback: If model slightly formatted prefix, polish only the active tail to guarantee prefix immutability
+            refinedTail = TextPolisher.shared.polish(activeTail, mode: .liveStream)
+        }
+        
+        let targetFull = frozenPrefix + refinedTail
         guard targetFull != screenText else {
             frozenIndex = screenText.count
             return .noChange
@@ -171,7 +164,7 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
         
         if backspaces <= maxBackspaceLimit {
             screenText = targetFull
-            frozenIndex = targetFull.count // Lock the finalized clause into frozen history
+            frozenIndex = targetFull.count // Advance frozen checkpoint to current pause position
             if backspaces == 0 && !replacement.isEmpty {
                 return .append(text: replacement)
             } else if backspaces > 0 {
