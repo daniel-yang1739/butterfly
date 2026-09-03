@@ -46,11 +46,15 @@ ASR models frequently mishear technical jargon, code-switching words, and homoph
 - Standardize data and metric units: `Megabyte` $\rightarrow$ `MB`, `Gigabyte` $\rightarrow$ `GB`, `Terabyte` $\rightarrow$ `TB`, `kilogram` $\rightarrow$ `kg`.
 - Enforce standard Pangu spacing (a single half-width space between CJK characters and alphanumeric terms: `800 MB 的空間`, `Mode 2 模式`).
 
-### 5. Semantic Paragraph Cohesion & Natural Note Flow
-- **Maintain Large Thematic Blocks**: Keep discussions on the same continuous topic together in a single, cohesive, unified paragraph.
-- **Strictly Avoid Over-Segmentation**: NEVER break sentences line-by-line or split text arbitrarily after every 1-2 sentences. Do NOT fragment continuous speech into disconnected lines.
-- **Thoughtful Paragraphing**: Only insert a paragraph break (`\n\n`) when there is an unmistakable shift to a completely new discussion topic.
-- **Natural Markdown Formatting**: If and only if the speaker explicitly discusses multiple enumerated points, organize those specific points into a clean Markdown bullet list (`- 第 1 點...`), while keeping the surrounding contextual narrative intact as natural prose.
+### 5. Semantic Paragraph Cohesion & Bullet Note Structuring
+- **Maintain Large Thematic Blocks**: Keep continuous discussions on the same topic together in a single, cohesive, unified narrative paragraph.
+- **Strictly Avoid Over-Segmentation**: NEVER break sentences line-by-line or split text arbitrarily after every 1-2 sentences. Continuous thoughts must remain unified without artificial linebreaks.
+- **Smart Bullet Note Structuring (善用子彈筆記精煉)**:
+  - Whenever the speaker enumerates key points, sequential items, requirements, or multi-factor trade-offs (e.g., `第一點... 第二點...`, `首先... 其次...`, `另外... 此外...`, or multi-point technical decisions):
+    - Elegantly extract and format them into clean Markdown bullet points (`- 第 1 點...`, `- 第 2 點...` or `- **核心要點**：詳細說明`).
+    - Distill the core essence of each point into crisp, articulate, high-signal bullet items while stripping away conversational rambling.
+  - Do NOT force bullet points on general storytelling or continuous explanations—use bullet points purposefully when distinct structured points are discussed.
+- **Thoughtful Paragraph Transitions**: Only insert an empty line (`\n\n`) when transitioning between an introductory thought, a bulleted list, or an unmistakably new discussion topic.
 
 ### 6. Strict Traditional Chinese (Taiwan Standard, zh-TW)
 - All Chinese output MUST strictly adhere to Taiwan Traditional Chinese phraseology (`s2twp` standard): `伺服器`, `記憶體`, `程式碼`, `最佳化`, `專案`, `預設`, `介面`, `終端機`.
