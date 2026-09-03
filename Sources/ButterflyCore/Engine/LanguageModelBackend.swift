@@ -74,33 +74,42 @@ public final class LocalSLMInferenceBackend: LanguageModelBackend {
         return polished
     }
     
-    /// Execute local llama-cli runner if available
+    /// Execute local llama-cli runner safely without Process pipe deadlock
     private func executeLocalCLI(modelPath: String, prompt: String) async throws -> String? {
-        let process = Process()
-        let pipe = Pipe()
-        
-        // Check for llama-cli in common local paths
-        let candidateCLIs = ["/usr/local/bin/llama-cli", "/opt/homebrew/bin/llama-cli"]
+        let candidateCLIs = ["/opt/homebrew/bin/llama-cli", "/usr/local/bin/llama-cli"]
         guard let cliPath = candidateCLIs.first(where: { FileManager.default.fileExists(atPath: $0) }) else {
             return nil
         }
         
-        process.executableURL = URL(fileURLWithPath: cliPath)
-        process.arguments = ["-m", modelPath, "-p", prompt, "-n", "512", "-ngl", "99", "--temp", "0.2", "--no-display-prompt"]
-        process.standardOutput = pipe
-        process.standardError = Pipe()
-        
-        do {
-            try process.run()
-            process.waitUntilExit()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            if let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines), !output.isEmpty {
-                return output
+        return await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let process = Process()
+                let pipe = Pipe()
+                process.executableURL = URL(fileURLWithPath: cliPath)
+                process.arguments = [
+                    "-m", modelPath,
+                    "-p", prompt,
+                    "-n", "512",
+                    "-ngl", "99",
+                    "--temp", "0.2"
+                ]
+                process.standardOutput = pipe
+                process.standardError = Pipe()
+                
+                do {
+                    try process.run()
+                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                    process.waitUntilExit()
+                    if let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines), !output.isEmpty {
+                        continuation.resume(returning: output)
+                    } else {
+                        continuation.resume(returning: nil)
+                    }
+                } catch {
+                    continuation.resume(returning: nil)
+                }
             }
-        } catch {
-            return nil
         }
-        return nil
     }
 }
 
