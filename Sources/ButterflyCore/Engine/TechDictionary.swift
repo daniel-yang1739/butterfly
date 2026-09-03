@@ -19,9 +19,14 @@ public struct TechDictionary: Sendable {
             return []
         }
         return content
-            .components(separatedBy: CharacterSet.newlines.union(CharacterSet(charactersIn: ",;")))
+            .components(separatedBy: .newlines)
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty && !$0.hasPrefix("#") }
+            .flatMap { line in
+                line.components(separatedBy: CharacterSet(charactersIn: ",;"))
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+            }
     }
     
     /// Combined, deduplicated vocabulary for ASR Contextual Strings (Apple Speech) & Whisper Prompt Biasing

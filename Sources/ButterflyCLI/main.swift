@@ -77,11 +77,15 @@ case "cache", "info":
     let hardware = ModelManager.shared.detectPlatformHardware()
     let totalBytes = ModelManager.shared.getTotalCacheSizeBytes()
     let formattedTotal = ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
+    let userVocab = TechDictionary.loadUserVocabulary()
     print("\nSystem Hardware & Storage Information:")
     print("  • Recommended Accelerator: \(hardware.rawValue)")
     print("  • Model Cache Directory: \(ModelManager.shared.cacheDirectory.path)")
     print("  • Total Cache Used: \(formattedTotal)")
     print("  • Active Speech Model: \(ModelManager.shared.activeASRModel.displayName)")
+    print("  • Custom Dictionary Path: \(TechDictionary.userDictionaryURL.path)")
+    print("  • Custom Dictionary Words Loaded: \(userVocab.count) terms (\(userVocab.prefix(5).joined(separator: ", "))...)")
+    print("  • Total Recognition Vocabulary: \(TechDictionary.allVocabulary.count) terms")
     print("  • Traditional Chinese Standard: OpenCC s2twp (Taiwan standard)")
 
 case "test-convert":
