@@ -120,9 +120,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 button.title = "🦋"
             }
-            button.target = self
-            button.action = #selector(statusBarButtonClicked(_:))
-            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
         
         updateMenu()
@@ -236,10 +233,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         quitItem.target = self
         menu.addItem(quitItem)
         
-    }
-    
-    @objc private func statusBarButtonClicked(_ sender: NSStatusBarButton) {
-        statusItem.button?.performClick(nil)
+        statusItem.menu = menu
     }
     
     @objc private func selectASRModelSpec(_ sender: NSMenuItem) {
