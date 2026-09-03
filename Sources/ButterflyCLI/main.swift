@@ -7,6 +7,10 @@ let args = CommandLine.arguments
 let command = args.count > 1 ? args[1] : "listen"
 
 switch command {
+case "test", "test-all", "test-logic":
+    TestRunner.runAllTests()
+    exit(0)
+
 case "models":
     print("\nSupported Local Models:")
     for model in ModelManager.defaultModels {

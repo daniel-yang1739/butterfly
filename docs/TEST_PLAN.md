@@ -2,51 +2,55 @@
 
 ## 1. 測試理念 (Testing Philosophy)
 
-為防止未來在 Butterfly 新增功能、升級模型或重構架構時造成既有功能的迴歸損壞（Regression），我們建立了全方位的邏輯測試矩陣。所有文字轉換、語音音訊處理、狀態切換與剪貼簿防護均有高覆蓋率的自動化單元測試保護。
+為防止在 Butterfly 新增功能、升級模型或重構架構時造成既有核心邏輯的迴歸損壞（Regression），我們建立了全方位的 26 項核心邏輯測試矩陣。所有繁簡轉換、排版、兩輪認知意圖重構、數字/單位標準化、動態提示詞、白名單與鍵盤注入均有嚴格的自動化斷言保護。
 
 ---
 
-## 2. 邏輯測試案例矩陣 (Logic Test Matrix)
+## 2. 邏輯測試案例矩陣 (26 Core Logic Assertions)
 
-### 類別 A：繁簡轉換與語言過濾邏輯測試 (`OpenCCTranslatorTests`)
+### 📦 Suite 1：繁簡轉換與語言過濾測試 (`OpenCCTranslator`)
+- **TC-A1**：純簡體字轉換（`"这是语音识别测试"` $\rightarrow$ `"這是語音識別測試"`）
+- **TC-A2**：台灣慣用詞彙適配（`"服务器内存不足"` $\rightarrow$ `"伺服器記憶體不足"`）
+- **TC-A3**：中英混雜語音轉換（`"请帮我review这段React代码"` $\rightarrow$ `"請幫我 review 這段 React 程式碼"`）
+- **TC-A4**：純英文大小寫與符號保留（`"git checkout -b feature/butterfly --quiet"`）
+- **TC-A5**：零簡體殘留斷言（`assert(!containsSimplified(output))`）
 
-| 編號 | 測試案例名稱 | 輸入 (Input) | 預期輸出 (Expected Output) | 驗證目的 |
-| :--- | :--- | :--- | :--- | :--- |
-| **TC-A1** | 純簡體字轉換 | `"这是语音识别测试"` | `"這是語音識別測試"` | 驗證基礎簡繁字形替換 |
-| **TC-A2** | 台灣慣用詞彙替換 | `"服务器内存不足"` | `"伺服器記憶體不足"` | 驗證 `s2twp` 詞庫慣用語精準轉換 |
-| **TC-A3** | 中英混雜語音轉換 | `"请帮我review这段代码"` | `"請幫我 review 這段程式碼"` | 確保中英混說時，英文不受影響且中文轉繁體 |
-| **TC-A4** | 純英文大小寫保留 | `"git checkout -b feature/butterfly"` | `"git checkout -b feature/butterfly"` | 確保英文代碼、參數完全不被誤轉或改寫 |
-| **TC-A5** | 特殊符號、網址與數字 | `"API版本是 v2.0，網址是 https://example.com"` | `"API版本是 v2.0，網址是 https://example.com"` | 確保網址、標點、浮點數原樣保留 |
-| **TC-A6** | 零簡體殘留斷言 | 任意多國語言輸入 | `assert(containsSimplified(output) == false)` | 遍歷簡體常用字表，確保簡體字完全絕跡 |
+### 📦 Suite 2：文字格式化與數字/單位標準化測試 (`TextFormatter`)
+- **TC-B1**：中英混排盤古之白自動補空格（`"建立一個React組件與10個API端點"` $\rightarrow$ `"建立一個 React 組件與 10 個 API 端點"`）
+- **TC-B2**：口語大寫數字轉阿拉伯數字（`"八百多 MB... 兩千行程式碼第 1 點"` $\rightarrow$ `"800 多 MB... 2000 行程式碼第 1 點"`）
+- **TC-B3**：口語數據與公制度量單位縮寫標準化（`"500 Mega bite... 2 Tara bite... 5 kilogram"` $\rightarrow$ `"500 MB... 2 TB... 5 kg"`）
+- **TC-B4**：口語開頭結巴重複代名詞過濾（`"我我我覺得這這這個可以"` $\rightarrow$ `"我覺得這個可以"`）
 
-### 類別 B：文字格式化與排版去贅詞測試 (`TextFormatterTests`)
+### 📦 Suite 3：兩輪認知意圖重構引擎測試 (`TextPolisher`)
+- **TC-C1**：Mode 1 全音素泛化還原（`"切換到 沒ode 1 試試看 茂 the one 模式"` $\rightarrow$ `"Mode 1"`）
+- **TC-C2**：Mode 2 全音素泛化還原（`"試試看 茂 t 與 冒著吐兔 以及 貓的兔 的結果"` $\rightarrow$ `"Mode 2"`）
+- **TC-C3**：System Prompt 全音素模糊還原與尾音自癒（`"sister Prom"`, `"sister from"`, `"season Pro"`, `"To Pro"`, `"System Promptpt"` $\rightarrow$ `"System Prompt"`）
+- **TC-C4**：Context 上下文語境定向（`"看到上下文這個字，所以知道要翻成 contact"` $\rightarrow$ `"翻成 Context"`）
+- **TC-C5**：文件與架構關鍵字自癒（`"Varun"` $\rightarrow$ `"README"`, `"A DM D R"` $\rightarrow$ `"AGENTS.md"`, `"Source Coded"` $\rightarrow$ `"Source Code"`）
+- **TC-C6**：Mode 1 即時串流忠實性保證（自然重複詞 `"測試測試"` 與標點符號 `"，。？"` 100% 完整保留，零刪字）
+- **TC-C7**：Mode 2 深度口吃與重啟句消除（`"好我們來，好我們來測，好，我們來測試一下"` $\rightarrow$ `"我們來測試一下"`）
+- **TC-C8**：Mode 2 Markdown 智慧列點結構化提取（`"第一點是... 第二點是..."` $\rightarrow$ `"- 第 1 點是...\n- 第 2 點是..."`）
+- **TC-C9**：Mode 2 長篇獨白全句去重複（消除 3 次連續重複錄音句子）
+- **TC-C10**：語意意圖與同音字上下文校正（`"好的認識"` $\rightarrow$ `"好的潤飾"`, `"羽翼"` $\rightarrow$ `"語意"`, `"把蚊子"` $\rightarrow$ `"把文字"`）
 
-| 編號 | 測試案例名稱 | 輸入 (Input) | 預期輸出 (Expected Output) | 驗證目的 |
-| :--- | :--- | :--- | :--- | :--- |
-| **TC-B1** | 中英混排自動補空格 | `"建立一個React組件"` | `"建立一個 React 組件"` | 提升專業排版美觀度（盤古之白規範） |
-| **TC-B2** | 語音結尾標點修整 | `"今天天氣真好。"` | `"今天天氣真好"` (短語情境) | 避免短語輸入時多出多餘句號 |
-| **TC-B3** | 語音結巴重複詞過濾 | `"我我我覺得可以"` | `"我覺得可以"` | 濾除語音初始卡頓之重複音節 |
+### 📦 Suite 4：系統提示詞動態載入測試 (`SystemPrompt`)
+- **TC-D1**：`SYSTEM_PROMPT.md` 磁碟動態載入驗證
+- **TC-D2**：Butterfly 提示詞角色與規則完整性驗證
 
-### 類別 C：推論抽象與 Mock 測試 (`InferenceEngineTests`)
+### 📦 Suite 5：模型白名單與硬體偵測測試 (`ModelManager`)
+- **TC-E1**：模型白名單排序優先級（Rank 1 為 `Whisper Large-v3-Turbo`）
+- **TC-E2**：模型檔案大小格式化驗證
+- **TC-E3**：本機可用模型自動探測（`getBestAvailableModel()`）
 
-| 編號 | 測試案例名稱 | 測試條件 | 預期行為 | 驗證目的 |
-| :--- | :--- | :--- | :--- | :--- |
-| **TC-C1** | Mock 後端推論流程 | 使用 MockInferenceBackend 注入音訊 | 正確觸發回呼並輸出 `TranscriptionResult` | 驗證推論層與上層管線解耦性 |
-| **TC-C2** | 音訊重取樣精度 | 44.1kHz / 48kHz 麥克風音訊串流 | 正確重取樣為 16,000Hz 16-bit Mono Float | 符合各平台 NPU 標準輸入規格 |
-| **TC-C3** | 靜音偵測自動停止 | 連續 800ms 低於閾值能量（-45dB） | 發出 `VADEvent.speechEnded` 事件 | 自動結束錄音進入辨識 |
-
-### 類別 D：焦點輸入框安全注入測試 (`InputInjectorTests`)
-
-| 編號 | 測試案例名稱 | 測試情境 | 預期行為 | 驗證目的 |
-| :--- | :--- | :--- | :--- | :--- |
-| **TC-D1** | 剪貼簿完整性保護 | 使用者剪貼簿已有重要內容（如一段代碼） | 注入文字後，原剪貼簿內容 100% 復原 | 絕不污染使用者的剪貼簿資料 |
-| **TC-D2** | 無焦點輸入框防護 | 使用者當前桌面無任何活躍輸入框 | HUD 顯示複製提示並寫入剪貼簿，不跳錯 | 友善降級處理 |
+### 📦 Suite 6：游標注入增量計算測試 (`InputInjector`)
+- **TC-F1**：即時串流正向追加增量計算（`"你好"` $\rightarrow$ `"你好世界"`）
+- **TC-F2**：即時串流退格就地微調增量計算（`"你好是界"` $\rightarrow$ `"你好世界"`）
 
 ---
 
-## 3. 自動化測試執行指令 (How to Run Tests)
+## 3. 測試執行方式 (How to Run Tests)
 
 ```bash
-# 執行所有自動化單元測試
-swift test
+# 執行所有 26 項核心邏輯單元測試
+swift run butterfly-cli test
 ```
