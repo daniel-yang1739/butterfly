@@ -87,18 +87,15 @@ swift build
 
 ### Running CLI Tools
 ```bash
-# List available models and hardware detection
-swift run butterfly-cli models
-swift run butterfly-cli info
-
-# Test text polishing and bullet structuring
-swift run butterfly-cli test-polish
-
-# Start terminal live listening (Mode 1)
+# Start terminal live streaming dictation
 swift run butterfly-cli listen
 
-# Start terminal record & polish mode (Mode 2)
-swift run butterfly-cli listen --polish
+# Run full automated test suite (36 assertions)
+swift run butterfly-cli test
+
+# List available speech recognition models
+swift run butterfly-cli models
+swift run butterfly-cli info
 ```
 
 ### Running the macOS Application

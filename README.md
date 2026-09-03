@@ -2,39 +2,38 @@
   <img src="docs/assets/banner.jpg" alt="Butterfly Banner" width="100%" />
 </p>
 
-# 🦋 Butterfly: macOS Native Real-Time Dual-Mode Speech-to-Text & Note Polisher
+# 🦋 Butterfly: macOS Native Real-Time Streaming Voice Dictation
 
-> **Butterfly**: Liberate your hands from the keyboard and let your thoughts fly freely with hands-free voice dictation and intelligent note structuring.
+> **Butterfly**: Liberate your hands from the keyboard and let your thoughts fly freely with zero-latency, hands-free local voice dictation.
 
-A lightweight, privacy-focused, zero-cloud-dependency local speech-to-text tool built for macOS (Apple Silicon). Whenever your cursor is focused in any text input or application, press a global hotkey to transcribe mixed Chinese and English speech with real-time streaming or smart note structuring into Traditional Chinese (Taiwan standard / OpenCC s2twp).
+A lightweight, privacy-focused, zero-cloud-dependency local speech-to-text tool built for macOS (Apple Silicon). Whenever your cursor is focused in any text input or application, press <kbd>Option</kbd> + <kbd>Space</kbd> to stream mixed Chinese and English speech directly into your active cursor with automatic pause-gated typo self-healing and guaranteed Traditional Chinese (Taiwan standard / OpenCC `s2twp`).
 
 ---
 
 ## ✨ Key Features
 
-1. **Dual Voice Input Modes**:
-   - **🎙️ Mode 1: Live Streaming Dictation (`Option + Space`)**:
-     - 100% faithful real-time streaming speech-to-text directly into your active cursor.
-     - 1~2 second sliding window in-place refinement (revises tech terms, numbers, and units without disturbing earlier text).
-     - Preserves all natural spoken words, repetitions, and punctuation without aggressive deletion.
-   - **📝 Mode 2: Record & Smart Polish (`Option + Shift + Space`)**:
-     - Complete, uninterrupted recording of long monologues, meetings, and thoughts.
-     - Automatic deep filler filtering (`呃`, `啊`, `哦`, `那個那個`, `就是說`), stutter cleaning, intelligent paragraph structuring, and Markdown bullet point extraction (`- ...`).
-     - One-shot paste into the active window with clipboard protection.
-2. **Accidental Send Protection with Low-Level `CGEventTap`**:
-   - Press <kbd>Enter</kbd> (or <kbd>Esc</kbd>) to stop recording.
-   - The first <kbd>Enter</kbd> is intercepted and swallowed at the OS level so it **never accidentally sends messages in Slack, Discord, ChatGPT, or Cursor**!
-   - The second <kbd>Enter</kbd> passes through normally to submit your polished text.
-3. **External Editable `SYSTEM_PROMPT.md`**:
-   - System Prompt is fully decoupled into `SYSTEM_PROMPT.md` at project root or `~/.config/butterfly/SYSTEM_PROMPT.md` for seamless customization without recompiling.
-4. **Seamless Code-Switching & Cognitive Intent Reconstruction**:
-   - Accurately recognizes mixed Chinese and English speech (e.g., `Mode 1`, `Mode 2`, `System Prompt`, `Context`, `Source Code`, `README`, `AGENTS.md`, `Local Data`).
-   - Normalizes spoken numbers (`八百多 MB` $\rightarrow$ `800 多 MB`, `one thousand` $\rightarrow$ `1000`) and metric/digital units (`MB`, `GB`, `TB`, `kg`).
-5. **Guaranteed Traditional Chinese Output (Zero Simplified Chinese)**:
-   - Integrates OpenCC `s2twp` dictionary to convert all recognized Chinese into Taiwan Traditional Chinese standards (`伺服器`, `記憶體`, `程式碼`), while preserving original English terms.
-6. **Prioritized Model Whitelist & Apple Silicon Hardware Acceleration**:
-   - Automatically detects and loads high-precision models (Rank 1: `Whisper Large-v3-Turbo` $\rightarrow$ Rank 6: `Apple Speech Native`).
-   - Hardware accelerated via Apple Neural Engine (ANE / NPU) and Metal GPU for ultra-low latency.
+1. **🎙️ Real-Time Live Streaming Voice Dictation (`Option + Space`)**:
+   - 100% faithful real-time speech-to-text with continuous streaming directly into your active cursor.
+   - **Pause-Gated In-Place Self-Healing (0.8s)**: Automatically normalizes tech terms (`System Prompt`, `Context`, `Model`), numbers, and units (`800 MB`, `1000 行`) on short pauses without disturbing earlier text.
+   - **Cumulative Anti-Avalanche Freezing**: Automatically freezes validated clauses in RAM and screen mirror to ensure zero sentence duplication and zero avalanche deletions.
+2. **🛑 Chat-Safe Accidental Send Protection (`Enter` / `Esc`)**:
+   - Press <kbd>Enter</kbd> (or <kbd>Esc</kbd>) to stop voice dictation.
+   - The first <kbd>Enter</kbd> is intercepted and swallowed at the OS level by low-level `CGEventTap` so it **never accidentally sends messages in Slack, Discord, ChatGPT, Claude, or Cursor**!
+   - The second <kbd>Enter</kbd> passes through normally to submit your message.
+3. **🇹🇼 Guaranteed Traditional Chinese Output (Zero Simplified Chinese)**:
+   - Integrates OpenCC `s2twp` dictionary to convert all recognized Chinese into Taiwan Traditional Chinese standards (`伺服器`, `記憶體`, `程式碼`, `專案`), while preserving original English terms.
+4. **🩹 Spoken Typo Self-Healing & Code-Switching**:
+   - Accurately recognizes mixed Chinese and English speech (e.g., `System Prompt`, `Context`, `Source Code`, `README`, `AGENTS.md`, `Docker`, `Python`).
+   - Applies standard Pangu spacing (a single space between CJK characters and alphanumeric terms: `800 MB 的空間`).
+5. **⚡ Multi-Tiered Whisper ASR Whitelist on Apple Silicon**:
+   - Built-in multi-model support:
+     - 🥇 **Rank 1**: `Whisper Large-v3-Turbo` (1.62 GB / Flagship accuracy)
+     - 🥈 **Rank 2**: `Whisper Small` (488 MB / High accuracy code-switching)
+     - 🥉 **Rank 3**: `SenseVoice Small` (230 MB / Ultra-low latency)
+     - 🍎 **Rank 4**: `Apple Speech Native` (Built-in / 0 MB)
+   - Hardware accelerated via Apple Neural Engine (ANE / NPU) and Metal GPU.
+6. **🔒 100% On-Device Privacy**:
+   - All audio processing and speech recognition execute 100% locally on your Mac. No audio or text ever leaves your machine.
 
 ---
 
@@ -51,15 +50,15 @@ butterfly/
 ├── Package.swift                # Swift Package Manager configuration (macOS 13+)
 ├── Sources/
 │   ├── ButterflyCore/           # Core framework library
-│   │   ├── Audio/               # Audio capture & VAD detection
-│   │   ├── Engine/              # Inference backend, LiveSpeechEngine, ModelManager, SystemPrompt
-│   │   ├── Injector/            # CGEvent keyboard injector & clipboard proxy
+│   │   ├── Audio/               # Audio capture, resampling & VAD detection
+│   │   ├── Engine/              # Whisper inference backend, LiveSpeechEngine, ModelManager
+│   │   ├── Injector/            # CGEvent keyboard injector & cursor proxy
 │   │   ├── State/               # State machine coordinator
-│   │   └── Text/                # OpenCC s2twp, TextFormatter, TextPolisher
+│   │   └── Text/                # OpenCC s2twp, TextFormatter, TextPolisher, SlidingWindowBuffer
 │   ├── ButterflyCLI/            # Command-line interface for testing & benchmarking
 │   └── ButterflyApp/            # Native macOS menu bar application with CGEventTap
 └── Tests/
-    └── ButterflyTests/          # Unit test suites
+    └── ButterflyTests/          # Unit test suites (36 automated assertions)
 ```
 
 ---
@@ -73,20 +72,17 @@ swift build
 
 ### 2. Run CLI Commands
 ```bash
-# List supported local models and download status
+# Start Live Streaming Dictation in terminal
+swift run butterfly-cli listen
+
+# Run full 36-assertion automated unit test suite
+swift run butterfly-cli test
+
+# List supported local speech recognition models
 swift run butterfly-cli models
 
 # Display hardware acceleration and cache directory info
 swift run butterfly-cli info
-
-# Test text polishing, bullet points, and filler removal
-swift run butterfly-cli test-polish "我想一個 System Prompt 之類的，我們有兩種模式需求，第一點是即時串流，第二點是錄音智慧整理。"
-
-# Start Live Streaming Dictation in terminal
-swift run butterfly-cli listen
-
-# Start Record & Smart Polish mode in terminal
-swift run butterfly-cli listen --polish
 ```
 
 ### 3. Launch the macOS Menu Bar App
@@ -95,6 +91,6 @@ swift run ButterflyApp
 ```
 
 Once launched, the 🦋 icon will appear in your macOS menu bar:
-- Press <kbd>Option</kbd> + <kbd>Space</kbd> to start **Mode 1: Live Streaming Dictation**.
-- Press <kbd>Option</kbd> + <kbd>Shift</kbd> + <kbd>Space</kbd> to start **Mode 2: Record & Smart Polish**.
-- Press <kbd>Enter</kbd> (or <kbd>Esc</kbd>) to **Stop & Finalize** (First Enter stops recording without sending; Second Enter submits).
+- Press <kbd>Option</kbd> + <kbd>Space</kbd> to start/stop **Live Voice Dictation**.
+- Press <kbd>Enter</kbd> (or <kbd>Esc</kbd>) to **Stop Dictation** (First Enter stops recording safely without sending; Second Enter submits).
+- Click the menu bar icon to download or switch between Whisper models.
