@@ -74,35 +74,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         mode: .liveStreaming
                     )
                     
-                    // Mode 1 Phase 2: Reset 0.8s Pause-Gated Refinement Timer (Tri-Color Model + 2PC)
+                    // Mode 1 Phase 2: Reset 0.8s Pause-Gated Refinement Timer (Pure Swift Zero-Hallucination)
                     self.pauseTimer?.invalidate()
                     self.pauseTimer = Timer.scheduledTimer(withTimeInterval: 0.8, repeats: false) { [weak self] _ in
                         Task { @MainActor [weak self] in
                             guard let self = self, self.isRecording, self.activeMode == .liveStreaming else { return }
                             
-                            let activeClause = self.slidingWindowBuffer.activeTail
-                            guard !activeClause.isEmpty else { return }
-                            
-                            // 1. Asynchronously refine ONLY the active un-frozen clause with SLM
-                            let slmRefined = await LanguageModelCoordinator.shared.refineLiveStream(transcript: activeClause)
-                            
-                            // 2. Prepare refinement plan with refined clause
-                            guard let prepared = self.slidingWindowBuffer.preparePauseRefinement(customRefinedText: slmRefined) else {
-                                FloatingHUDWindow.shared.update(
-                                    frozenText: self.slidingWindowBuffer.frozenText,
-                                    polishedText: self.slidingWindowBuffer.polishedText,
-                                    activeTail: self.slidingWindowBuffer.activeTail,
-                                    timeStr: timeStr,
-                                    mode: .liveStreaming
-                                )
-                                return
-                            }
-                            
-                            // 3. Physically execute in-place keystrokes in OS active cursor
-                            InputInjector.shared.applySlidingDelta(prepared.action)
-                            
-                            // 4. Commit pointer in RAM ONLY AFTER physical keystrokes are 100% complete!
-                            self.slidingWindowBuffer.commitPauseRefinement(prepared)
+                            let action = self.slidingWindowBuffer.onPauseTriggered()
+                            InputInjector.shared.applySlidingDelta(action)
                             
                             // Re-sync Floating HUD with updated Tri-Color regions
                             FloatingHUDWindow.shared.update(
