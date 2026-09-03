@@ -57,11 +57,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     )
                     
                     let preview = formattedText.count > 12 ? "..." + String(formattedText.suffix(12)) : formattedText
-                    self.statusItem.button?.title = "🎙️ \(preview)"
+                    self.statusItem.button?.title = " 🎙️ \(preview)"
                 } else {
                     // Mode 2: Record audio quietly and display preview in menu bar
                     let preview = formattedText.count > 12 ? "..." + String(formattedText.suffix(12)) : formattedText
-                    self.statusItem.button?.title = "🔴 \(preview)"
+                    self.statusItem.button?.title = " 🔴 \(preview)"
                 }
             }
         }
@@ -76,7 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         
         Butterfly macOS native desktop app successfully started!
         --------------------------------------------------
-        Look for the 🦋 icon in your top menu bar.
+        Look for the Butterfly icon in your top menu bar.
         
         Global Hotkeys:
           • [Option + Space]         -> Start Live Streaming Dictation (type live as you speak)
@@ -85,7 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         
         Active Model: \(activeModelSpec.displayName)
         Model Cache Path: \(ModelManager.shared.cacheDirectory.path)
-        Click the menu bar 🦋 icon to switch or manage models.
+        Click the Butterfly menu bar icon to switch or manage models.
         --------------------------------------------------
         
         """)
@@ -95,7 +95,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         
         if let button = statusItem.button {
-            button.title = "🦋"
+            // Load native high-contrast white outline template image for macOS menu bar
+            let fileManager = FileManager.default
+            let candidatePaths = [
+                "docs/assets/menu_bar_icon.png",
+                "docs/assets/menu_bar_icon@2x.png",
+                URL(fileURLWithPath: fileManager.currentDirectoryPath).appendingPathComponent("docs/assets/menu_bar_icon.png").path,
+                "/Users/daniel_y_yang/Documents/self/butterfly/docs/assets/menu_bar_icon.png"
+            ]
+            
+            var loadedImage: NSImage? = nil
+            for path in candidatePaths {
+                if fileManager.fileExists(atPath: path), let img = NSImage(contentsOfFile: path) {
+                    img.size = NSSize(width: 22, height: 22)
+                    img.isTemplate = true
+                    loadedImage = img
+                    break
+                }
+            }
+            
+            if let img = loadedImage {
+                button.image = img
+                button.imagePosition = .imageLeft
+                button.title = ""
+            } else {
+                button.title = "🦋"
+            }
             button.target = self
             button.action = #selector(statusBarButtonClicked(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -261,30 +286,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         isDownloadingModel = true
         
         Task { @MainActor in
-            self.statusItem.button?.title = "⏳ Downloading \(spec.displayName.prefix(12))..."
+            self.statusItem.button?.title = " ⏳ Downloading..."
             
             do {
                 _ = try await ModelManager.shared.downloadModel(spec) { progress in
                     Task { @MainActor in
                         let percentage = Int(progress * 100)
-                        self.statusItem.button?.title = "⏳ \(spec.displayName.prefix(10)) (\(percentage)%)"
+                        self.statusItem.button?.title = " ⏳ \(percentage)%"
                     }
                 }
                 
                 self.activeModelSpec = spec
                 self.isDownloadingModel = false
-                self.statusItem.button?.title = "✅ \(spec.displayName.prefix(12)) Ready!"
+                self.statusItem.button?.title = " ✅ Ready!"
                 self.updateMenu()
                 print("Butterfly: Model \(spec.displayName) downloaded successfully!")
                 
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
-                self.statusItem.button?.title = "🦋"
+                self.statusItem.button?.title = ""
             } catch {
                 self.isDownloadingModel = false
-                self.statusItem.button?.title = "⚠️ Download Failed"
+                self.statusItem.button?.title = " ⚠️ Failed"
                 print("Failed to download model: \(error.localizedDescription)")
                 try? await Task.sleep(nanoseconds: 2_500_000_000)
-                self.statusItem.button?.title = "🦋"
+                self.statusItem.button?.title = ""
                 self.updateMenu()
             }
         }
@@ -355,9 +380,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             isRecording = true
             
             if mode == .liveStreaming {
-                self.statusItem.button?.title = "🎙️ Streaming..."
+                self.statusItem.button?.title = " 🎙️ Streaming..."
             } else {
-                self.statusItem.button?.title = "🔴 Recording..."
+                self.statusItem.button?.title = " 🔴 Recording..."
             }
             self.updateMenu()
             
@@ -366,7 +391,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } catch {
             print("Failed to start recording: \(error.localizedDescription)")
             isRecording = false
-            self.statusItem.button?.title = "🦋"
+            self.statusItem.button?.title = ""
             self.updateMenu()
         }
     }
@@ -377,7 +402,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         isRecording = false
         
         let mode = activeMode
-        self.statusItem.button?.title = (mode == .recordAndPolish) ? "⏳ Polishing..." : "⏳ Finalizing..."
+        self.statusItem.button?.title = (mode == .recordAndPolish) ? " ⏳ Polishing..." : " ⏳ Finalizing..."
         self.updateMenu()
         
         // Asynchronously flush audio buffers and retrieve full finalized transcript
@@ -402,7 +427,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         
         streamingInjectedText = ""
-        self.statusItem.button?.title = "🦋"
+        self.statusItem.button?.title = ""
         self.updateMenu()
     }
     
