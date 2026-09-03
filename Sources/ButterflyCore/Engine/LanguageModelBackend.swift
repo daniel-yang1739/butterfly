@@ -72,11 +72,16 @@ public final class LocalSLMInferenceBackend: @unchecked Sendable {
     
     private func isHighQualityNote(_ text: String) -> Bool {
         guard !text.isEmpty else { return false }
-        let forbidden = ["使用者口述", "Butterfly AI", "專業筆記秘書", "使用者的描述", "角色定義", "Prompt, 他, 優先"]
+        let forbidden = [
+            "使用者口述", "Butterfly AI", "專業筆記秘書", "使用者的描述",
+            "角色定義", "Prompt, 他, 優先", "I can't fulfil", "cannot fulfil",
+            "I am sorry", "As an AI", "I'm sorry", "I cannot", "I can't",
+            "請問您需要", "好的，請問", "請隨時告知", "您需要進行", "我可以協助"
+        ]
         for f in forbidden {
-            if text.contains(f) { return false }
+            if text.localizedCaseInsensitiveContains(f) { return false }
         }
-        return true
+        return text.contains("- ") || text.contains("1. ") || text.contains("\n")
     }
     
     /// Refine live streaming clause using active SLM model on Metal GPU with full telemetry
