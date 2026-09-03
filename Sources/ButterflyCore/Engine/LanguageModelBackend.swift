@@ -110,7 +110,7 @@ public final class LanguageModelCoordinator: @unchecked Sendable {
         }
         
         let activeModel = ModelManager.shared.activeSLMModel
-        let systemPrompt = SystemPrompt.shared.content
+        let systemPrompt = SystemPrompt.shared.prompt(for: .structuredNote)
         let slmBackend = LocalSLMInferenceBackend(spec: activeModel)
         
         return (try? await slmBackend.restructureNote(transcript: transcript, systemPrompt: systemPrompt))
@@ -124,7 +124,7 @@ public final class LanguageModelCoordinator: @unchecked Sendable {
         }
         
         let activeModel = ModelManager.shared.activeSLMModel
-        let systemPrompt = SystemPrompt.shared.content
+        let systemPrompt = SystemPrompt.shared.prompt(for: .liveStream)
         let slmBackend = LocalSLMInferenceBackend(spec: activeModel)
         
         let polished = (try? await slmBackend.restructureNote(transcript: transcript, systemPrompt: systemPrompt))
