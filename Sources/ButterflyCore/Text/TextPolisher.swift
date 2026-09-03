@@ -108,6 +108,7 @@ public final class TextPolisher {
             ("(?i)\\b(?:Varun|Vera|Read\\s*me|Red\\s*me)\\b", "README"),
             ("(?i)\\b(?:A\\s*DM\\s*D\\s*R|Agent\\s*M\\s*D|agents?\\s*m\\s*d)\\b", "AGENTS.md"),
             ("(?i)\\bSource\\s*Coded?\\b|收\\s*call|so\\s*call|so\\s*co", "Source Code"),
+            ("(?i)\\b(?:Doux|D\\s*O\\s*C\\s*S)\\b", "docs/"),
             ("(?i)\\b(?:coming\\s*com\\s*meet|com\\s*meet|c\\s*o\\s*m\\s*m\\s*i\\s*t|c\\s*o\\s*n\\s*m\\s*i\\s*t)\\b|com\\s*一版|come\\s*一版", "Commit"),
             ("哈扣寫|哈扣", "Hardcode"),
             ("拍森|拍省", "Python"),
