@@ -63,8 +63,10 @@ public final class LiveSpeechEngine: NSObject, @unchecked Sendable, SFSpeechReco
         
         recognitionRequest.taskHint = .dictation
         recognitionRequest.contextualStrings = TechDictionary.engineeringVocabulary + [
-            "Typeless", "Record", "Smart Polish", "Polish", "Live Streaming", "Dictation",
-            "Esc", "Option", "Space", "Command", "Shift", "Bullet", "Markdown"
+            "System Prompt", "Prompt", "Typeless", "Record", "Smart Polish", "Polish",
+            "Live Streaming", "Dictation", "Speech-to-Text", "Context", "Local", "Source Code",
+            "Hardcode", "Whitelist", "Blacklist", "Esc", "Option", "Space", "Command",
+            "Shift", "Bullet", "Markdown", "MB", "GB", "TB", "kg", "Mode 1", "Mode 2"
         ]
         
         if #available(macOS 13.0, *) {

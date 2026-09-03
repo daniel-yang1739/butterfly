@@ -95,51 +95,26 @@ public final class InputInjector: @unchecked Sendable {
         
         let backspaceCount = oldChars.count - commonPrefixCount
         
-        // 3. Strict Speech pause boundary detection:
-        // When speech resumes after a pause, Apple ASR starts a new utterance.
-        // If common prefix <= 1 and previous utterance had substantial characters (>= 4),
-        // NEVER delete previous words! Smoothly bridge with punctuation and append the new utterance directly at the cursor.
-        if commonPrefixCount <= 1 && oldChars.count >= 4 {
-            let punctuationSet: Set<Character> = ["。", "，", "！", "？", "；", "…", ".", ",", "!", "?", ";", " "]
-            if let lastChar = previousText.last, !punctuationSet.contains(lastChar) {
-                let firstChar = currentNewText.first
-                if firstChar == nil || !punctuationSet.contains(firstChar!) {
-                    // Smart punctuation based on sentence ending
-                    if previousText.hasSuffix("嗎") || previousText.hasSuffix("呢") || previousText.hasSuffix("吧") || previousText.hasSuffix("會不會") || previousText.hasSuffix("是不是") {
-                        typeUnicodeString("？")
-                    } else {
-                        typeUnicodeString("，")
-                    }
-                }
+        // 3. Clean in-place refinement for active utterance
+        if backspaceCount > 0 && backspaceCount <= 25 {
+            sendBackspaces(count: backspaceCount)
+            let deltaNew = String(newChars[commonPrefixCount...])
+            if !deltaNew.isEmpty {
+                typeUnicodeString(deltaNew)
             }
-            typeUnicodeString(currentNewText)
+            previousText = currentNewText
+            return
+        } else if backspaceCount > 25 {
+            // If the shift is larger than 25 chars, avoid destructive backspacing; only append trailing difference
+            if newChars.count > oldChars.count {
+                let extraCount = newChars.count - oldChars.count
+                let extraSuffix = String(newChars.suffix(extraCount))
+                typeUnicodeString(extraSuffix)
+            }
             previousText = currentNewText
             return
         }
         
-        // 4. Second-Pass Substantial Revision Protection:
-        // If ASR makes a middle-sentence revision to text already typed on screen,
-        // attempting to backspace > 4 characters in a live stream is unsafe (causes duplicate text in target apps).
-        // Instead, check if newText is largely similar to previousText without new suffix:
-        if backspaceCount > 4 {
-            if newChars.count <= oldChars.count {
-                // No new content at the tail; keep what's on screen and update tracking
-                previousText = currentNewText
-                return
-            } else {
-                // If there's new content at the tail, only type the extra new characters
-                let extraCharsCount = newChars.count - oldChars.count
-                let extraSuffix = String(newChars.suffix(extraCharsCount))
-                typeUnicodeString(extraSuffix)
-                previousText = currentNewText
-                return
-            }
-        }
-        
-        // 5. Safe Local phonetic refinement within active utterance (small tail backspaces <= 4 chars)
-        if backspaceCount > 0 {
-            sendBackspaces(count: backspaceCount)
-        }
         let deltaNew = String(newChars[commonPrefixCount...])
         if !deltaNew.isEmpty {
             typeUnicodeString(deltaNew)
