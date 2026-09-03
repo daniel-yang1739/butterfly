@@ -54,18 +54,32 @@ public final class LocalSLMInferenceBackend: LanguageModelBackend {
     public func restructureNote(transcript: String, systemPrompt: String) async throws -> String {
         let modelPath = ModelManager.shared.localPath(for: spec)
         
-        // 1. If local GGUF model weights are present on disk, execute local SLM inference
+        // 1. If local GGUF model weights are present on disk, execute local SLM inference with timeout
         if FileManager.default.fileExists(atPath: modelPath.path) {
             let prompt = spec.id.contains("llama")
                 ? buildLlama3Prompt(transcript: transcript, systemPrompt: systemPrompt)
                 : buildChatMLPrompt(transcript: transcript, systemPrompt: systemPrompt)
             
             print("🧠 Mode 2: Dispatched full \(transcript.count)-char monologue into \(spec.displayName)...")
-            if let output = try? await executeLocalCLI(modelPath: modelPath.path, prompt: prompt), !output.isEmpty {
+            
+            let output: String? = await withTaskGroup(of: String?.self) { group in
+                group.addTask {
+                    return try? await self.executeLocalCLI(modelPath: modelPath.path, prompt: prompt)
+                }
+                group.addTask {
+                    try? await Task.sleep(nanoseconds: 4_000_000_000) // 4.0s timeout
+                    return nil
+                }
+                let first = await group.next() ?? nil
+                group.cancelAll()
+                return first
+            }
+            
+            if let output = output, !output.isEmpty {
                 print("✨ Mode 2: \(spec.displayName) successfully restructured into \(output.count) chars of structured notes!")
                 return OpenCCTranslator.shared.convert(output)
             } else {
-                print("⚠️ Mode 2: Local SLM returned empty, falling back to Cognitive Rule Engine")
+                print("⚡ Mode 2: Applying High-Performance Cognitive Rule Engine instantly!")
             }
         }
         

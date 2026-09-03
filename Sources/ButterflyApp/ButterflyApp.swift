@@ -491,10 +491,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.statusItem.button?.title = " 🎙️ [00:00] Streaming ·"
             } else {
                 self.statusItem.button?.title = " 🔴 [00:00] Recording ·"
-                // Type dynamic placeholder indicator directly into user's focused input box in English
-                let placeholder = " 🔴 [Listening... Press Enter to polish]"
-                InputInjector.shared.typeUnicodeString(placeholder)
-                mode2PlaceholderText = placeholder
             }
             self.updateMenu()
             
@@ -524,10 +520,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             print("Failed to start recording: \(error.localizedDescription)")
             isRecording = false
             FloatingHUDWindow.shared.hide()
-            if !mode2PlaceholderText.isEmpty {
-                InputInjector.shared.sendBackspaces(count: mode2PlaceholderText.utf16.count)
-                mode2PlaceholderText = ""
-            }
             recordingTimer?.invalidate()
             recordingTimer = nil
             pauseTimer?.invalidate()
@@ -555,14 +547,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let fullRawTranscript = await liveEngine.stopLiveListening()
         
         if mode == .recordAndPolish {
-            // 1. Instantly erase the placeholder text from active cursor using backspaces
-            if !mode2PlaceholderText.isEmpty {
-                let charCount = mode2PlaceholderText.utf16.count
-                InputInjector.shared.sendBackspaces(count: charCount)
-                mode2PlaceholderText = ""
-                try? await Task.sleep(nanoseconds: 40_000_000)
-            }
-            
             print("\n[Mode 2: Full Monologue Captured (\(fullRawTranscript.count) chars)]:\n\(fullRawTranscript)")
             // 2. Mode 2: Record & Smart Polish via Dual-Track SLM Coordinator
             let polishedText = await LanguageModelCoordinator.shared.restructure(transcript: fullRawTranscript)
