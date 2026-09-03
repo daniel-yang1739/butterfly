@@ -417,14 +417,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 await InputInjector.shared.inject(text: polishedText)
             }
         } else {
-            // Mode 1: Live Streaming Final Sync
-            if !fullRawTranscript.isEmpty && fullRawTranscript != streamingInjectedText {
-                InputInjector.shared.injectStreamingDelta(
-                    newText: fullRawTranscript,
-                    previousText: &streamingInjectedText
-                )
-            }
-            print("\n[Live Streaming Committed]: \(fullRawTranscript)")
+            // Mode 1: Live Streaming text was already typed into the focused cursor in real-time.
+            print("\n[Mode 1: Live Streaming Completed]: \(fullRawTranscript)")
         }
         
         streamingInjectedText = ""

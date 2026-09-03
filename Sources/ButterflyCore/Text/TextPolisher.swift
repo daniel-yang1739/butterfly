@@ -21,8 +21,9 @@ public final class TextPolisher {
         // 1. Ensure 100% Traditional Chinese (Taiwan standard)
         let traditional = OpenCCTranslator.shared.convert(trimmed)
         
-        // 2. Normalize phonetic homophones and common speech recognition artifacts
-        var normalized = normalizePhoneticTypos(traditional)
+        // 2. Normalize spoken English/Chinese numbers into Arabic digits (0-9)
+        var normalized = TextFormatter.shared.normalizeNumbersToDigits(traditional)
+        normalized = normalizePhoneticTypos(normalized)
         
         // 3. Remove stutters, repeated characters, and duplicated phrases
         normalized = removeStutterAndRepetitions(normalized)
