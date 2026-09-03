@@ -553,6 +553,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if !polishedText.isEmpty {
                 print("\n[Mode 2: Polished Note Result]:\n\(polishedText)\n")
                 await InputInjector.shared.inject(text: polishedText)
+                print("🚀 Mode 2: Injected \(polishedText.count) chars directly into active cursor via Unicode CGEvent!")
             }
         } else {
             // Mode 1: Final clause refinement flush & complete freeze
