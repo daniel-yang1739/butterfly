@@ -73,10 +73,12 @@ public final class TextPolisher {
             ("第二個\\s*(?:ml|mode|毛|Mo)\\s*的?", "第二個 Mode "),
             ("第一個\\s*(?:ml|mode|毛|Mo)\\s*的?", "第一個 Mode "),
             
-            // System Prompt fuzzy variations (matches sister Prom, sister Pat, set Pro, stone Prom, system Prom, etc.)
-            ("(?i)(?:secret|system|sister|cister|the\\s*season|season|stone|sistema|sixteen|set)\\s*(?:stone|prom|prompt|pro|promt|pat|pad)\\b", "System Prompt"),
-            ("(?i)(?:sister\\s*Pat|set\\s*Pro|sister\\s*prom|sister\\s*prompt|stone\\s*prom|stone\\s*prompt)", "System Prompt"),
-            ("塞\\s*(?:the\\s*season|season|system|sister)?\\s*(?:prom|prompt|pro|stone|pat|pad)", "塞 System Prompt"),
+            // System Prompt fuzzy variations (matches sister Prom, sister Pat, sister from, season from, season Pro, To Pro, System Promptpt, etc.)
+            ("(?i)\\bSystem\\s*Prompt(?:pt|t|p)+\\b", "System Prompt"),
+            ("(?i)\\b(?:secret|system|sister|cister|season|the\\s*season|stone|sistema|sixteen|set)\\s*(?:stone|prom|prompt|pro|promt|pat|pad|from)\\b", "System Prompt"),
+            ("(?i)\\b(?:To\\s*Pro|top\\s*To\\s*Pro)\\b", "System Prompt"),
+            ("(?i)(?:sister\\s*Pat|set\\s*Pro|sister\\s*prom|sister\\s*prompt|stone\\s*prom|stone\\s*prompt|season\\s*from|season\\s*Pro)", "System Prompt"),
+            ("塞\\s*(?:the\\s*season|season|system|sister)?\\s*(?:prom|prompt|pro|stone|pat|pad|from)", "塞 System Prompt"),
             ("Theakston\\s*Brown|Theakston|brown\\s*所以", "System Prompt"),
             
             // Context & Token relations
