@@ -179,7 +179,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func updateMenu() {
         let menu = NSMenu()
         
-        let titleItem = NSMenuItem(title: "Butterfly Voice Input", action: nil, keyEquivalent: "")
+        let titleItem = NSMenuItem(title: "Butterfly Voice Dictation", action: nil, keyEquivalent: "")
         titleItem.isEnabled = false
         menu.addItem(titleItem)
         
@@ -187,7 +187,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         
         if isRecording {
             let stopItem = NSMenuItem(
-                title: "Stop & Finalize (Enter / Esc)",
+                title: "Stop Dictation (Enter / Esc)",
                 action: #selector(stopCurrentRecording),
                 keyEquivalent: "\r"
             )
@@ -195,39 +195,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(stopItem)
         } else {
             let liveItem = NSMenuItem(
-                title: "Start Live Streaming (Option+Space)",
+                title: "Start Voice Dictation (Option+Space)",
                 action: #selector(startLiveStreamingMode),
                 keyEquivalent: ""
             )
             liveItem.target = self
             menu.addItem(liveItem)
-            
-            let polishItem = NSMenuItem(
-                title: "Start Record & Polish (Option+Shift+Space)",
-                action: #selector(startRecordAndPolishMode),
-                keyEquivalent: ""
-            )
-            polishItem.target = self
-            menu.addItem(polishItem)
         }
         
         menu.addItem(NSMenuItem.separator())
-        
-        // Mode preference submenu
-        let modeMenu = NSMenu()
-        for mode in ButterflyMode.allCases {
-            let item = NSMenuItem(
-                title: (mode == activeMode ? "✓ " : "  ") + mode.title,
-                action: #selector(selectDefaultMode(_:)),
-                keyEquivalent: ""
-            )
-            item.target = self
-            item.representedObject = mode
-            modeMenu.addItem(item)
-        }
-        let modeParentItem = NSMenuItem(title: "Default Input Mode", action: nil, keyEquivalent: "")
-        modeParentItem.submenu = modeMenu
-        menu.addItem(modeParentItem)
         
         // Track A: Speech Recognition (ASR) Submenu
         let asrMenu = NSMenu()
@@ -249,37 +225,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             modelItem.representedObject = model
             asrMenu.addItem(modelItem)
         }
-        let asrParentItem = NSMenuItem(title: "🎙️ Speech Recognition (ASR): \(ModelManager.shared.activeASRModel.displayName)", action: nil, keyEquivalent: "")
+        let asrParentItem = NSMenuItem(title: "🎙️ Speech Model: \(ModelManager.shared.activeASRModel.displayName)", action: nil, keyEquivalent: "")
         asrParentItem.submenu = asrMenu
         menu.addItem(asrParentItem)
         
-        // Track B: Smart Note Language Model (SLM) Submenu
-        let slmMenu = NSMenu()
-        for model in ModelManager.defaultSLMModels {
-            let isSelected = model.id == ModelManager.shared.activeSLMModel.id
-            let isDownloaded = ModelManager.shared.isModelDownloaded(model)
-            
-            let selectionMark = isSelected ? "✓ " : "   "
-            let downloadStatus = isDownloaded ? " [Ready]" : " [Click to Download]"
-            let sizeDesc = model.sizeBytes > 0 ? " (\(model.formattedSize))" : " (Built-in)"
-            
-            let itemTitle = "\(selectionMark)\(model.displayName)\(sizeDesc)\(downloadStatus)"
-            let modelItem = NSMenuItem(
-                title: itemTitle,
-                action: #selector(selectSLMModelSpec(_:)),
-                keyEquivalent: ""
-            )
-            modelItem.target = self
-            modelItem.representedObject = model
-            slmMenu.addItem(modelItem)
-        }
-        let slmParentItem = NSMenuItem(title: "🧠 Smart Note Language Model (SLM): \(ModelManager.shared.activeSLMModel.displayName)", action: nil, keyEquivalent: "")
-        slmParentItem.submenu = slmMenu
-        menu.addItem(slmParentItem)
-        
         // Manage Model Storage & Uninstall Submenu
         let cacheMenu = NSMenu()
-        let downloadedModels = ModelManager.defaultModels.filter { $0.id != "apple-speech-native" && ModelManager.shared.isModelDownloaded($0) }
+        let downloadedModels = ModelManager.defaultASRModels.filter { $0.id != "apple-speech-native" && ModelManager.shared.isModelDownloaded($0) }
         
         if downloadedModels.isEmpty {
             let emptyItem = NSMenuItem(title: "No downloaded models in cache", action: nil, keyEquivalent: "")
@@ -318,28 +270,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         openFolderItem.target = self
         cacheMenu.addItem(openFolderItem)
         
-        let cacheParentItem = NSMenuItem(title: "Manage Model Storage", action: nil, keyEquivalent: "")
+        let cacheParentItem = NSMenuItem(title: "💾 Model Storage", action: nil, keyEquivalent: "")
         cacheParentItem.submenu = cacheMenu
         menu.addItem(cacheParentItem)
         
         menu.addItem(NSMenuItem.separator())
         
-        let quitItem = NSMenuItem(title: "Quit Butterfly", action: #selector(quitApp), keyEquivalent: "q")
+        let quitItem = NSMenuItem(
+            title: "Quit Butterfly",
+            action: #selector(quitApp),
+            keyEquivalent: "q"
+        )
         quitItem.target = self
         menu.addItem(quitItem)
         
-        statusItem.menu = menu
     }
     
     @objc private func statusBarButtonClicked(_ sender: NSStatusBarButton) {
         statusItem.button?.performClick(nil)
-    }
-    
-    @objc private func selectDefaultMode(_ sender: NSMenuItem) {
-        if let mode = sender.representedObject as? ButterflyMode {
-            self.activeMode = mode
-            updateMenu()
-        }
     }
     
     @objc private func selectASRModelSpec(_ sender: NSMenuItem) {
@@ -348,20 +296,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if ModelManager.shared.isModelDownloaded(spec) {
             ModelManager.shared.activeASRModel = spec
             updateMenu()
-            print("Butterfly: Switched active ASR model to \(spec.displayName)")
-            return
-        }
-        
-        downloadModelSpec(spec)
-    }
-    
-    @objc private func selectSLMModelSpec(_ sender: NSMenuItem) {
-        guard let spec = sender.representedObject as? ModelSpec else { return }
-        
-        if ModelManager.shared.isModelDownloaded(spec) {
-            ModelManager.shared.activeSLMModel = spec
-            updateMenu()
-            print("Butterfly: Switched active SLM language model to \(spec.displayName)")
+            print("Butterfly: Switched active speech model to \(spec.displayName)")
             return
         }
         
@@ -383,11 +318,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                 }
                 
-                if spec.category == .speechToText {
-                    ModelManager.shared.activeASRModel = spec
-                } else {
-                    ModelManager.shared.activeSLMModel = spec
-                }
+                ModelManager.shared.activeASRModel = spec
                 
                 self.isDownloadingModel = false
                 self.statusItem.button?.title = " ✅ Ready!"
@@ -439,20 +370,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     
-    @objc private func startRecordAndPolishMode() {
-        Task { @MainActor in
-            await startListening(mode: .recordAndPolish)
-        }
-    }
-    
     @objc private func stopCurrentRecording() {
         Task { @MainActor in
             await stopAndInject()
         }
     }
     
-    /// Start listening with specific mode
-    private func startListening(mode: ButterflyMode) async {
+    /// Start listening with live streaming dictation
+    private func startListening(mode: ButterflyMode = .liveStreaming) async {
         guard !isRecording else { return }
         
         let granted = await liveEngine.requestPermissions()
@@ -464,7 +389,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         do {
             latestTranscript = ""
             streamingInjectedText = ""
-            activeMode = mode
+            activeMode = .liveStreaming
             isRecording = true
             recordingStartTime = Date()
             animationIndex = 0
@@ -472,11 +397,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             pauseTimer?.invalidate()
             pauseTimer = nil
             
-            if mode == .liveStreaming {
-                self.statusItem.button?.title = " 🎙️ [00:00] Streaming ·"
-            } else {
-                self.statusItem.button?.title = " 🔴 [00:00] Recording ·"
-            }
+            self.statusItem.button?.title = " 🎙️ [00:00] Streaming ·"
             self.updateMenu()
             
             recordingTimer?.invalidate()
@@ -489,18 +410,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     let timeStr = String(format: "[%02d:%02d]", elapsed / 60, elapsed % 60)
                     
                     if self.latestTranscript.isEmpty {
-                        if self.activeMode == .recordAndPolish {
-                            self.statusItem.button?.title = " 🔴 \(timeStr) Recording \(dots)"
-                        } else {
-                            self.statusItem.button?.title = " 🎙️ \(timeStr) Streaming \(dots)"
-                        }
+                        self.statusItem.button?.title = " 🎙️ \(timeStr) Streaming \(dots)"
                     }
                 }
             }
             
             try liveEngine.startLiveListening()
-            FloatingHUDWindow.shared.show(mode: mode)
-            print("Butterfly: Started \(mode.title) [ASR: \(ModelManager.shared.activeASRModel.displayName), SLM: \(ModelManager.shared.activeSLMModel.displayName)]...")
+            FloatingHUDWindow.shared.show(mode: .liveStreaming)
+            print("Butterfly: Started Live Voice Dictation [ASR: \(ModelManager.shared.activeASRModel.displayName)]...")
         } catch {
             print("Failed to start recording: \(error.localizedDescription)")
             isRecording = false
@@ -524,29 +441,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pauseTimer?.invalidate()
         pauseTimer = nil
         
-        let mode = activeMode
-        self.statusItem.button?.title = (mode == .recordAndPolish) ? " 🧠 Polishing notes..." : " ⏳ Finalizing..."
+        self.statusItem.button?.title = " ⏳ Finalizing..."
         self.updateMenu()
         
         // Asynchronously flush audio buffers and retrieve full finalized transcript
         let fullRawTranscript = await liveEngine.stopLiveListening()
         
-        if mode == .recordAndPolish {
-            print("\n[Mode 2: Full Monologue Captured (\(fullRawTranscript.count) chars)]:\n\(fullRawTranscript)")
-            // 2. Mode 2: Record & Smart Polish via Dual-Track SLM Coordinator
-            let polishedText = await LanguageModelCoordinator.shared.restructure(transcript: fullRawTranscript)
-            if !polishedText.isEmpty {
-                print("\n[Mode 2: Polished Note Result]:\n\(polishedText)\n")
-                await InputInjector.shared.inject(text: polishedText)
-                print("🚀 Mode 2: Injected \(polishedText.count) chars directly into active cursor via Unicode CGEvent!")
-            }
-        } else {
-            // Mode 1: Final clause refinement flush & complete freeze
-            let finalAction = slidingWindowBuffer.onPauseTriggered()
-            InputInjector.shared.applySlidingDelta(finalAction)
-            slidingWindowBuffer.finalizeAll()
-            print("\n[Mode 1: Live Streaming Completed]: \(fullRawTranscript)")
-        }
+        // Final clause refinement flush & complete freeze
+        let finalAction = slidingWindowBuffer.onPauseTriggered()
+        InputInjector.shared.applySlidingDelta(finalAction)
+        slidingWindowBuffer.finalizeAll()
+        print("\n[Butterfly: Live Dictation Completed]: \(fullRawTranscript)")
         
         streamingInjectedText = ""
         self.statusItem.button?.title = ""
@@ -582,21 +487,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return nil
         }
         
-        // 2. Option + Space (49) or Option + Shift + Space
+        // 2. Option + Space (49) -> Toggle Live Streaming Dictation
         if keyCode == 49 && flags.contains(.maskAlternate) {
-            let isShift = flags.contains(.maskShift)
             Task { @MainActor in
                 if self.isRecording {
                     print("\n[CGEventTap: Toggle Stop]")
                     await self.stopAndInject()
                 } else {
-                    if isShift {
-                        print("\n[CGEventTap: Option + Shift + Space] -> Starting Mode 2 (Record & Smart Polish)...")
-                        await self.startListening(mode: .recordAndPolish)
-                    } else {
-                        print("\n[CGEventTap: Option + Space] -> Starting Mode 1 (Live Streaming)...")
-                        await self.startListening(mode: .liveStreaming)
-                    }
+                    print("\n[CGEventTap: Option + Space] -> Starting Live Voice Dictation...")
+                    await self.startListening(mode: .liveStreaming)
                 }
             }
             return nil // Swallow Space key so it doesn't type a space
