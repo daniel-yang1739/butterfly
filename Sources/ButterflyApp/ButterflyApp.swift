@@ -81,7 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Global Hotkeys:
           • [Option + Space]         -> Start Live Streaming Dictation (type live as you speak)
           • [Option + Shift + Space] -> Start Record & Smart Polish (auto-structured notes)
-          • [Esc]                    -> Stop & Finalize Recording
+          • [Enter] / [Esc]          -> Stop & Finalize (First Enter stops recording, Second Enter sends)
         
         Active Model: \(activeModelSpec.displayName)
         Model Cache Path: \(ModelManager.shared.cacheDirectory.path)
@@ -140,11 +140,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem.separator())
         
         if isRecording {
-            let modeDesc = (activeMode == .liveStreaming) ? "Live Streaming" : "Smart Polish"
             let stopItem = NSMenuItem(
-                title: "⏹️ Stop Recording (Esc) [\(modeDesc)]",
+                title: "Stop & Finalize (Enter / Esc)",
                 action: #selector(stopCurrentRecording),
-                keyEquivalent: "\u{1b}" // Esc key
+                keyEquivalent: "\r"
             )
             stopItem.target = self
             menu.addItem(stopItem)
@@ -432,9 +431,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let eventHandler: (NSEvent) -> NSEvent? = { [weak self] event in
             guard let self = self else { return event }
             
-            // 53: Escape keycode (Esc) -> Immediately stop and commit recording
-            if event.keyCode == 53 && self.isRecording {
-                print("\n[Hotkey Event: Esc] -> Finalizing and injecting text...")
+            // 36: Return/Enter, 76: Keypad Enter, 53: Escape (Esc)
+            // When recording, the first Enter or Esc stops recording and finalizes text.
+            // Returning nil swallows the Enter event so it does NOT accidentally send chat messages!
+            if (event.keyCode == 36 || event.keyCode == 76 || event.keyCode == 53) && self.isRecording {
+                print("\n[Hotkey Event: Enter / Esc] -> Stopping recording & injecting text (First Enter swallowed to protect message sending)...")
                 Task { @MainActor in
                     await self.stopAndInject()
                 }
