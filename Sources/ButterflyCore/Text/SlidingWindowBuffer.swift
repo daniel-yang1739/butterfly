@@ -154,7 +154,7 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
     // MARK: - Phase 2: Tri-Color 20% Stride Dynamic Window Refinement (Two-Phase Commit)
     
     /// Step 1: Prepare refinement plan with 20% Stride / 80% Dynamic Overlap Window
-    public func preparePauseRefinement() -> PreparedRefinement? {
+    public func preparePauseRefinement(customRefinedText: String? = nil) -> PreparedRefinement? {
         lock.lock()
         defer { lock.unlock() }
         
@@ -170,8 +170,8 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
             return nil
         }
         
-        // 1. Pass FULL text to Polisher for global contextual awareness
-        let refinedFull = TextPolisher.shared.polish(screenText, mode: .liveStream)
+        // 1. Pass FULL text to SLM or Polisher for global contextual awareness
+        let refinedFull = customRefinedText ?? TextPolisher.shared.polish(screenText, mode: .liveStream)
         
         // 2. Extract ONLY the polished tail after the frozen prefix boundary
         let refinedTail: String
@@ -179,7 +179,7 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
             let tailIdx = refinedFull.index(refinedFull.startIndex, offsetBy: frozenPrefix.count)
             refinedTail = String(refinedFull[tailIdx...])
         } else {
-            refinedTail = TextPolisher.shared.polish(activeTail, mode: .liveStream)
+            refinedTail = customRefinedText ?? TextPolisher.shared.polish(activeTail, mode: .liveStream)
         }
         
         let targetFull = frozenPrefix + refinedTail
