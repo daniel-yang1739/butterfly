@@ -35,10 +35,10 @@ graph TB
         SLM_Native["Rank 3 (內建預設): Built-in Cognitive Rule Engine (0 MB, 零下載)"]
     end
 
-    subgraph Mode2Execution ["⚡ Mode 2 執行流程 (Option+Shift+Space 錄音 -> Enter 結束)"]
+    subgraph Mode2Execution ["⚡ Mode 2 執行流程"]
         AudioInput["長篇口述音訊"] --> TrackA
-        TrackA -->|高精確度原始逐字稿| TrackB
-        TrackB -->|頂級結構化 Markdown 筆記| SafePaste["防誤送安全貼入 (CGEventTap Swallowed Enter)"]
+        TrackA -->|"高精確度原始逐字稿"| TrackB
+        TrackB -->|"頂級結構化 Markdown 筆記"| SafePaste["防誤送安全貼入 (CGEventTap Swallowed Enter)"]
     end
 ```
 

@@ -43,10 +43,10 @@ graph TB
     end
 
     %% Flow Connections
-    CGTap -->|Option+Space (Mode 1)| MicCapture
-    CGTap -->|Option+Shift+Space (Mode 2)| MicCapture
-    CGTap -->|Enter (第一次按)| EnterSwallower
-    EnterSwallower -->|吞掉 Enter 事件| MicCapture
+    CGTap -->|"Option+Space (Mode 1)"| MicCapture
+    CGTap -->|"Option+Shift+Space (Mode 2)"| MicCapture
+    CGTap -->|"Enter (第一次按)"| EnterSwallower
+    EnterSwallower -->|"吞掉 Enter 事件"| MicCapture
     MicCapture --> SessionRecycler
     SessionRecycler --> WhitelistManager
     WhitelistManager --> WhisperLarge
@@ -56,8 +56,8 @@ graph TB
     OpenCC --> TextFormatter
     TextFormatter --> CognitivePolisher
     SystemPromptDoc -.-> CognitivePolisher
-    CognitivePolisher -->|Mode 1 即時打字| LiveStreamingDelta
-    CognitivePolisher -->|Mode 2 深度潤飾| ClipboardProxy
+    CognitivePolisher -->|"Mode 1 即時打字"| LiveStreamingDelta
+    CognitivePolisher -->|"Mode 2 深度潤飾"| ClipboardProxy
     LiveStreamingDelta --> FocusedApp["前台活動視窗 (Cursor, VS Code, Chrome, Slack, Discord 等)"]
     ClipboardProxy --> FocusedApp
 ```
