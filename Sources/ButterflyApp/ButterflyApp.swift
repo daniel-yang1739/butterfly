@@ -27,8 +27,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var recordingTimer: Timer?
     private var recordingStartTime: Date?
     private var animationIndex: Int = 0
-    private let slidingWindowBuffer = SlidingWindowBuffer()
-    private var pauseTimer: Timer?
     
     static func main() {
         let app = NSApplication.shared
@@ -53,38 +51,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let seconds = String(format: "%02d", elapsed % 60)
                 let timeStr = "[\(minutes):\(seconds)]"
                 
-                // Phase 1: Continuous Acoustic Streaming (Append-Only Fast Path)
-                let action = self.slidingWindowBuffer.appendStreamingText(formattedText)
-                InputInjector.shared.applySlidingDelta(action)
+                // Direct streaming delta injection into focused cursor (zero-latency, no sliding window overhead)
+                InputInjector.shared.injectStreamingDelta(newText: formattedText, previousText: &self.streamingInjectedText)
                 
-                // Update Floating HUD with Tri-Color Cognitive Model (White: Locked, Gold: AI Refined, Gray: Raw Speech)
+                // Update Floating HUD with active transcript
                 FloatingHUDWindow.shared.update(
-                    frozenText: self.slidingWindowBuffer.frozenText,
-                    polishedText: self.slidingWindowBuffer.polishedText,
-                    activeTail: self.slidingWindowBuffer.activeTail,
-                    timeStr: timeStr,
-                    mode: .liveStreaming
+                    text: formattedText,
+                    timeStr: timeStr
                 )
-                
-                // Phase 2: Reset 0.8s Pause-Gated Refinement Timer (Pure Swift Zero-Hallucination)
-                self.pauseTimer?.invalidate()
-                self.pauseTimer = Timer.scheduledTimer(withTimeInterval: 0.8, repeats: false) { [weak self] _ in
-                    Task { @MainActor [weak self] in
-                        guard let self = self, self.isRecording else { return }
-                        
-                        let action = self.slidingWindowBuffer.onPauseTriggered()
-                        InputInjector.shared.applySlidingDelta(action)
-                        
-                        // Re-sync Floating HUD with updated Tri-Color regions
-                        FloatingHUDWindow.shared.update(
-                            frozenText: self.slidingWindowBuffer.frozenText,
-                            polishedText: self.slidingWindowBuffer.polishedText,
-                            activeTail: self.slidingWindowBuffer.activeTail,
-                            timeStr: timeStr,
-                            mode: .liveStreaming
-                        )
-                    }
-                }
                 
                 let preview = formattedText.count > 10 ? "..." + String(formattedText.suffix(10)) : formattedText
                 self.statusItem.button?.title = " 🎙️ \(timeStr) \(preview)"
@@ -371,9 +345,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             isRecording = true
             recordingStartTime = Date()
             animationIndex = 0
-            slidingWindowBuffer.reset()
-            pauseTimer?.invalidate()
-            pauseTimer = nil
             
             self.statusItem.button?.title = " 🎙️ [00:00] Streaming ·"
             self.updateMenu()
@@ -402,8 +373,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             FloatingHUDWindow.shared.hide()
             recordingTimer?.invalidate()
             recordingTimer = nil
-            pauseTimer?.invalidate()
-            pauseTimer = nil
             self.statusItem.button?.title = ""
             self.updateMenu()
         }
@@ -416,8 +385,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         FloatingHUDWindow.shared.hide()
         recordingTimer?.invalidate()
         recordingTimer = nil
-        pauseTimer?.invalidate()
-        pauseTimer = nil
         
         self.statusItem.button?.title = " ⏳ Finalizing..."
         self.updateMenu()
@@ -425,10 +392,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Asynchronously flush audio buffers and retrieve full finalized transcript
         let fullRawTranscript = await liveEngine.stopLiveListening()
         
-        // Final clause refinement flush & complete freeze
-        let finalAction = slidingWindowBuffer.onPauseTriggered()
-        InputInjector.shared.applySlidingDelta(finalAction)
-        slidingWindowBuffer.finalizeAll()
         print("\n[Butterfly: Live Dictation Completed]: \(fullRawTranscript)")
         
         streamingInjectedText = ""

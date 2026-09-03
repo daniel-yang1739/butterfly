@@ -104,10 +104,19 @@ public final class FloatingHUDWindow: NSPanel {
         isVisibleOnScreen = true
     }
     
-    /// Update HUD text with Tri-Color Cognitive Visual Model:
-    /// - `frozenText` -> ⚪ Bright White (100% Locked & confirmed)
-    /// - `polishedText` -> 🟡 Amber Gold (AI Refined in active wave)
-    /// - `activeTail` -> 🔘 Subtle Gray (Raw incoming speech)
+    /// Update HUD with real-time streaming transcript text directly
+    public func update(text: String, timeStr: String) {
+        guard isVisibleOnScreen else { return }
+        statusLabel.stringValue = "🎙️ Live Voice Dictation \(timeStr)"
+        let attr: [NSAttributedString.Key: Any] = [
+            .foregroundColor: NSColor.white,
+            .font: NSFont.systemFont(ofSize: 14, weight: .medium)
+        ]
+        textView.textStorage?.setAttributedString(NSAttributedString(string: text, attributes: attr))
+        textView.scrollToEndOfDocument(nil)
+    }
+    
+    /// Backward-compatible multi-segment update
     public func update(frozenText: String, polishedText: String, activeTail: String, timeStr: String, mode: ButterflyMode = .liveStreaming) {
         guard isVisibleOnScreen else { return }
         

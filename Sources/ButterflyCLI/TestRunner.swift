@@ -91,9 +91,10 @@ public enum TestRunner {
         let bestASR = ModelManager.shared.getBestAvailableASRModel()
         assertTrue(!bestASR.id.isEmpty, "TC-E5: Best available speech model auto-discovery")
         
-        // MARK: - 6. InputInjector Tests
-        print("\n📦 Suite 6: InputInjector (Streaming In-Place Delta)")
+        // MARK: - 6. InputInjector Direct Streaming Delta Tests
+        print("\n📦 Suite 6: InputInjector (Direct Real-time Streaming Delta)")
         let injector = InputInjector.shared
+        
         var prev1 = "你好"
         injector.injectStreamingDelta(newText: "你好世界", previousText: &prev1)
         assertEqual(prev1, "你好世界", "TC-F1: Streaming forward append delta")
@@ -102,33 +103,15 @@ public enum TestRunner {
         injector.injectStreamingDelta(newText: "你好世界", previousText: &prev2)
         assertEqual(prev2, "你好世界", "TC-F2: Streaming in-place backspace refinement delta")
         
-        // MARK: - 7. SlidingWindowBuffer Tests (Mode 1 Plan A Engine)
-        print("\n📦 Suite 7: SlidingWindowBuffer (Cumulative Streaming & Avalanche Prevention)")
-        let buffer = SlidingWindowBuffer()
-        buffer.reset()
+        var prev3 = ""
+        injector.injectStreamingDelta(newText: "第一步", previousText: &prev3)
+        assertEqual(prev3, "第一步", "TC-F3: Initial empty string forward typing")
         
-        // TC-G1: Streaming forward append
-        let a1 = buffer.appendStreamingText("你好")
-        assertEqual(a1, .append(text: "你好"), "TC-G1: Sliding window append fast path")
-        let a2 = buffer.appendStreamingText("你好世界")
-        assertEqual(a2, .append(text: "世界"), "TC-G2: Incremental streaming append without backspaces")
+        injector.injectStreamingDelta(newText: "第一步第二步", previousText: &prev3)
+        assertEqual(prev3, "第一步第二步", "TC-F4: Multi-step incremental typing")
         
-        // TC-G3: Silence pause-gated contextual self-healing ('八百 MB' -> ' 800 MB')
-        buffer.reset()
-        _ = buffer.appendStreamingText("需要八百 MB")
-        let pauseAction = buffer.onPauseTriggered()
-        assertEqual(pauseAction, .replaceTail(backspaces: 5, replacement: " 800 MB"), "TC-G3: Pause-gated numbers & units normalization ('八百 MB' -> ' 800 MB')")
-        assertEqual(buffer.screenText, "需要 800 MB", "TC-G4: Screen text mirror updated cleanly")
-        
-        // TC-G5: Avalanche Prevention Test (Continuous Cumulative ASR Updates)
-        let a3 = buffer.appendStreamingText("需要 800 MB，現在是不是會突然出現一些雪崩效應")
-        assertEqual(a3, .append(text: "，現在是不是會突然出現一些雪崩效應"), "TC-G5: Avalanche prevention (appends only new suffix without repeating earlier text)")
-        
-        // TC-G6: Numbers & Units pause-gated normalization
-        buffer.reset()
-        _ = buffer.appendStreamingText("五百 GB")
-        let pauseNumAction = buffer.onPauseTriggered()
-        assertEqual(pauseNumAction, .replaceTail(backspaces: 5, replacement: "500 GB"), "TC-G6: Numbers and units pause-gated normalization ('五百 GB' -> '500 GB')")
+        injector.injectStreamingDelta(newText: "第一步第二步", previousText: &prev3)
+        assertEqual(prev3, "第一步第二步", "TC-F5: Idempotent duplicate update (no spurious keystrokes)")
         
         // MARK: - Final Summary
         print("\n" + String(repeating: "=", count: 60))

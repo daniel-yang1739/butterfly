@@ -3,6 +3,16 @@ import Foundation
 import AppKit
 import ApplicationServices
 
+/// Action to apply to the focused OS cursor to synchronize with streaming text
+public enum SlidingDeltaAction: Equatable, Sendable {
+    /// Pure forward character append (0 backspaces)
+    case append(text: String)
+    /// In-place suffix replacement with minimal backspaces
+    case replaceTail(backspaces: Int, replacement: String)
+    /// No keystroke action needed
+    case noChange
+}
+
 /// Active window text injector and clipboard protection proxy
 public final class InputInjector: @unchecked Sendable {
     public static let shared = InputInjector()
