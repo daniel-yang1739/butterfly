@@ -117,6 +117,21 @@ case "test-polish":
     print("\n[Mode 2: Smart Note Polished (Paragraphs / Bullet Points)]:\n\(polishResult)")
     print("--------------------------------------------------")
 
+case "test-slm":
+    let inputText = args.dropFirst(2).joined(separator: " ")
+    let testString = inputText.isEmpty ? "好，那我現在來試一下就是 Mode 2 的結果，你 README 啊，還有 AGENTS.md 等等的我們整個 Source Code 裡面改更新的一些東西把它更新一下。架構寫清楚，我們中間做了滿多的修改嘛，第一點是新增雙軌模型白名單，第二點是升級 System Prompt 給小語言模型。把它改一改謝謝。" : inputText
+    
+    print("\n[Input Transcript]:\n\(testString)\n")
+    print("Active SLM Model: \(ModelManager.shared.activeSLMModel.displayName)")
+    print("Executing LanguageModelCoordinator restructuring with external SYSTEM_PROMPT.md...\n")
+    
+    Task {
+        let structuredResult = await LanguageModelCoordinator.shared.restructure(transcript: testString)
+        print("[SLM Structured Markdown Output]:\n--------------------------------------------------\n\(structuredResult)\n--------------------------------------------------")
+        exit(0)
+    }
+    RunLoop.main.run()
+
 case "listen":
     let isPolishMode = args.contains("--polish")
     let modeTitle = isPolishMode ? "Mode 2: Record & Smart Polish (Paragraphs / Bullets / Filler Removal)" : "Mode 1: Live Streaming Dictation"

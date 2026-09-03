@@ -54,14 +54,46 @@ public final class LocalSLMInferenceBackend: LanguageModelBackend {
     public func restructureNote(transcript: String, systemPrompt: String) async throws -> String {
         let modelPath = ModelManager.shared.localPath(for: spec)
         
-        // If model file is not downloaded yet, gracefully fallback to built-in cognitive engine
-        guard FileManager.default.fileExists(atPath: modelPath.path) else {
-            return try await BuiltinCognitiveBackend.shared.restructureNote(transcript: transcript, systemPrompt: systemPrompt)
+        // 1. If local GGUF model weights are present on disk, execute local inference
+        if FileManager.default.fileExists(atPath: modelPath.path) {
+            let prompt = buildChatMLPrompt(transcript: transcript, systemPrompt: systemPrompt)
+            if let output = try? await executeLocalCLI(modelPath: modelPath.path, prompt: prompt), !output.isEmpty {
+                return OpenCCTranslator.shared.convert(output)
+            }
         }
         
-        // When local model weights are present, execute on-device Metal / ANE inference
-        let prePolished = TextPolisher.shared.polish(transcript, mode: .structuredNote)
-        return prePolished
+        // 2. High-performance cognitive polishing fallback
+        let polished = TextPolisher.shared.polish(transcript, mode: .structuredNote)
+        return polished
+    }
+    
+    /// Execute local llama-cli runner if available
+    private func executeLocalCLI(modelPath: String, prompt: String) async throws -> String? {
+        let process = Process()
+        let pipe = Pipe()
+        
+        // Check for llama-cli in common local paths
+        let candidateCLIs = ["/usr/local/bin/llama-cli", "/opt/homebrew/bin/llama-cli"]
+        guard let cliPath = candidateCLIs.first(where: { FileManager.default.fileExists(atPath: $0) }) else {
+            return nil
+        }
+        
+        process.executableURL = URL(fileURLWithPath: cliPath)
+        process.arguments = ["-m", modelPath, "-p", prompt, "-n", "512", "-ngl", "99", "--temp", "0.2", "--no-display-prompt"]
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+        
+        do {
+            try process.run()
+            process.waitUntilExit()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            if let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines), !output.isEmpty {
+                return output
+            }
+        } catch {
+            return nil
+        }
+        return nil
     }
 }
 
@@ -79,14 +111,9 @@ public final class LanguageModelCoordinator: @unchecked Sendable {
         
         let activeModel = ModelManager.shared.activeSLMModel
         let systemPrompt = SystemPrompt.shared.content
+        let slmBackend = LocalSLMInferenceBackend(spec: activeModel)
         
-        if activeModel.id == "builtin-cognitive-polisher" {
-            return (try? await BuiltinCognitiveBackend.shared.restructureNote(transcript: transcript, systemPrompt: systemPrompt))
-                ?? TextPolisher.shared.polish(transcript, mode: .structuredNote)
-        } else {
-            let slmBackend = LocalSLMInferenceBackend(spec: activeModel)
-            return (try? await slmBackend.restructureNote(transcript: transcript, systemPrompt: systemPrompt))
-                ?? TextPolisher.shared.polish(transcript, mode: .structuredNote)
-        }
+        return (try? await slmBackend.restructureNote(transcript: transcript, systemPrompt: systemPrompt))
+            ?? TextPolisher.shared.polish(transcript, mode: .structuredNote)
     }
 }
