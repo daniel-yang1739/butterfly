@@ -186,31 +186,8 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
             action = .noChange
         }
         
-        // 3. Compute 50% Overlapping Sliding Window Midpoint Checkpoint
-        let previousFrozen = frozenIndex
-        let activeLength = targetFull.count - previousFrozen
-        let newFrozenIndex: Int
-        if activeLength > 10 {
-            let midpoint = previousFrozen + (activeLength / 2)
-            let delimiters: [Character] = ["，", "。", "！", "？", "；", "\n"]
-            var alignedPoint = midpoint
-            let targetChars = Array(targetFull)
-            for offset in 0...min(6, activeLength / 3) {
-                let rightIdx = midpoint + offset
-                if rightIdx < targetChars.count && delimiters.contains(targetChars[rightIdx]) {
-                    alignedPoint = rightIdx + 1
-                    break
-                }
-                let leftIdx = midpoint - offset
-                if leftIdx > previousFrozen && delimiters.contains(targetChars[leftIdx]) {
-                    alignedPoint = leftIdx + 1
-                    break
-                }
-            }
-            newFrozenIndex = max(previousFrozen, min(alignedPoint, targetFull.count))
-        } else {
-            newFrozenIndex = targetFull.count
-        }
+        // 3. Once refined by the Model, the entire polished segment is 100% committed to Bright White!
+        let newFrozenIndex = targetFull.count
         
         isCursorInjecting = true
         return PreparedRefinement(action: action, targetText: targetFull, newFrozenIndex: newFrozenIndex)
