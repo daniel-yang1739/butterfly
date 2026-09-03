@@ -145,7 +145,7 @@ public enum TestRunner {
         _ = buffer.appendStreamingText("上下文 contact")
         let pauseAction = buffer.onPauseTriggered()
         assertEqual(pauseAction, .replaceTail(backspaces: 7, replacement: "Context"), "TC-G3: Pause-gated phonetic self-healing ('contact' -> 'Context')")
-        assertEqual(buffer.injectedCumulativeText, "上下文 Context", "TC-G4: Cumulative mirror updated cleanly")
+        assertEqual(buffer.screenText, "上下文 Context", "TC-G4: Screen text mirror updated cleanly")
         
         // TC-G5: Avalanche Prevention Test (Continuous Cumulative ASR Updates)
         let a3 = buffer.appendStreamingText("上下文 Context，現在是不是會突然出現一些雪崩效應")
