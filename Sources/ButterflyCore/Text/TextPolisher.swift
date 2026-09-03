@@ -56,22 +56,24 @@ public final class TextPolisher {
         var result = text
         
         let tokenPatterns: [(pattern: String, replacement: String)] = [
-            // Fuzzy Mode 2 & Mode 1 phonetic variations (matches 冒著吐兔, 貓的兔, 夢的圖, 莫德圖, 墨得兔, ml 的 to, etc.)
+            // Fuzzy Mode 2 & Mode 1 phonetic variations (matches 茂 t, 茂 the one, me 兔, 沒ode 1, 冒著吐兔, etc.)
             ("(?i)\\b(?:ml|m\\s*l)\\s*(?:的|得|之)?\\s*(?:to|two|2|兔|圖)\\b|ml\\s*的\\s*to", "Mode 2"),
             ("(?i)\\b(?:ml|m\\s*l)\\s*(?:的|得|之)?\\s*(?:one|1|萬|玩)\\b|ml\\s*的\\s*one", "Mode 1"),
-            ("[貓冒墨莫夢帽][的德得著]*[兔圖吐土]+", "Mode 2"),
-            ("[貓冒墨莫夢帽][的德得著]*[萬玩完一1]+", "Mode 1"),
+            ("(?i)茂\\s*(?:the\\s*one|one|1|萬)", "Mode 1"),
+            ("(?i)(?:me\\s*兔|茂\\s*[tT2二兔圖吐]|茂\\s*the\\s*two)", "Mode 2"),
+            ("沒\\s*ode\\s*1", "Mode 1"),
+            ("沒\\s*ode\\s*2", "Mode 2"),
+            ("[貓冒墨莫夢帽茂][的德得著]*[兔圖吐土tT2二]+", "Mode 2"),
+            ("[貓冒墨莫夢帽茂][的德得著]*[萬玩完一1]+", "Mode 1"),
+            ("Mode 2\\s*的萬\\s*Mode 1", "Mode 2 與 Mode 1"),
             ("這兩個\\s*(?:mall|mode|毛|Mo)", "這兩個 Mode"),
             ("第二個\\s*(?:ml|mode|毛|Mo)\\s*的?", "第二個 Mode "),
             ("第一個\\s*(?:ml|mode|毛|Mo)\\s*的?", "第一個 Mode "),
             
-            // System Prompt fuzzy variations (matches sister Prom, stone Prom, system Prom, season Prom, etc.)
-            ("(?i)(?:secret|system|sister|cister|the\\s*season|season|stone|sistema|sixteen)\\s*(?:stone|prom|prompt|pro|promt)\\b", "System Prompt"),
-            ("(?i)sister\\s*prom\\b", "System Prompt"),
-            ("(?i)stone\\s*prom\\b", "System Prompt"),
-            ("stone\\s*Prom", "System Prompt"),
-            ("sister\\s*Prom", "System Prompt"),
-            ("塞\\s*(?:the\\s*season|season|system|sister)?\\s*(?:prom|prompt|pro|stone)", "塞 System Prompt"),
+            // System Prompt fuzzy variations (matches sister Prom, sister Pat, set Pro, stone Prom, system Prom, etc.)
+            ("(?i)(?:secret|system|sister|cister|the\\s*season|season|stone|sistema|sixteen|set)\\s*(?:stone|prom|prompt|pro|promt|pat|pad)\\b", "System Prompt"),
+            ("(?i)(?:sister\\s*Pat|set\\s*Pro|sister\\s*prom|sister\\s*prompt|stone\\s*prom|stone\\s*prompt)", "System Prompt"),
+            ("塞\\s*(?:the\\s*season|season|system|sister)?\\s*(?:prom|prompt|pro|stone|pat|pad)", "塞 System Prompt"),
             ("Theakston\\s*Brown|Theakston|brown\\s*所以", "System Prompt"),
             
             // Context & Token relations
