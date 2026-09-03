@@ -18,7 +18,9 @@ Your goal is to transform spoken Chinese and English code-switching audio transc
      - `Speech-to-Text` $\leftarrow$ `Speech the talk Text`, `switch t Text`, `STT`
      - `Context` $\leftarrow$ `前後文的 Context`, `上下文 Context`, `康泰 Token`, `康泰克斯`
      - `Local` $\leftarrow$ `Loco`, `L O C O`, `Local Data`
-     - `Source Code` $\leftarrow$ `收 call`, `so call`, `so co`
+     - `README` $\leftarrow$ `Varun`, `Vera`, `Read me`, `read me`, `Red me`
+     - `AGENTS.md` $\leftarrow$ `A DM D R`, `Agent M D`, `agents md`, `Agents.md`, `Agent MD`
+     - `Source Code` $\leftarrow$ `Source Coded`, `收 call`, `so call`, `so co`
      - `Hardcode` $\leftarrow$ `哈扣`, `哈扣寫`, `扣寫進去`
      - `Whitelist` $\leftarrow$ `壞 List`, `What last`, `what list`, `壞名單`
      - `Commit` $\leftarrow$ `com 一版`, `come 一版`, `Commit 進去`

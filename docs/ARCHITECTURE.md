@@ -4,7 +4,7 @@
 
 > **Butterfly（蝴蝶）**  
 > **寓意**：解放雙手，無需碰觸鍵盤，讓雙手如蝴蝶雙翼般自由展翅（Hands-Free Voice Dictation）。  
-> **使命**：專為 macOS (Apple Silicon) 打造的極致輕量、零雲端依賴的本地端語音輸入工具。在任何輸入框聚焦時，一鍵語音輸入，即時中英雙語混雜辨識，並強制轉換為標準台灣繁體中文輸出。
+> **使命**：專為 macOS (Apple Silicon) 打造的極致輕量、零雲端依賴的本地端語音輸入與筆記重構工具。在任何輸入框聚焦時，一鍵語音輸入，即時中英雙語混雜辨識，並強制轉換為標準台灣繁體中文輸出。
 
 ---
 
@@ -13,75 +13,85 @@
 ```mermaid
 graph TB
     subgraph UserLayer ["1. 使用者互動層 (User Interaction Layer)"]
-        Hotkey["全域快捷鍵監聽<br/>(Global HotKey / CGEventTap)"]
-        HUD["懸浮膠囊 HUD<br/>(SwiftUI Floating Capsule)"]
+        CGTap["macOS 核心事件攔截器<br/>(Low-Level CGEventTap)"]
         MenuBar["狀態選單列<br/>(Status Menu Bar 🦋)"]
+        SystemPromptDoc["外部自訂 System Prompt<br/>(SYSTEM_PROMPT.md)"]
     end
 
-    subgraph AudioPipeline ["2. 音訊採集與處理層 (Audio & VAD Pipeline)"]
+    subgraph AudioPipeline ["2. 音訊採集與會話管理層 (Audio Pipeline)"]
         MicCapture["麥克風低延遲收音<br/>(AVAudioEngine 16kHz PCM)"]
-        VAD["語音活動偵測<br/>(Voice Activity Detector)"]
-        AudioBuffer["音訊重取樣與緩衝區<br/>(16kHz Mono Float Buffer)"]
+        SessionRecycler["會話資源乾淨回收器<br/>(Audio Tap / Session Recycler)"]
     end
 
-    subgraph InferenceEngine ["3. 本地 AI 推論抽象層 (Local Inference Engine)"]
-        Protocol["<< Protocol >><br/>SpeechInferenceBackend"]
-        AppleMetal["Apple Silicon 後端 (CoreML ANE + Metal GPU)"]
-        ModelCache["本機模型快取管理<br/>(~/.cache/butterfly/models/)"]
+    subgraph InferenceEngine ["3. 本地 AI 推論與模型層 (Inference & Whitelist Engine)"]
+        WhitelistManager["強弱優先白名單管理器<br/>(ModelManager Prioritized Whitelist)"]
+        WhisperLarge["Whisper Large-v3-Turbo (Rank 1)"]
+        AppleSpeech["Apple Speech Native (Fallback)"]
+        SingleSourceAccumulator["單一真源就地狀態機<br/>(In-Place Utterance Tracker)"]
     end
 
-    subgraph TextProcessing ["4. 文字格式化與繁中轉換層 (Text Processing Layer)"]
+    subgraph TextProcessing ["4. 兩輪認知重構與繁中轉換層 (Two-Pass Cognitive Engine)"]
         OpenCC["OpenCC 繁中轉換引擎<br/>(s2twp 台灣正體與慣用詞彙)"]
-        TextFormatter["中英混排空格校正與去重<br/>(Text Normalizer)"]
+        TextFormatter["數字/單位標準化與盤古之白<br/>(Arabic Digits & Pangu Spacing)"]
+        CognitivePolisher["兩輪語意意圖重構引擎<br/>(TextPolisher: Mode 1 忠實 / Mode 2 深度列點)"]
     end
 
-    subgraph InputInjection ["5. 系統焦點注入層 (Input Injection Layer)"]
-        AXDetector["焦點輸入框偵測<br/>(macOS Accessibility AXUIElement)"]
-        KeystrokeInjector["自動貼上與鍵盤模擬<br/>(CGEvent / Clipboard Proxy)"]
-        ClipRestorer["剪貼簿備份與瞬時還原<br/>(Clipboard Restorer)"]
+    subgraph InputInjection ["5. 系統焦點注入與防誤送層 (Input Injection Layer)"]
+        EnterSwallower["Enter 鍵攔截防誤送<br/>(First Enter Discarded)"]
+        LiveStreamingDelta["即時游標 Unicode 鍵盤注入<br/>(CGEvent In-Place Delta)"]
+        ClipboardProxy["剪貼簿安全寫入與貼上<br/>(Pasteboard Cmd+V Proxy)"]
     end
 
     %% Flow Connections
-    Hotkey -->|觸發錄音| MicCapture
-    MicCapture --> AudioBuffer
-    AudioBuffer --> VAD
-    VAD -->|說話結束/手動停止| AudioBuffer
-    AudioBuffer -->|傳遞 16kHz 音訊| Protocol
-    Protocol -.->|實作| AppleMetal
-    ModelCache -.-> AppleMetal
-    AppleMetal -->|原始中英辨識串流| OpenCC
-    OpenCC -->|繁體中文 + 英文| TextFormatter
-    TextFormatter -->|即時預覽| HUD
-    TextFormatter -->|最終文字| AXDetector
-    AXDetector --> KeystrokeInjector
-    KeystrokeInjector --> ClipRestorer
-    ClipRestorer -->|注入文字| FocusedApp["前台活動視窗 (VS Code, Chrome, Terminal, Slack 等)"]
+    CGTap -->|Option+Space (Mode 1)| MicCapture
+    CGTap -->|Option+Shift+Space (Mode 2)| MicCapture
+    CGTap -->|Enter (第一次按)| EnterSwallower
+    EnterSwallower -->|吞掉 Enter 事件| MicCapture
+    MicCapture --> SessionRecycler
+    SessionRecycler --> WhitelistManager
+    WhitelistManager --> WhisperLarge
+    WhitelistManager --> AppleSpeech
+    AppleSpeech --> SingleSourceAccumulator
+    SingleSourceAccumulator --> OpenCC
+    OpenCC --> TextFormatter
+    TextFormatter --> CognitivePolisher
+    SystemPromptDoc -.-> CognitivePolisher
+    CognitivePolisher -->|Mode 1 即時打字| LiveStreamingDelta
+    CognitivePolisher -->|Mode 2 深度潤飾| ClipboardProxy
+    LiveStreamingDelta --> FocusedApp["前台活動視窗 (Cursor, VS Code, Chrome, Slack, Discord 等)"]
+    ClipboardProxy --> FocusedApp
 ```
 
 ---
 
-## 3. 核心狀態機與生命週期 (State Machine)
+## 3. 雙模式運作與防誤送狀態機 (Dual-Mode & Safety State Machine)
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Idle: 應用程式啟動
+    [*] --> Idle: 應用程式啟動 (載入 SYSTEM_PROMPT.md)
 
-    Idle --> Listening: 按下全域快捷鍵 (Option+Space)
-    Listening --> Listening: 麥克風即時取樣 (音波動畫顯示於 HUD)
-    
-    Listening --> Processing: 偵測到靜音停頓 / 再次按下快捷鍵
-    Processing --> Normalizing: 本地端 Metal/NPU 模型轉譯音訊
-    Normalizing --> Injecting: OpenCC (s2twp) 繁中轉換 + 格式美化
-    
-    Injecting --> Restoring: 備份剪貼簿 -> 模擬貼入焦點輸入框
-    Restoring --> Idle: 0.05 秒內還原原剪貼簿 -> 隱藏 HUD
+    Idle --> Mode1_Streaming: 按下 Option+Space (Mode 1)
+    Idle --> Mode2_Recording: 按下 Option+Shift+Space (Mode 2)
+
+    Mode1_Streaming --> Mode1_Streaming: 1~2 秒滑動視窗微調，即時 Unicode 打字 (保留所有詞句與標點)
+    Mode2_Recording --> Mode2_Recording: 背景錄音，單一真源無重複累計
+
+    Mode1_Streaming --> Stopping_SwallowEnter: 使用者按下 Enter / Esc
+    Mode2_Recording --> Stopping_SwallowEnter: 使用者按下 Enter / Esc
+
+    Stopping_SwallowEnter --> Idle: 1. CGEventTap 吞掉該 Enter 訊號 (防止目標 App 誤送訊息)<br/>2. 執行認知潤飾與注入<br/>3. 回收 Audio Engine 資源
 ```
 
 ---
 
-## 4. 可插拔硬體推論協定 (Pluggable Backend Protocol)
+## 4. 關鍵技術模組 (Key Technical Modules)
 
-核心推論層採用抽象協定設計，上層所有繁中轉換、排版、VAD 與測試案例完全與底層硬體解耦：
-
-- **macOS (v1)**：`AppleSiliconInferenceBackend`（榨取 CoreML ANE 與 Metal GPU 算力）。
-- **Windows (v2 擴充)**：`WindowsNPUBackend`（支援 Qualcomm QNN、Intel OpenVINO、DirectML）。
+1. **`SystemPrompt.swift` & `SYSTEM_PROMPT.md`**：
+   - 將提示詞與詞庫完全解耦為獨立 Markdown 檔案，支援熱載入與免重新編譯調整。
+2. **`TextPolisher.swift`（兩輪認知意圖重構）**：
+   - **Pass 1**：數字（`800`）、單位（`MB`, `GB`, `TB`, `kg`）與無邊界音素科技詞彙校正（`Mode 1`, `Mode 2`, `System Prompt`, `Context`, `Source Code`, `README`, `AGENTS.md`）。
+   - **Pass 2**：Mode 1 嚴格非破壞性忠實輸出；Mode 2 深度贅字消除與 Markdown 列點自動重構。
+3. **`LiveSpeechEngine.swift`（單一真源狀態機）**：
+   - 廢除重複字串拼接，採用 `state.committed` + `state.active` 就地更新，徹底消除錄音時重複產生 3~4 次相同句子的問題。
+4. **`ButterflyApp.swift`（低階 `CGEventTap` 核心攔截）**：
+   - 註冊 `.cgSessionEventTap`，在錄音結束時吞掉 Enter 鍵，實現「第一次 Enter 結束錄音，第二次 Enter 才送出訊息」的安全保護。

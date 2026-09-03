@@ -20,37 +20,41 @@ Butterfly is structured as a modular Swift Package consisting of three main targ
 
 ```text
 butterfly/
-├── Package.swift               # Swift Package Manager manifest (macOS 13+)
-├── AGENTS.md                   # Agent developer guidelines (this file)
-├── README.md                   # Public repository documentation
-├── docs/                       # System documentation and architecture guides
-│   ├── ARCHITECTURE.md         # Detailed pipeline architecture & diagrams
-│   ├── IMPLEMENTATION_PLAN.md  # Roadmap & feature implementations
-│   └── TEST_PLAN.md            # Test matrix and quality assurance specs
+├── SYSTEM_PROMPT.md             # External editable system prompt & cognitive guidelines
+├── Package.swift                # Swift Package Manager manifest (macOS 13+)
+├── AGENTS.md                    # Agent developer guidelines (this file)
+├── README.md                    # Public repository documentation
+├── docs/                        # System documentation and architecture guides
+│   ├── ARCHITECTURE.md          # Detailed pipeline architecture & diagrams
+│   ├── IMPLEMENTATION_PLAN.md   # Roadmap & feature implementations
+│   └── TEST_PLAN.md             # Test matrix and quality assurance specs
 ├── Sources/
-│   ├── ButterflyCore/          # Core framework library
-│   │   ├── Audio/              # Audio capture, resampling & VAD detection
+│   ├── ButterflyCore/           # Core framework library
+│   │   ├── Audio/               # Audio capture, resampling & VAD detection
 │   │   │   ├── AudioCaptureManager.swift
 │   │   │   └── VADDetector.swift
-│   │   ├── Engine/             # Speech recognition & inference engines
+│   │   ├── Engine/              # Speech recognition, model whitelist & SystemPrompt
 │   │   │   ├── AppleSiliconInferenceBackend.swift
 │   │   │   ├── LiveSpeechEngine.swift
 │   │   │   ├── ModelManager.swift
-│   │   │   └── SpeechInferenceBackend.swift
-│   │   ├── Injector/           # Active input focus injection & clipboard proxy
+│   │   │   ├── SpeechInferenceBackend.swift
+│   │   │   ├── SystemPrompt.swift
+│   │   │   └── TechDictionary.swift
+│   │   ├── Injector/            # Low-level CGEventTap & cursor injector proxy
 │   │   │   └── InputInjector.swift
-│   │   ├── State/              # Core state machine coordinator
+│   │   ├── State/               # Core state machine coordinator
 │   │   │   └── ButterflyStateMachine.swift
-│   │   └── Text/               # Text processing, OpenCC s2twp & smart polishing
+│   │   └── Text/                # OpenCC s2twp, TextFormatter & cognitive TextPolisher
 │   │       ├── OpenCCTranslator.swift
 │   │       ├── TextFormatter.swift
-│   │       └── TextPolisher.swift
-│   ├── ButterflyCLI/           # Command-line interface for testing & benchmarking
+│   │       ├── TextPolisher.swift
+│   │       └── TranscriptAccumulator.swift
+│   ├── ButterflyCLI/            # Command-line interface for testing & benchmarking
 │   │   └── main.swift
-│   └── ButterflyApp/           # Native macOS menu bar application
+│   └── ButterflyApp/            # Native macOS menu bar application (CGEventTap integration)
 │       └── ButterflyApp.swift
 └── Tests/
-    └── ButterflyTests/         # Unit test suites
+    └── ButterflyTests/          # Unit test suites
         ├── InferenceEngineTests.swift
         ├── OpenCCTranslatorTests.swift
         ├── StateMachineTests.swift
@@ -64,13 +68,16 @@ butterfly/
 Butterfly supports two core input modes and a dedicated stop hotkey:
 
 1. **Start Live Streaming Dictation (`Option + Space`)**:
-   - Real-time speech-to-text with continuous streaming directly into your active cursor.
-   - Real-time filler word removal and stutter filtering.
+   - 100% faithful real-time speech-to-text with continuous streaming directly into your active cursor.
+   - 1~2 second sliding window in-place refinement (revises tech terms, numbers, and units without disturbing earlier text).
+   - Preserves all natural spoken repetitions and punctuation.
 2. **Start Record & Smart Polish (`Option + Shift + Space`)**:
    - Continuous audio recording for long-form thoughts, meetings, or monologues.
    - Upon completion, executes deep filler removal (`呃`, `啊`, `哦`, `那個那個`, `就是說`), stutter cleaning, intelligent paragraph structuring, and Markdown bullet point extraction (`- ...`).
-3. **Stop & Commit Recording (`Esc` / Escape Key)**:
-   - Pressing `Esc` at any time while recording immediately finalizes the transcription and commits the result.
+3. **Stop & Commit Recording (`Enter` / `Esc`)**:
+   - Monitored via macOS low-level `CGEventTap` (`.headInsertEventTap`).
+   - The first `Enter` stops recording and is **swallowed at the OS level to prevent accidental chat/agent message submission**.
+   - The second `Enter` passes through normally to submit your message.
 
 ---
 
@@ -107,8 +114,10 @@ swift run ButterflyApp
 ## 📐 Key Engineering Conventions
 
 1. **Strict Concurrency & Sendable Compliance**:
-   - All shared singletons and manager classes must adhere to Swift concurrency guidelines (`@unchecked Sendable` or actor isolation where appropriate).
+   - All shared singletons and manager classes must adhere to Swift concurrency guidelines (`@unchecked Sendable` or actor isolation with `OSAllocatedUnfairLock`).
 2. **Zero Cloud Dependency & Local Privacy**:
    - All audio processing, speech recognition, and text polishing run 100% locally on the user's Apple Silicon hardware.
 3. **Traditional Chinese Guarantee**:
    - Any transcribed Chinese text must pass through `OpenCCTranslator` (s2twp standard) to ensure 0% Simplified Chinese characters in final outputs.
+4. **Zero Hardcoded Paths**:
+   - Dynamic path discovery using `FileManager.default.homeDirectoryForCurrentUser` and bundle resources.
