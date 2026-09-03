@@ -37,36 +37,16 @@ public final class SystemPrompt: @unchecked Sendable {
         self.content = SystemPrompt.loadFromDisk()
     }
     
-    /// Returns the specialized System Prompt tailored for Mode 1 (Live Dictation) or Mode 2 (Smart Notes)
-    public func prompt(for mode: TextPolisher.PolishMode) -> String {
-        switch mode {
-        case .liveStream:
-            return """
-            \(content)
-            
-            [Active Mode Directive: Mode 1 - Real-Time Live Streaming Dictation]
-            - Priority: 100% Faithful Reproduction & Fluid Sentence Punctuation.
-            - Do NOT summarize, reorder, or delete the speaker's ideas.
-            - Accurately add natural punctuation (，, 。, ！, ？), correct typos and technical terms, and insert Pangu spacing.
-            """
-        case .structuredNote:
-            return """
-            \(content)
-            
-            [Active Mode Directive: Mode 2 - Smart Structured Note Synthesis]
-            - Priority: Deep Semantic Comprehension, Paragraph Restructuring & Markdown Outlining.
-            - Deeply understand the core message across the entire monologue.
-            - Annihilate circular stutters and oral filler debris.
-            - Structure distinct arguments into clean Markdown bullet points (- 第 1 點：...) and logical paragraphs.
-            """
-        case .conciseSummary:
-            return """
-            \(content)
-            
-            [Active Mode Directive: Concise Summary]
-            - Priority: Ultra-dense key takeaways and action items.
-            """
-        }
+    /// Returns the System Prompt tailored for Real-Time Live Dictation
+    public func prompt(for mode: TextPolisher.PolishMode = .liveStream) -> String {
+        return """
+        \(content)
+        
+        [Active Mode Directive: Real-Time Live Streaming Voice Dictation]
+        - Priority: 100% Faithful Reproduction & Fluid Sentence Punctuation.
+        - Do NOT summarize, reorder, or omit the speaker's ideas.
+        - Accurately add natural punctuation (，, 。, ！, ？), format numbers and units, and insert Pangu spacing.
+        """
     }
     
     /// Default embedded System Prompt fallback

@@ -48,25 +48,7 @@ public final class TextFormatter {
     public func normalizeNumbersToDigits(_ text: String) -> String {
         var result = text
         
-        // 1. Phonetic speech typos for Mode 1, Mode 2 & common ASR glitches
-        let speechAcroMap = [
-            "Line mo Mailil": "Mode 1",
-            "Line Mail": "Mode 1",
-            "Line made": "Mode 1",
-            "made one": "Mode 1",
-            "me to": "Mode 2",
-            "夢的兔": "Mode 2",
-            "made two": "Mode 2",
-            "IE S C": "Esc",
-            "IE S": "Esc",
-            "E S C": "Esc",
-            "S C": "Esc"
-        ]
-        for (typo, replacement) in speechAcroMap {
-            result = result.replacingOccurrences(of: typo, with: replacement)
-        }
-        
-        // 2. English hundreds & thousands
+        // 1. English hundreds & thousands
         let enHundreds: [(pattern: String, replacement: String)] = [
             ("(?i)\\bone\\s+hundred\\b", "100"),
             ("(?i)\\btwo\\s+hundred\\b", "200"),
@@ -147,35 +129,21 @@ public final class TextFormatter {
     public func normalizeUnitsAndTechTerms(_ text: String) -> String {
         var result = text
         
-        // 1. Spoken tech jargon & phonetic homophones
-        let techJargonMap = [
-            "收 call": "Source Code",
-            "so call": "Source Code",
-            "so co": "Source Code",
-            "so col": "Source Code",
-            "哈扣寫": "Hardcode",
-            "哈扣": "Hardcode",
-            "扣寫進去": "Code 寫進去",
-            "come 進去": "Commit 進去",
-            "co me 進去": "Commit 進去",
-            "com Commit": "Commit",
-            "Loco Data": "Local Data",
-            "Loco": "Local",
-            "telegram": "kg",
-            "Telegram": "kg",
-            "Tarab bite": "TB",
-            "tara bite": "TB",
-            "Tara bite": "TB",
-            "tarabyte": "TB",
-            "Mega bite": "MB",
-            "mega bite": "MB",
-            "Giga bite": "GB",
-            "giga bite": "GB",
-            "Kilo bite": "KB",
-            "kilo bite": "KB"
+        // 1. Spoken Digital Storage Units (Mega bite, Giga bite, etc.)
+        let spokenUnits = [
+            ("Tarab bite", "TB"),
+            ("tara bite", "TB"),
+            ("Tara bite", "TB"),
+            ("tarabyte", "TB"),
+            ("Mega bite", "MB"),
+            ("mega bite", "MB"),
+            ("Giga bite", "GB"),
+            ("giga bite", "GB"),
+            ("Kilo bite", "KB"),
+            ("kilo bite", "KB")
         ]
-        for (typo, replacement) in techJargonMap {
-            result = result.replacingOccurrences(of: typo, with: replacement)
+        for (unit, replacement) in spokenUnits {
+            result = result.replacingOccurrences(of: unit, with: replacement)
         }
         
         // 2. Unit regexes (Digital, Metric, Time, Frequency)

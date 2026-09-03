@@ -4,16 +4,10 @@ import ButterflyCore
 
 /// Operating mode for Butterfly
 public enum ButterflyMode: String, CaseIterable {
-    case liveStreaming = "live"       // Mode 1: Live Streaming Dictation (real-time live typing into cursor)
-    case recordAndPolish = "polish"   // Mode 2: Record & Smart Polish (deep filler cleaning, paragraphs, bullet points on Esc)
+    case liveStreaming = "live"       // Real-time zero-latency speech-to-text dictation
     
     public var title: String {
-        switch self {
-        case .liveStreaming:
-            return "Live Streaming Dictation"
-        case .recordAndPolish:
-            return "Record & Smart Polish"
-        }
+        return "Live Voice Dictation"
     }
 }
 
@@ -33,7 +27,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var recordingTimer: Timer?
     private var recordingStartTime: Date?
     private var animationIndex: Int = 0
-    private var mode2PlaceholderText: String = ""
     private let slidingWindowBuffer = SlidingWindowBuffer()
     private var pauseTimer: Timer?
     
@@ -60,54 +53,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let seconds = String(format: "%02d", elapsed % 60)
                 let timeStr = "[\(minutes):\(seconds)]"
                 
-                if self.activeMode == .liveStreaming {
-                    // Mode 1 Phase 1: Continuous Acoustic Streaming (Append-Only Fast Path)
-                    let action = self.slidingWindowBuffer.appendStreamingText(formattedText)
-                    InputInjector.shared.applySlidingDelta(action)
-                    
-                    // Update Floating HUD with Tri-Color Cognitive Model (White: Locked, Gold: AI Refined, Gray: Raw Speech)
-                    FloatingHUDWindow.shared.update(
-                        frozenText: self.slidingWindowBuffer.frozenText,
-                        polishedText: self.slidingWindowBuffer.polishedText,
-                        activeTail: self.slidingWindowBuffer.activeTail,
-                        timeStr: timeStr,
-                        mode: .liveStreaming
-                    )
-                    
-                    // Mode 1 Phase 2: Reset 0.8s Pause-Gated Refinement Timer (Pure Swift Zero-Hallucination)
-                    self.pauseTimer?.invalidate()
-                    self.pauseTimer = Timer.scheduledTimer(withTimeInterval: 0.8, repeats: false) { [weak self] _ in
-                        Task { @MainActor [weak self] in
-                            guard let self = self, self.isRecording, self.activeMode == .liveStreaming else { return }
-                            
-                            let action = self.slidingWindowBuffer.onPauseTriggered()
-                            InputInjector.shared.applySlidingDelta(action)
-                            
-                            // Re-sync Floating HUD with updated Tri-Color regions
-                            FloatingHUDWindow.shared.update(
-                                frozenText: self.slidingWindowBuffer.frozenText,
-                                polishedText: self.slidingWindowBuffer.polishedText,
-                                activeTail: self.slidingWindowBuffer.activeTail,
-                                timeStr: timeStr,
-                                mode: .liveStreaming
-                            )
-                        }
+                // Phase 1: Continuous Acoustic Streaming (Append-Only Fast Path)
+                let action = self.slidingWindowBuffer.appendStreamingText(formattedText)
+                InputInjector.shared.applySlidingDelta(action)
+                
+                // Update Floating HUD with Tri-Color Cognitive Model (White: Locked, Gold: AI Refined, Gray: Raw Speech)
+                FloatingHUDWindow.shared.update(
+                    frozenText: self.slidingWindowBuffer.frozenText,
+                    polishedText: self.slidingWindowBuffer.polishedText,
+                    activeTail: self.slidingWindowBuffer.activeTail,
+                    timeStr: timeStr,
+                    mode: .liveStreaming
+                )
+                
+                // Phase 2: Reset 0.8s Pause-Gated Refinement Timer (Pure Swift Zero-Hallucination)
+                self.pauseTimer?.invalidate()
+                self.pauseTimer = Timer.scheduledTimer(withTimeInterval: 0.8, repeats: false) { [weak self] _ in
+                    Task { @MainActor [weak self] in
+                        guard let self = self, self.isRecording else { return }
+                        
+                        let action = self.slidingWindowBuffer.onPauseTriggered()
+                        InputInjector.shared.applySlidingDelta(action)
+                        
+                        // Re-sync Floating HUD with updated Tri-Color regions
+                        FloatingHUDWindow.shared.update(
+                            frozenText: self.slidingWindowBuffer.frozenText,
+                            polishedText: self.slidingWindowBuffer.polishedText,
+                            activeTail: self.slidingWindowBuffer.activeTail,
+                            timeStr: timeStr,
+                            mode: .liveStreaming
+                        )
                     }
-                    
-                    let preview = formattedText.count > 10 ? "..." + String(formattedText.suffix(10)) : formattedText
-                    self.statusItem.button?.title = " 🎙️ \(timeStr) \(preview)"
-                } else {
-                    // Mode 2: Live feedback in floating HUD and menu bar
-                    FloatingHUDWindow.shared.update(
-                        frozenText: "",
-                        polishedText: "",
-                        activeTail: formattedText,
-                        timeStr: timeStr,
-                        mode: .recordAndPolish
-                    )
-                    let preview = formattedText.count > 10 ? "..." + String(formattedText.suffix(10)) : formattedText
-                    self.statusItem.button?.title = " 🔴 \(timeStr) \(preview)"
                 }
+                
+                let preview = formattedText.count > 10 ? "..." + String(formattedText.suffix(10)) : formattedText
+                self.statusItem.button?.title = " 🎙️ \(timeStr) \(preview)"
             }
         }
         
