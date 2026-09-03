@@ -64,13 +64,19 @@ public final class TextPolisher {
             ("羽翼(?=如果|明顯|表達|理解|上下文|順序|判定)", "語意"),
             ("(稍微|多|幫我|進行|文字|文章|內容)認識", "$1潤飾"),
             ("認識(?=文字|文章|一下|的多一點|一下下|的|內容)", "潤飾"),
-            ("音譜", "Input"),
-            ("應譜", "Input"),
-            ("奧普", "Output"),
-            ("奧特普", "Output"),
-            ("L\\s*O\\s*C\\s*O", "Local"),
-            ("L\\s*O\\s*C\\s*A\\s*L", "Local"),
-            ("(?i)\\bLoco\\b", "Local"),
+            ("Speech\\s+(the\\s+talk|to|the)\\s+Text|switch\\s+t\\s+Text", "Speech-to-Text"),
+            ("前後的康泰|前後的\\s*context|前後的\\s*康泰克斯", "前後文的 Context"),
+            ("康泰克斯|康泰(?=[可以|能夠|去做|分析])", "Context"),
+            ("這兩個\\s*(mall|mode|毛|Mo)", "這兩個 Mode"),
+            ("第二個\\s*(ml|mode|毛|Mo)\\s*的?", "第二個 Mode "),
+            ("夢的圖|莫德圖|莫得圖", "Mode 2"),
+            ("莫德萬|莫得萬|夢的萬|墨的萬", "Mode 1"),
+            ("live\\s*saving|streamDreamin|Live\\s*Streaming\\s*streamDreamin", "Live Streaming"),
+            ("messMessa\\s*messge\\s*mess\\s*RadarMadara|RadarMadara\\s*game\\s*getMadara", "Message"),
+            ("Mata\\s*bite|Meta\\s*bite", "MB"),
+            ("音譜|應譜", "Input"),
+            ("奧普|奧特普", "Output"),
+            ("L\\s*O\\s*C\\s*O|L\\s*O\\s*C\\s*A\\s*L|(?i)\\bLoco\\b", "Local"),
             ("壞\\s*List|What\\s*last|what\\s*list|壞名單", "Whitelist"),
             ("com\\s*一版|come\\s*一版", "Commit 一版"),
             ("扣核心", "Core 核心"),
@@ -80,11 +86,13 @@ public final class TextPolisher {
             ("達克", "Docker"),
             ("字字", "字"),
             ("段類", "段之類"),
-            ("類類", "類")
+            ("類類", "類"),
+            ("夠夠", "夠"),
+            ("別別", "別")
         ]
         
         for item in contextualRegexes {
-            if let regex = try? NSRegularExpression(pattern: item.pattern, options: []) {
+            if let regex = try? NSRegularExpression(pattern: item.pattern, options: [.caseInsensitive]) {
                 let range = NSRange(location: 0, length: result.utf16.count)
                 result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: item.replacement)
             }
@@ -206,7 +214,20 @@ public final class TextPolisher {
     public func removeStutterAndRepetitions(_ text: String) -> String {
         var result = text
         
-        // 1. Progressive prefix clause stutter (e.g. "好我們來，好我們來測試" -> "好我們來測試")
+        // 1. Repetitive restarting clauses (e.g. "好，我再來試次，好我再試一次，好，我再試一次" -> "好，我再試一次，")
+        let restartPatterns = [
+            ("(好[，、\\s]*我[再來|再]*試[一次|次]*[，、\\s]*)+", "好，我再試一次，"),
+            ("(看[看]*能[不]*[，、\\s]*就是看能不能[錯別字別|把錯別字去]*[，、\\s]*)+", "看能不能把錯別字去掉，"),
+            ("是錯的。[，、\\s\n]*但是因為你知道", "但是因為你知道")
+        ]
+        for (pat, rep) in restartPatterns {
+            if let regex = try? NSRegularExpression(pattern: pat, options: []) {
+                let range = NSRange(location: 0, length: result.utf16.count)
+                result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: rep)
+            }
+        }
+        
+        // 2. Progressive prefix clause stutter (e.g. "好我們來，好我們來測試" -> "好我們來測試")
         let progressivePrefixPattern = "([，。！？\n\\s]|^)([\\u4e00-\\u9fa5A-Za-z0-9]{2,15})[，、\\s]+(?=\\2)"
         if let regex = try? NSRegularExpression(pattern: progressivePrefixPattern, options: []) {
             for _ in 0..<3 {
@@ -215,7 +236,7 @@ public final class TextPolisher {
             }
         }
         
-        // 2. Repeated full sentence deduplication (e.g. "盡可能地去呈現。盡可能地去呈現" -> "盡可能地去呈現。")
+        // 3. Repeated full sentence deduplication (e.g. "盡可能地去呈現。盡可能地去呈現" -> "盡可能地去呈現。")
         let sentenceRepeatPattern = "([^\\n。！？]{4,40}[。！？])[，、\\s]*\\1"
         if let regex = try? NSRegularExpression(pattern: sentenceRepeatPattern, options: []) {
             for _ in 0..<2 {
@@ -224,28 +245,28 @@ public final class TextPolisher {
             }
         }
         
-        // 3. Single character repeated 3+ times (e.g. "我我我" -> "我")
+        // 4. Single character repeated 3+ times (e.g. "我我我" -> "我")
         let triplePattern = "([\\u4e00-\\u9fa5])\\1{2,}"
         if let regex = try? NSRegularExpression(pattern: triplePattern, options: []) {
             let range = NSRange(location: 0, length: result.utf16.count)
             result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: "$1")
         }
         
-        // 4. Remove 2-character stutter pronouns/conjunctions at phrase starts (e.g. "我我覺得" -> "我覺得")
+        // 5. Remove 2-character stutter pronouns/conjunctions at phrase starts (e.g. "我我覺得" -> "我覺得")
         let cleanPattern = "([，。！？\n\\s]|^)(我|這|那|但|就|如|連|是|很|剛)\\2([\\u4e00-\\u9fa5])"
         if let cleanRegex = try? NSRegularExpression(pattern: cleanPattern, options: []) {
             let r = NSRange(location: 0, length: result.utf16.count)
             result = cleanRegex.stringByReplacingMatches(in: result, options: [], range: r, withTemplate: "$1$2$3")
         }
         
-        // 5. Two-character words repeated (e.g. "這個這個" -> "這個", "然後然後" -> "然後")
+        // 6. Two-character words repeated (e.g. "這個這個" -> "這個", "然後然後" -> "然後")
         let doubleCharPattern = "([\\u4e00-\\u9fa5]{2})\\1+"
         if let regex = try? NSRegularExpression(pattern: doubleCharPattern, options: []) {
             let range = NSRange(location: 0, length: result.utf16.count)
             result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: "$1")
         }
         
-        // 6. Multi-character phrase repetitions (2 to 10 characters, e.g. "我們試試看我們試試看" -> "我們試試看")
+        // 7. Multi-character phrase repetitions (2 to 10 characters, e.g. "我們試試看我們試試看" -> "我們試試看")
         let multiPhrasePattern = "([\\u4e00-\\u9fa5A-Za-z0-9]{2,10})\\1+"
         if let regex = try? NSRegularExpression(pattern: multiPhrasePattern, options: []) {
             for _ in 0..<2 {
@@ -254,7 +275,7 @@ public final class TextPolisher {
             }
         }
         
-        // 7. Repeated phrases separated by comma or space (e.g. "你真的覺得，你真的覺得" -> "你真的覺得")
+        // 8. Repeated phrases separated by comma or space (e.g. "你真的覺得，你真的覺得" -> "你真的覺得")
         let commaPhrasePattern = "([\\u4e00-\\u9fa5A-Za-z0-9]{2,12})[，、\\s]+\\1"
         if let regex = try? NSRegularExpression(pattern: commaPhrasePattern, options: []) {
             let range = NSRange(location: 0, length: result.utf16.count)
@@ -370,7 +391,7 @@ public final class TextPolisher {
         var paragraphs: [String] = []
         var currentParagraph: [String] = []
         
-        let transitionKeywords = ["另外", "此外", "不過", "但是", "然而", "因此", "總結來說", "總之", "總結", "最後", "也就是", "而且", "你看像"]
+        let transitionKeywords = ["另外", "此外", "不過", "但是", "然而", "因此", "總結來說", "總之", "總結", "最後", "也就是", "而且", "你看像", "所以"]
         
         for sentence in sentences {
             let cleanSentence = sentence.hasSuffix("。") || sentence.hasSuffix("！") || sentence.hasSuffix("？") ? sentence : sentence + "。"
