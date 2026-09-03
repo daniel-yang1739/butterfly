@@ -80,13 +80,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         Task { @MainActor [weak self] in
                             guard let self = self, self.isRecording, self.activeMode == .liveStreaming else { return }
                             
-                            let currentText = self.slidingWindowBuffer.screenText
-                            guard !currentText.isEmpty else { return }
+                            let activeClause = self.slidingWindowBuffer.activeTail
+                            guard !activeClause.isEmpty else { return }
                             
-                            // 1. Asynchronously refine the active sliding window with SLM
-                            let slmRefined = await LanguageModelCoordinator.shared.refineLiveStream(transcript: currentText)
+                            // 1. Asynchronously refine ONLY the active un-frozen clause with SLM
+                            let slmRefined = await LanguageModelCoordinator.shared.refineLiveStream(transcript: activeClause)
                             
-                            // 2. Prepare refinement plan (Memory pointer does NOT advance yet)
+                            // 2. Prepare refinement plan with refined clause
                             guard let prepared = self.slidingWindowBuffer.preparePauseRefinement(customRefinedText: slmRefined) else {
                                 FloatingHUDWindow.shared.update(
                                     frozenText: self.slidingWindowBuffer.frozenText,

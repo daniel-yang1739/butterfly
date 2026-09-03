@@ -1,53 +1,91 @@
 import Foundation
 
-/// Local SLM Inference Backend for Mode 2 structured note synthesis
+/// Local SLM Inference Backend for Mode 2 structured note synthesis & Mode 1 live streaming refinement
 public final class LocalSLMInferenceBackend: @unchecked Sendable {
     public let spec: ModelSpec
+    
+    private static let timeFormatter: DateFormatter = {
+        let df = DateFormatter()
+        df.dateFormat = "HH:mm:ss.SSS"
+        return df
+    }()
     
     public init(spec: ModelSpec) {
         self.spec = spec
     }
     
     /// Format ChatML prompt template
-    public func buildChatMLPrompt(transcript: String, systemPrompt: String) -> String {
+    public func buildChatMLPrompt(transcript: String, mode: TextPolisher.PolishMode) -> String {
+        let rolePrompt: String
+        switch mode {
+        case .liveStream:
+            rolePrompt = "你是繁體中文即時語音修正助手。請將使用者的口述語音片段修復錯字並加上繁體中文標點符號。規則：直接輸出修正後的繁體中文句子，絕不重複指令、絕不輸出多餘問候。"
+        case .structuredNote, .conciseSummary:
+            rolePrompt = "你是專業的繁體中文語音筆記整理助手。請將使用者的口述文字整理成乾淨、條理分明的繁體中文 Markdown 條列式筆記（以 - 開頭）。規則：直接輸出筆記內容，絕不重複指令、絕不輸出問候語、絕不包含閒聊贅詞。"
+        }
+        
         return """
         <|im_start|>system
-        \(systemPrompt)<|im_end|>
+        \(rolePrompt)<|im_end|>
         <|im_start|>user
-        請將以下口述語音逐字稿整理成專業清晰的繁體中文筆記：
         \(transcript)<|im_end|>
         <|im_start|>assistant
         
         """
     }
     
-    /// Format Llama 3 prompt template
-    public func buildLlama3Prompt(transcript: String, systemPrompt: String) -> String {
+    /// Format Llama 3 prompt template with strict anti-echo directives
+    public func buildLlama3Prompt(transcript: String, mode: TextPolisher.PolishMode) -> String {
+        let rolePrompt: String
+        switch mode {
+        case .liveStream:
+            rolePrompt = "你是繁體中文即時語音修正助手。請將使用者的口述語音片段修復錯字並加上繁體中文標點符號。規則：直接輸出修正後的繁體中文句子，絕不重複指令、絕不輸出多餘問候。"
+        case .structuredNote, .conciseSummary:
+            rolePrompt = "你是專業的繁體中文語音筆記整理助手。請將使用者的口述文字整理成乾淨、條理分明的繁體中文 Markdown 條列式筆記（以 - 開頭）。規則：直接輸出筆記內容，絕不重複指令、絕不輸出問候語、絕不包含閒聊贅詞。"
+        }
+        
         return """
         <|begin_of_text|><|start_header_id|>system<|end_header_id|>
-        \(systemPrompt)<|eot_id|><|start_header_id|>user<|end_header_id|>
-        請將以下口述語音逐字稿整理成專業清晰的繁體中文筆記：
+        \(rolePrompt)<|eot_id|><|start_header_id|>user<|end_header_id|>
         \(transcript)<|eot_id|><|start_header_id|>assistant
         
         """
     }
     
-    /// Restructure monologue transcript using true local SLM inference on Metal GPU
+    /// Restructure monologue transcript using true local SLM inference on Metal GPU with full telemetry
     public func restructureNote(transcript: String, systemPrompt: String) async throws -> String {
         let modelPath = ModelManager.shared.localPath(for: spec)
         
         // 1. If local GGUF model weights are present on disk, execute REAL SLM neural inference
         if FileManager.default.fileExists(atPath: modelPath.path) {
             let prompt = spec.id.contains("llama")
-                ? buildLlama3Prompt(transcript: transcript, systemPrompt: systemPrompt)
-                : buildChatMLPrompt(transcript: transcript, systemPrompt: systemPrompt)
+                ? buildLlama3Prompt(transcript: transcript, mode: .structuredNote)
+                : buildChatMLPrompt(transcript: transcript, mode: .structuredNote)
             
-            print("🧠 Mode 2: Executing REAL SLM Inference via \(spec.displayName) on Apple Silicon Metal GPU...")
+            let dispatchTimeStr = Self.timeFormatter.string(from: Date())
+            let startTime = DispatchTime.now()
+            
             if let output = try? await executeLocalCLI(modelPath: modelPath.path, prompt: prompt), !output.isEmpty {
+                let endTime = DispatchTime.now()
+                let receiveTimeStr = Self.timeFormatter.string(from: Date())
+                let elapsedMs = Double(endTime.uptimeNanoseconds - startTime.uptimeNanoseconds) / 1_000_000.0
+                
                 let cleaned = cleanSLMOutput(output)
                 if !cleaned.isEmpty {
-                    print("✨ Mode 2: SLM Generated \(cleaned.count) chars of structured notes on Metal GPU!")
-                    return OpenCCTranslator.shared.convert(cleaned)
+                    let traditional = OpenCCTranslator.shared.convert(cleaned)
+                    
+                    let samplePreview = transcript.count > 50 ? String(transcript.prefix(50)) + "..." : transcript
+                    print("""
+                    
+                    ┌─── 🧠 [Mode 2 SLM Telemetry: \(spec.displayName)] ──────────────────────────────
+                    │ ⏰ Dispatched Time  : \(dispatchTimeStr)
+                    │ 📥 Input Monologue   : (\(transcript.count) chars) "\(samplePreview)"
+                    │ ⚡ Compute Engine    : Apple Silicon Metal GPU (Unified Memory)
+                    │ ⏰ Received Time    : \(receiveTimeStr) (⏱️ Total Latency: \(String(format: "%.1f", elapsedMs)) ms)
+                    │ 📤 Output Note Size  : (\(traditional.count) chars)
+                    └─────────────────────────────────────────────────────────────────────────────
+                    """)
+                    return traditional
                 }
             }
         }
@@ -57,8 +95,45 @@ public final class LocalSLMInferenceBackend: @unchecked Sendable {
         return polished
     }
     
-    /// Execute local llama-cli runner with non-interactive --single-turn flag
-    private func executeLocalCLI(modelPath: String, prompt: String) async throws -> String? {
+    /// Refine live streaming clause using active SLM model on Metal GPU with full telemetry
+    public func refineLiveClause(clause: String) async -> String {
+        let modelPath = ModelManager.shared.localPath(for: spec)
+        
+        if FileManager.default.fileExists(atPath: modelPath.path) {
+            let prompt = spec.id.contains("llama")
+                ? buildLlama3Prompt(transcript: clause, mode: .liveStream)
+                : buildChatMLPrompt(transcript: clause, mode: .liveStream)
+            
+            let dispatchTimeStr = Self.timeFormatter.string(from: Date())
+            let startTime = DispatchTime.now()
+            
+            if let output = try? await executeLocalCLI(modelPath: modelPath.path, prompt: prompt, maxTokens: 64), !output.isEmpty {
+                let endTime = DispatchTime.now()
+                let receiveTimeStr = Self.timeFormatter.string(from: Date())
+                let elapsedMs = Double(endTime.uptimeNanoseconds - startTime.uptimeNanoseconds) / 1_000_000.0
+                
+                let cleaned = cleanSLMOutput(output)
+                if !cleaned.isEmpty {
+                    let traditional = OpenCCTranslator.shared.convert(cleaned)
+                    print("""
+                    
+                    ┌─── 🧠 [Mode 1 SLM Clause Telemetry: \(spec.displayName)] ────────────────────────
+                    │ ⏰ Dispatched Time  : \(dispatchTimeStr)
+                    │ 📥 Input Clause     : "\(clause)"
+                    │ ⏰ Received Time    : \(receiveTimeStr) (⏱️ Total Latency: \(String(format: "%.1f", elapsedMs)) ms)
+                    │ 📤 Refined Clause   : "\(traditional)"
+                    └─────────────────────────────────────────────────────────────────────────────
+                    """)
+                    return traditional
+                }
+            }
+        }
+        
+        return TextPolisher.shared.polish(clause, mode: .liveStream)
+    }
+    
+    /// Execute local llama-cli runner with non-interactive --single-turn and anti-repetition flags
+    internal func executeLocalCLI(modelPath: String, prompt: String, maxTokens: Int = 256) async throws -> String? {
         let candidateCLIs = ["/opt/homebrew/bin/llama-cli", "/usr/local/bin/llama-cli"]
         guard let cliPath = candidateCLIs.first(where: { FileManager.default.fileExists(atPath: $0) }) else {
             return nil
@@ -72,9 +147,10 @@ public final class LocalSLMInferenceBackend: @unchecked Sendable {
                 process.arguments = [
                     "-m", modelPath,
                     "-p", prompt,
-                    "-n", "256",
+                    "-n", "\(maxTokens)",
                     "-ngl", "99",
-                    "--temp", "0.2",
+                    "--temp", "0.1",
+                    "--repeat-penalty", "1.2",
                     "--simple-io",
                     "--no-display-prompt",
                     "--single-turn"
@@ -100,7 +176,7 @@ public final class LocalSLMInferenceBackend: @unchecked Sendable {
     }
     
     /// Parse and extract only the assistant response from llama-cli terminal output
-    private func cleanSLMOutput(_ raw: String) -> String {
+    internal func cleanSLMOutput(_ raw: String) -> String {
         var text = raw
         if let range = text.range(of: "\n> ") {
             let suffix = String(text[range.upperBound...])
@@ -114,7 +190,22 @@ public final class LocalSLMInferenceBackend: @unchecked Sendable {
         if let exitRange = text.range(of: "Exiting...") {
             text = String(text[..<exitRange.lowerBound])
         }
-        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // Clean out any echo header lines or conversational hallucination prefixes
+        var lines = text.components(separatedBy: .newlines)
+        lines.removeAll { line in
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.hasPrefix("# 🦋 Butterfly") ||
+                   trimmed.hasPrefix("<system_instructions>") ||
+                   trimmed.hasPrefix("</system_instructions>") ||
+                   trimmed.hasPrefix("我想你可能是在問") ||
+                   trimmed.hasPrefix("你可能是在問") ||
+                   trimmed.hasPrefix("好的，以下是") ||
+                   trimmed.hasPrefix("這裡是用戶的口述")
+        }
+        
+        let result = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        return result
     }
 }
 
@@ -147,7 +238,8 @@ public final class LanguageModelCoordinator: @unchecked Sendable {
             return ""
         }
         
-        let polished = TextPolisher.shared.polish(transcript, mode: .liveStream)
-        return polished
+        let activeModel = ModelManager.shared.activeSLMModel
+        let backend = LocalSLMInferenceBackend(spec: activeModel)
+        return await backend.refineLiveClause(clause: transcript)
     }
 }
