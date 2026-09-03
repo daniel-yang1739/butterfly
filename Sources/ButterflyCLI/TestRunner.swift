@@ -98,6 +98,11 @@ public enum TestRunner {
         let semanticOutput = polisher.polish(semanticInput, mode: .structuredNote)
         assertTrue(semanticOutput.contains("潤飾") && semanticOutput.contains("語意") && semanticOutput.contains("把文字"), "TC-C10: Semantic intent disambiguation ('認識' -> '潤飾', '羽翼' -> '語意')")
         
+        // TC-C11: Boundary-free bullet extraction & homophone healing
+        let boundaryInput = "不要讓我一直驗收好不好讓我一直驗收，然後又又一直都有 bug 我可不可以一直修到好好第一個分段精確第二個錯字為治癒第三個完全去除 System Prompt 與角色定義的第四個適當點自然分段，避免每個句子單獨成段"
+        let boundaryOut = polisher.polish(boundaryInput, mode: .structuredNote)
+        assertTrue((boundaryOut.contains("- 第一個") || boundaryOut.contains("- 第 1 個")) && boundaryOut.contains("錯字會自癒") && boundaryOut.contains("修到好") && !boundaryOut.contains("又又"), "TC-C11: Boundary-free bullet extraction & homophone healing ('錯字為治癒' -> '錯字會自癒')")
+        
         // MARK: - 4. SystemPrompt Tests
         print("\n📦 Suite 4: SystemPrompt (Dynamic Loading & Fallbacks)")
         let sysPrompt = SystemPrompt.shared

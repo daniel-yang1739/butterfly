@@ -243,6 +243,12 @@ public final class TextPolisher {
             "犧牲 prom": "System Prompt",
             "Chat 的點": "Check 的點",
             "分開系": "分開細",
+            "錯字為治癒": "錯字會自癒",
+            "錯字會治癒": "錯字會自癒",
+            "成斷": "成段",
+            "第四次第四個": "第四個",
+            "修到好好": "修到好",
+            "又又": "又",
             "郵輪邏輯": "邏輯",
             "於最近": "贅字",
             "拗不出來": "Output 出來",
@@ -282,6 +288,7 @@ public final class TextPolisher {
         
         // 2. Repetitive restarting clauses (e.g. "好，我再來試次，好我再試一次，好，我再試一次" -> "好，我再試一次，")
         let restartPatterns = [
+            ("(不要讓我一直驗收[好不好，\\s]*)+(讓我一直驗收[，\\s]*)+", "不要讓我一直驗收，"),
             ("(好[，、\\s]*我[再來|再]*試[一次|次]*[，、\\s]*)+", "好，我再試一次，"),
             ("(看[看]*能[不]*[，、\\s]*就是看能不能[錯別字別|把錯別字去]*[，、\\s]*)+", "看能不能把錯別字去掉，"),
             ("是錯的。[，、\\s\n]*但是因為你知道", "但是因為你知道"),
@@ -312,7 +319,14 @@ public final class TextPolisher {
             }
         }
         
-        // 5. Single character repeated 3+ times (e.g. "我我我" -> "我")
+        // 5. Single character repeated 2+ times for oral stutters (e.g. "又又" -> "又")
+        let doubleOralPattern = "(?<=[\\u4e00-\\u9fa5]|^)([又也再被就])\\1+"
+        if let regex = try? NSRegularExpression(pattern: doubleOralPattern, options: []) {
+            let range = NSRange(location: 0, length: result.utf16.count)
+            result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: "$1")
+        }
+        
+        // 6. Single character repeated 3+ times (e.g. "我我我" -> "我")
         let triplePattern = "([\\u4e00-\\u9fa5])\\1{2,}"
         if let regex = try? NSRegularExpression(pattern: triplePattern, options: []) {
             let range = NSRange(location: 0, length: result.utf16.count)
@@ -468,7 +482,7 @@ public final class TextPolisher {
         guard text.count > 15 else { return text }
         
         // 1. Check for enumerated list indicators (e.g. 第一點... 第二點...)
-        let listPattern = "(?:^|[。！？\n，])\\s*(第一種模式|第二種模式|第\\s*[一二三四五六七八九十0-9]+\\s*[點個項件、，事]|首先|一來|其次|二來|再來|最後[一點項事]?|總結來說|總結[：:]?|另外[一點項件事]?|此外[一點項件事]?)"
+        let listPattern = "(?:(?<=[。！？\n，、\\s])|^|(?<=[^第0-9一二三四五六七八九十]))(第一種模式|第二種模式|第\\s*[一二三四五六七八九十0-9]+\\s*[點個項件、，事]|首先|一來|其次|二來|再來|最後[一點項事]?|總結來說|總結[：:]?|另外[一點項件事]?|此外[一點項件事]?)"
         
         if let regex = try? NSRegularExpression(pattern: listPattern, options: []) {
             let nsString = text as NSString
@@ -483,7 +497,7 @@ public final class TextPolisher {
                 if firstMatchLoc > 0 {
                     let intro = nsString.substring(with: NSRange(location: 0, length: firstMatchLoc))
                         .trimmingCharacters(in: .whitespacesAndNewlines)
-                        .trimmingCharacters(in: CharacterSet(charactersIn: "，、。；"))
+                        .trimmingCharacters(in: CharacterSet(charactersIn: "，、。；！？ "))
                     if !intro.isEmpty {
                         sections.append(intro.hasSuffix("。") || intro.hasSuffix("！") || intro.hasSuffix("？") ? intro : intro + "。")
                     }
