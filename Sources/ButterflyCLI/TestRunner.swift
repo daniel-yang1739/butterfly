@@ -112,7 +112,7 @@ public enum TestRunner {
         
         let slmModels = ModelManager.defaultSLMModels
         assertEqual(slmModels[0].id, "qwen2.5-0.5b-instruct", "TC-E3: SLM whitelist Rank 1 is Qwen2.5-0.5B-Instruct")
-        assertEqual(slmModels.last?.id, "builtin-cognitive-polisher", "TC-E4: SLM baseline fallback is Built-in Cognitive Rule Engine")
+        assertEqual(slmModels[1].id, "llama-3.2-1b-instruct", "TC-E4: SLM whitelist Rank 2 is Llama-3.2-1B-Instruct")
         
         let bestASR = ModelManager.shared.getBestAvailableASRModel()
         let bestSLM = ModelManager.shared.getBestAvailableSLMModel()

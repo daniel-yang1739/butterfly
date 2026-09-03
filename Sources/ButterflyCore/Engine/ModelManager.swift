@@ -112,7 +112,7 @@ public final class ModelManager: @unchecked Sendable {
     
     // MARK: - Track B: Smart Note Language Models (SLM) Whitelist
     
-    /// Whitelist sorted from STRONGEST (Rank 1) to WEAKEST fallback (Rank 3)
+    /// Whitelist sorted from STRONGEST (Rank 1) to LIGHTEST (Rank 2)
     public static let defaultSLMModels: [ModelSpec] = [
         ModelSpec(
             id: "qwen2.5-0.5b-instruct",
@@ -133,16 +133,6 @@ public final class ModelManager: @unchecked Sendable {
             downloadURL: URL(string: "https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf"),
             recommendedHardware: .appleNeuralEngine,
             description: "Rank 2: High-speed reasoning and deep structural outline generation (~700 MB)"
-        ),
-        ModelSpec(
-            id: "builtin-cognitive-polisher",
-            displayName: "Built-in Cognitive Rule Engine (Built-in)",
-            category: .languageModel,
-            parameterCount: "Rule-Based",
-            sizeBytes: 0,
-            downloadURL: nil,
-            recommendedHardware: .cpuFallback,
-            description: "Rank 3: Zero-download native Two-Pass Cognitive Intent Reconstruction Engine (0 MB, 0 latency)"
         )
     ]
     
@@ -220,15 +210,11 @@ public final class ModelManager: @unchecked Sendable {
     /// Returns the highest-ranked SLM model available locally in the cache.
     public func getBestAvailableSLMModel() -> ModelSpec {
         for model in ModelManager.defaultSLMModels {
-            if model.id == "builtin-cognitive-polisher" {
-                continue
-            }
             if isModelDownloaded(model) {
                 return model
             }
         }
-        // Baseline fallback (Built-in Cognitive Rule Engine)
-        return ModelManager.defaultSLMModels.last!
+        return ModelManager.defaultSLMModels.first!
     }
     
     public func getBestAvailableModel() -> ModelSpec {
@@ -245,7 +231,7 @@ public final class ModelManager: @unchecked Sendable {
     
     /// Check if a model is downloaded locally
     public func isModelDownloaded(_ spec: ModelSpec) -> Bool {
-        if spec.id == "apple-speech-native" || spec.id == "builtin-cognitive-polisher" {
+        if spec.id == "apple-speech-native" {
             return true
         }
         let path = localPath(for: spec)
