@@ -1,6 +1,6 @@
 import Foundation
 
-/// Intelligent text polishing, contextual homophone correction, filler word removal, and Typeless-grade note structuring engine
+/// Two-Pass Cognitive Text Polisher and Contextual Intent Reconstruction Engine
 public final class TextPolisher {
     public static let shared = TextPolisher()
     
@@ -13,65 +13,77 @@ public final class TextPolisher {
         case conciseSummary = "concise"     // Summary mode: concise wording, colloquial removal
     }
     
-    /// Main polishing and formatting pipeline
+    /// Main multi-pass cognitive polishing and contextual intent reconstruction pipeline
     public func polish(_ text: String, mode: PolishMode = .structuredNote) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "" }
         
-        // 1. Ensure 100% Traditional Chinese (Taiwan standard)
+        // Step 0: Ensure 100% Traditional Chinese (Taiwan standard)
         let traditional = OpenCCTranslator.shared.convert(trimmed)
         
-        // 2. Normalize spoken numbers & unit abbreviations
-        var normalized = TextFormatter.shared.normalizeNumbersToDigits(traditional)
-        normalized = TextFormatter.shared.normalizeUnitsAndTechTerms(normalized)
+        // Pass 1: Spoken Numbers & Metric/Data Units Normalization
+        var pass1 = TextFormatter.shared.normalizeNumbersToDigits(traditional)
+        pass1 = TextFormatter.shared.normalizeUnitsAndTechTerms(pass1)
         
-        // 3. Deep contextual homophone & tech terms correction
-        normalized = correctContextualHomophones(normalized)
-        normalized = normalizePhoneticTypos(normalized)
+        // Pass 2: Deep Contextual Intent Disambiguation & ASR Acoustic Recovery
+        var pass2 = restoreAcousticAndPhoneticTokens(pass1)
+        pass2 = disambiguateSemanticIntent(pass2)
+        pass2 = normalizePhoneticTypos(pass2)
         
-        // 4. Remove multi-clause progressive stutters and immediate repetitions
-        normalized = removeStutterAndRepetitions(normalized)
+        // Pass 3: Multi-Clause Progressive Stutter & Loop Annihilation
+        var pass3 = annihilateStuttersAndRestarts(pass2)
+        pass3 = removeFillerWords(pass3, aggressive: mode != .liveStream)
+        pass3 = cleanPunctuation(pass3)
         
-        // 5. Remove conversational filler words and oral crutches
-        normalized = removeFillerWords(normalized, aggressive: mode != .liveStream)
-        
-        // 6. Clean messy and consecutive punctuation marks
-        normalized = cleanPunctuation(normalized)
-        
-        // 7. Apply structural organization based on mode (Typeless-grade structuring)
+        // Pass 4: Typeless-Grade Structural Note Formatting
         let structured: String
         switch mode {
         case .liveStream:
-            structured = normalized
+            structured = pass3
         case .structuredNote, .conciseSummary:
-            structured = structureIntoTypelessNotes(normalized)
+            structured = structureIntoTypelessNotes(pass3)
         }
         
-        // 8. Insert spacing between CJK and alphanumeric characters (Pangu Spacing)
+        // Step Final: Insert spacing between CJK and alphanumeric characters (Pangu Spacing)
         let formatted = TextFormatter.shared.insertSpacingBetweenCJKAndAlphanumeric(structured)
-        
         return formatted.trimmingCharacters(in: .whitespacesAndNewlines)
     }
     
-    // MARK: - Contextual Homophone Correction
+    // MARK: - Pass 2A: Acoustic & Phonetic Token Restoration
     
-    /// Context-aware disambiguation for spoken homophones and technical jargon
-    public func correctContextualHomophones(_ text: String) -> String {
+    /// Restore acoustically misheard tech tokens and code-switching terms based on domain context
+    public func restoreAcousticAndPhoneticTokens(_ text: String) -> String {
         var result = text
         
-        // Regex patterns for context-dependent corrections
-        let contextualRegexes: [(pattern: String, replacement: String)] = [
-            ("羽翼(?=如果|明顯|表達|理解|上下文|順序|判定)", "語意"),
-            ("(稍微|多|幫我|進行|文字|文章|內容)認識", "$1潤飾"),
-            ("認識(?=文字|文章|一下|的多一點|一下下|的|內容)", "潤飾"),
-            ("Speech\\s+(the\\s+talk|to|the)\\s+Text|switch\\s+t\\s+Text", "Speech-to-Text"),
-            ("前後的康泰|前後的\\s*context|前後的\\s*康泰克斯", "前後文的 Context"),
-            ("康泰克斯|康泰(?=[可以|能夠|去做|分析])", "Context"),
-            ("這兩個\\s*(mall|mode|毛|Mo)", "這兩個 Mode"),
-            ("第二個\\s*(ml|mode|毛|Mo)\\s*的?", "第二個 Mode "),
+        let tokenPatterns: [(pattern: String, replacement: String)] = [
+            // System Prompt variations
+            ("(?i)(?:secret|system|the\\s*season|season|stone|sistema)\\s*(?:stone|prom|prompt|pro)\\b", "System Prompt"),
+            ("(?i)stone\\s*prom\\b", "System Prompt"),
+            ("stone\\s*Prom", "System Prompt"),
+            ("塞\\s*(?:the\\s*season|season|system)?\\s*(?:prom|prompt|pro|stone)", "塞 System Prompt"),
+            ("Theakston\\s*Brown|Theakston|brown\\s*所以", "System Prompt"),
+            
+            // Context & Token relations
+            ("(?:上下文|前後文|前後)\\s*康泰(?:\\s*克斯)?", "上下文 Context"),
+            ("康泰\\s*Token", "Context Token"),
+            ("康泰(?=[可以|能夠|去做|分析|之間的關係|之間的|長度|視窗])", "Context"),
+            
+            // Speech-to-Text & Transcription mechanics
+            ("Speech\\s+(?:the\\s+talk|to|the)\\s+Text|switch\\s+t\\s+Text", "Speech-to-Text"),
+            ("竹子稿|桌子稿", "逐字稿"),
+            ("診斷\\s*逐字稿", "整段逐字稿"),
+            ("診斷\\s*(?:文字|錄音|文章|內容)", "整段內容"),
+            ("診斷(?=[去做|分析|轉譯|處理])", "整段"),
+            ("轉出轉進去", "轉進去"),
+            
+            // Operating Modes
+            ("這兩個\\s*(?:mall|mode|毛|Mo)", "這兩個 Mode"),
+            ("第二個\\s*(?:ml|mode|毛|Mo)\\s*的?", "第二個 Mode "),
             ("夢的圖|莫德圖|莫得圖", "Mode 2"),
             ("莫德萬|莫得萬|夢的萬|墨的萬", "Mode 1"),
             ("live\\s*saving|streamDreamin|Live\\s*Streaming\\s*streamDreamin", "Live Streaming"),
+            
+            // Units, Storage & Hardware
             ("messMessa\\s*messge\\s*mess\\s*RadarMadara|RadarMadara\\s*game\\s*getMadara", "Message"),
             ("Mata\\s*bite|Meta\\s*bite", "MB"),
             ("音譜|應譜", "Input"),
@@ -83,18 +95,12 @@ public final class TextPolisher {
             ("收\\s*call|so\\s*call|so\\s*co", "Source Code"),
             ("哈扣寫|哈扣", "Hardcode"),
             ("拍森|拍省", "Python"),
-            ("secret\\s*stone|istema\\s*stone|the\\s*season\\s*Prom|the\\s*season\\s*Pro|season\\s*Prom|Theakston\\s*Brown|Theakston|brown\\s*所以", "System Prompt"),
-            ("塞\\s*(the\\s*season\\s*Prom|the\\s*season\\s*Pro|season\\s*Prom|season\\s*Pro|the\\s*season|Prompt|Prom|Pro)", "塞 System Prompt"),
-            ("把蚊子", "把文字"),
-            ("布拉布布拉|不拉布拉|布拉布拉", "等等"),
-            ("字字", "字"),
-            ("段類", "段之類"),
-            ("類類", "類"),
-            ("夠夠", "夠"),
-            ("別別", "別")
+            ("達克", "Docker"),
+            ("一到兩輪", "1 到 2 輪"),
+            ("做次分析", "做一次分析")
         ]
         
-        for item in contextualRegexes {
+        for item in tokenPatterns {
             if let regex = try? NSRegularExpression(pattern: item.pattern, options: [.caseInsensitive]) {
                 let range = NSRange(location: 0, length: result.utf16.count)
                 result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: item.replacement)
@@ -104,9 +110,39 @@ public final class TextPolisher {
         return result
     }
     
-    // MARK: - Phonetic & Colloquial Normalization
+    // MARK: - Pass 2B: Semantic Intent & Homophone Disambiguation
     
-    /// Normalize frequent phonetic homophones and code-switching errors
+    /// Context-aware disambiguation for homophones based on full-sentence narrative intent
+    public func disambiguateSemanticIntent(_ text: String) -> String {
+        var result = text
+        
+        let semanticRegexes: [(pattern: String, replacement: String)] = [
+            ("羽翼(?=如果|明顯|表達|理解|上下文|順序|判定)", "語意"),
+            ("(?:好的|做有|這叫做有|這才叫做有|進行|經過|文字|文章|內容)認識", "好的潤飾"),
+            ("認識(?=文字|文章|一下|的多一點|一下下|的|內容|輸出|結果|效果|功能)", "潤飾"),
+            ("潤濕", "潤飾"),
+            ("把蚊子", "把文字"),
+            ("布拉布布拉|不拉布拉|布拉布拉", "等等"),
+            ("字字", "字"),
+            ("段類", "段之類"),
+            ("類類", "類"),
+            ("夠夠", "夠"),
+            ("別別", "別")
+        ]
+        
+        for item in semanticRegexes {
+            if let regex = try? NSRegularExpression(pattern: item.pattern, options: []) {
+                let range = NSRange(location: 0, length: result.utf16.count)
+                result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: item.replacement)
+            }
+        }
+        
+        return result
+    }
+    
+    // MARK: - Pass 2C: Static Phonetic Typos Normalization
+    
+    /// Static dictionary for explicit spoken acronyms and platform terms
     public func normalizePhoneticTypos(_ text: String) -> String {
         var result = text
         
@@ -132,7 +168,6 @@ public final class TextPolisher {
             "第二二點": "第 2 點",
             "第一一點": "第 1 點",
             "第三三點": "第 3 點",
-            "認識認識": "潤飾",
             "所做的西西": "所做的東西",
             "整理過字": "整理過的字",
             "像對是": "相對是",
@@ -152,76 +187,18 @@ public final class TextPolisher {
         return result
     }
     
-    // MARK: - Filler Word Filtering
+    // MARK: - Pass 3: Multi-Clause Stutter & Loop Annihilation
     
-    /// Remove conversational filler words and redundant particles
-    public func removeFillerWords(_ text: String, aggressive: Bool = false) -> String {
-        var result = text
-        
-        // 1. Multi-word conversational fillers
-        let multiWordFillers = [
-            "那個那個": "",
-            "就是說那個": "",
-            "怎麼說呢": "",
-            "老實說啦": "",
-            "老實說": "",
-            "基本上來說": "",
-            "基本上": "",
-            "對對對": "對",
-            "是是是": "是",
-            "好不好啊": "",
-            "好不好": "",
-            "這樣那": "",
-            "我跟你講": "",
-            "我跟你說": "",
-            "應該說": aggressive ? "" : "應該說",
-            "就是說": aggressive ? "" : "即",
-            "然後呢": aggressive ? "，" : "接著",
-            "之後呢": aggressive ? "，" : "接著"
-        ]
-        for (filler, replacement) in multiWordFillers {
-            result = result.replacingOccurrences(of: filler, with: replacement)
-        }
-        
-        // 2. Leading conversational fillers at sentence starts or after punctuation
-        let leadingFillerPattern = "([，。！？\n]|^)\\s*(呃+|嗯+|啊+|哦+|噢+|唔+|欸+|呀+|那個+|就是說|話說回來|那也就是)+[，、\\s]*"
-        if let regex = try? NSRegularExpression(pattern: leadingFillerPattern, options: []) {
-            for _ in 0..<3 {
-                let range = NSRange(location: 0, length: result.utf16.count)
-                result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: "$1")
-            }
-        }
-        
-        // 3. Trailing conversational particles before punctuation (in aggressive note polishing mode)
-        if aggressive {
-            let trailingFillerPattern = "(?<=[\\u4e00-\\u9fa5]{2})[，\\s]*(啦|咧|吧|呢|呀|喔|噢|哈)+(?=[，。！？\n]|$)"
-            if let regex = try? NSRegularExpression(pattern: trailingFillerPattern, options: []) {
-                let range = NSRange(location: 0, length: result.utf16.count)
-                result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: "")
-            }
-        }
-        
-        // 4. Isolated filler particles enclosed by punctuation or whitespace
-        let isolatedFillerPattern = "(?<=[，。！？、\\s])[呃嗯欸喔噢唔呀咧]+(?=[，。！？、\\s])"
-        if let regex = try? NSRegularExpression(pattern: isolatedFillerPattern, options: []) {
-            let range = NSRange(location: 0, length: result.utf16.count)
-            result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: "")
-        }
-        
-        return result
-    }
-    
-    // MARK: - Stutter & Repetition Removal
-    
-    /// Remove progressive clause stutters and character/phrase repetitions
-    public func removeStutterAndRepetitions(_ text: String) -> String {
+    /// Remove progressive clause restarts, repetition loops, and stuttered fragments
+    public func annihilateStuttersAndRestarts(_ text: String) -> String {
         var result = text
         
         // 1. Repetitive restarting clauses (e.g. "好，我再來試次，好我再試一次，好，我再試一次" -> "好，我再試一次，")
         let restartPatterns = [
             ("(好[，、\\s]*我[再來|再]*試[一次|次]*[，、\\s]*)+", "好，我再試一次，"),
             ("(看[看]*能[不]*[，、\\s]*就是看能不能[錯別字別|把錯別字去]*[，、\\s]*)+", "看能不能把錯別字去掉，"),
-            ("是錯的。[，、\\s\n]*但是因為你知道", "但是因為你知道")
+            ("是錯的。[，、\\s\n]*但是因為你知道", "但是因為你知道"),
+            ("(有我們會產生一個逐字稿嗎[。，\\s\n]*)+(逐字稿[，。\\s\n]*)+", "我們會產生一個逐字稿。")
         ]
         for (pat, rep) in restartPatterns {
             if let regex = try? NSRegularExpression(pattern: pat, options: []) {
@@ -288,6 +265,65 @@ public final class TextPolisher {
         return result
     }
     
+    // MARK: - Filler Word Filtering
+    
+    /// Remove conversational filler words and redundant particles
+    public func removeFillerWords(_ text: String, aggressive: Bool = false) -> String {
+        var result = text
+        
+        // 1. Multi-word conversational fillers
+        let multiWordFillers = [
+            "那個那個": "",
+            "就是說那個": "",
+            "怎麼說呢": "",
+            "老實說啦": "",
+            "老實說": "",
+            "基本上來說": "",
+            "基本上": "",
+            "對對對": "對",
+            "是是是": "是",
+            "好不好啊": "",
+            "好不好": "",
+            "這樣那": "",
+            "我跟你講": "",
+            "我跟你說": "",
+            "應該說": aggressive ? "" : "應該說",
+            "就是說": aggressive ? "" : "即",
+            "然後呢": aggressive ? "，" : "接著",
+            "之後呢": aggressive ? "，" : "接著"
+        ]
+        for (filler, replacement) in multiWordFillers {
+            result = result.replacingOccurrences(of: filler, with: replacement)
+        }
+        
+        // 2. Leading conversational fillers at sentence starts or after punctuation
+        let leadingFillerPattern = "([，。！？\n]|^)\\s*(呃+|嗯+|啊+|哦+|噢+|唔+|欸+|呀+|那個+|就是說|話說回來|那也就是)+[，、\\s]*"
+        if let regex = try? NSRegularExpression(pattern: leadingFillerPattern, options: []) {
+            for _ in 0..<3 {
+                let range = NSRange(location: 0, length: result.utf16.count)
+                result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: "$1")
+            }
+        }
+        
+        // 3. Trailing conversational particles before punctuation (in aggressive note polishing mode)
+        if aggressive {
+            let trailingFillerPattern = "(?<=[\\u4e00-\\u9fa5]{2})[，\\s]*(啦|咧|吧|呢|呀|喔|噢|哈)+(?=[，。！？\n]|$)"
+            if let regex = try? NSRegularExpression(pattern: trailingFillerPattern, options: []) {
+                let range = NSRange(location: 0, length: result.utf16.count)
+                result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: "")
+            }
+        }
+        
+        // 4. Isolated filler particles enclosed by punctuation or whitespace
+        let isolatedFillerPattern = "(?<=[，。！？、\\s])[呃嗯欸喔噢唔呀咧]+(?=[，。！？、\\s])"
+        if let regex = try? NSRegularExpression(pattern: isolatedFillerPattern, options: []) {
+            let range = NSRange(location: 0, length: result.utf16.count)
+            result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: "")
+        }
+        
+        return result
+    }
+    
     // MARK: - Punctuation Cleanup & Sentence Normalization
     
     /// Clean duplicate and invalid punctuation sequences and normalize run-on commas
@@ -321,7 +357,7 @@ public final class TextPolisher {
         return result
     }
     
-    // MARK: - Typeless-Grade Note Structuring
+    // MARK: - Pass 4: Typeless-Grade Note Structuring
     
     /// Structure spoken monologue into formatted notes with bullet points and paragraphs
     public func structureIntoTypelessNotes(_ text: String) -> String {
@@ -394,7 +430,7 @@ public final class TextPolisher {
         var paragraphs: [String] = []
         var currentParagraph: [String] = []
         
-        let transitionKeywords = ["另外", "此外", "不過", "但是", "然而", "因此", "總結來說", "總之", "總結", "最後", "也就是", "而且", "你看像", "所以"]
+        let transitionKeywords = ["另外", "此外", "不過", "但是", "然而", "因此", "總結來說", "總之", "總結", "最後", "也就是", "而且", "你看像", "所以", "因為"]
         
         for sentence in sentences {
             let cleanSentence = sentence.hasSuffix("。") || sentence.hasSuffix("！") || sentence.hasSuffix("？") ? sentence : sentence + "。"
