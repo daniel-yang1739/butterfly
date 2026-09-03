@@ -10,7 +10,7 @@ public enum SlidingDeltaAction: Equatable, Sendable {
     case noChange
 }
 
-/// Thread-safe Cumulative Streaming & Pause-Gated Refiner Buffer (Zero Avalanche Guarantee)
+/// Thread-safe Cumulative Streaming & Serialized Pause-Gated Refiner (Zero Freeze & Zero Avalanche)
 public final class SlidingWindowBuffer: @unchecked Sendable {
     private let lock = NSLock()
     
@@ -19,6 +19,9 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
     
     /// Confirmed historical text locked on pauses
     public private(set) var frozenText: String = ""
+    
+    /// Flag to guarantee strictly serialized, non-overlapping refinement passes
+    private var isPolishingActive: Bool = false
     
     /// Active unfrozen text currently being spoken
     public var activeTail: String {
@@ -42,6 +45,7 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
         defer { lock.unlock() }
         injectedCumulativeText = ""
         frozenText = ""
+        isPolishingActive = false
     }
     
     /// Returns the complete transcribed text
@@ -84,20 +88,41 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
             } else if backspaces > 0 {
                 return .replaceTail(backspaces: backspaces, replacement: replacement)
             }
+        } else {
+            // 3. CRITICAL ANTI-FREEZE RECOVERY:
+            // If backspaces > maxBackspaceLimit (ASR modified text far in the past that was already frozen),
+            // NEVER block or freeze typing! Keep the existing screen text intact, extract only newly appended suffix,
+            // and continue streaming forward seamlessly!
+            if normalized.count > injectedCumulativeText.count {
+                let extraCount = normalized.count - injectedCumulativeText.count
+                let newSuffix = String(normalized.suffix(extraCount))
+                if !newSuffix.isEmpty {
+                    injectedCumulativeText += newSuffix
+                    return .append(text: newSuffix)
+                }
+            } else {
+                // If length is the same or shorter, update internal state to stay synchronized
+                injectedCumulativeText = normalized
+            }
         }
         
         return .noChange
     }
     
-    // MARK: - Phase 2: Pause-Gated Refinement (Triggered on ~350ms Silence)
+    // MARK: - Phase 2: Serialized Pause-Gated Refinement (Strict 1-at-a-time Model Queue)
     
     /// Triggered when the speaker naturally pauses (e.g. 350ms silence)
     /// Refines the active text with domain vocabulary, Pangu spacing, numbers & units.
+    /// Strictly serialized: Only allows ONE refinement pass at a time.
     public func onPauseTriggered() -> SlidingDeltaAction {
         lock.lock()
         defer { lock.unlock() }
         
         guard !injectedCumulativeText.isEmpty else { return .noChange }
+        guard !isPolishingActive else { return .noChange }
+        
+        isPolishingActive = true
+        defer { isPolishingActive = false }
         
         // Refine with Mode 1 live dictation polisher (Pangu spacing, numbers, tech terms like Context)
         let refined = TextPolisher.shared.polish(injectedCumulativeText, mode: .liveStream)
