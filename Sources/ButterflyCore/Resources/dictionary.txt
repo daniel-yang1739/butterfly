@@ -1,0 +1,325 @@
+# 🦋 Butterfly Custom Tech Dictionary (~/.config/butterfly/dictionary.txt)
+# Curated Software Engineering, InfoSec & Architecture Vocabulary
+# Lines starting with # are comments and will be ignored.
+
+# --- Git & Version Control ---
+Git
+GitHub
+GitLab
+Commit
+Branch
+Checkout
+Rebase
+Merge
+Squash
+Cherry-pick
+Pull Request
+Code Review
+Hotfix
+Monorepo
+Repository
+Stash
+Diff
+
+# --- Daily Dev & Team Workflow ---
+Agile
+Scrum
+Sprint
+Standup
+Backlog
+Milestone
+Roadmap
+Issue
+Bug
+Hotfix
+Refactor
+Hardcode
+Deprecated
+Benchmark
+Tech Debt
+Proof of Concept
+
+# --- System Architecture & Design ---
+Architecture
+Frontend
+Backend
+Fullstack
+Microservice
+Monolith
+Serverless
+API
+RESTful
+GraphQL
+gRPC
+Protobuf
+Webhook
+Payload
+Middleware
+Gateway
+Proxy
+Reverse Proxy
+Load Balancer
+High Availability
+Scalability
+Throughput
+Latency
+Bottleneck
+Concurrency
+Asynchronous
+Thread
+
+# --- Common Service, Class & Component Names ---
+Translator
+Manager
+Sensor
+Agent
+Service
+Controller
+Handler
+Provider
+Factory
+Builder
+Adapter
+Facade
+Proxy
+Gateway
+Router
+Dispatcher
+Interceptor
+Filter
+Validator
+Sanitizer
+Coordinator
+Orchestrator
+Scheduler
+Worker
+Consumer
+Producer
+Publisher
+Subscriber
+Emitter
+Listener
+Observer
+Hook
+Repository
+Registry
+Store
+Cache
+Buffer
+Queue
+Serializer
+Deserializer
+Encoder
+Decoder
+Formatter
+Parser
+Client
+Server
+Engine
+Driver
+Executor
+Detector
+Collector
+Aggregator
+Monitor
+Watcher
+Notifier
+Resolver
+Matcher
+Transformer
+Converter
+Extractor
+Loader
+Injector
+Evaluator
+Inspector
+Generator
+Reporter
+
+# --- Cybersecurity & InfoSec (資安領域) ---
+Threat Model
+Threat Modeling
+Zero Trust
+Defense in Depth
+Least Privilege
+Attack Vector
+Attack Surface
+Vulnerability
+Exploit
+Zero-day
+CVE
+Penetration Testing
+Pentest
+Red Team
+Blue Team
+Firewall
+WAF
+IDS
+IPS
+SIEM
+SOC
+DDoS
+Phishing
+Malware
+Ransomware
+Man-in-the-Middle
+MITM
+Spoofing
+SQL Injection
+XSS
+CSRF
+SSRF
+RCE
+Authentication
+Authorization
+OAuth
+OIDC
+SAML
+SSO
+MFA
+2FA
+Authenticator
+JWT
+Token
+API Key
+Credential
+Secret
+Vault
+KMS
+HSM
+Encryption
+Decryption
+Hash
+Salt
+Bcrypt
+SHA-256
+RSA
+AES
+PKI
+SSL
+TLS
+HTTPS
+Certificate
+RBAC
+Audit
+Compliance
+SOC 2
+ISO 27001
+GDPR
+
+# --- DevOps, Cloud & Infrastructure ---
+Cloud
+AWS
+GCP
+Azure
+Cloudflare
+Docker
+Container
+Kubernetes
+Pod
+Cluster
+Helm
+Ingress
+Terraform
+CI/CD
+Pipeline
+GitHub Actions
+Jenkins
+Production
+Staging
+Sandbox
+Localhost
+Telemetry
+Metrics
+Logging
+Tracing
+Grafana
+Prometheus
+Healthcheck
+
+# --- Database & Storage ---
+Database
+SQL
+NoSQL
+PostgreSQL
+MySQL
+SQLite
+MongoDB
+Redis
+ORM
+Prisma
+Sharding
+Replication
+Index
+Schema
+Migration
+Transaction
+Connection Pool
+Vector Database
+
+# --- Web & Frontend Technologies ---
+JavaScript
+TypeScript
+React
+Next.js
+Vue
+Angular
+Svelte
+Tailwind CSS
+HTML
+CSS
+DOM
+Node.js
+Bun
+WebAssembly
+State Management
+Props
+Component
+SSR
+SPA
+
+# --- Apple, macOS & Native Ecosystem ---
+Apple Silicon
+Neural Engine
+Xcode
+Swift
+SwiftUI
+AppKit
+UIKit
+SPM
+CocoaPods
+TestFlight
+Metal
+CoreGraphics
+EventTap
+
+# --- Programming Languages & Runtimes ---
+Python
+Rust
+Golang
+Java
+Kotlin
+C++
+Ruby
+PHP
+
+# --- AI, ML & LLM Engineering ---
+Antigravity
+Agent
+Subagent
+Slash Command
+System Prompt
+Context Window
+Token
+Tokenizer
+Embeddings
+Fine-tuning
+RAG
+LoRA
+Few-shot
+Zero-shot
+Multimodal
+Whisper
+PyTorch
+Hugging Face
+LangChain

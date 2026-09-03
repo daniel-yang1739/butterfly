@@ -34,12 +34,36 @@ public struct TechDictionary: Sendable {
             }
     }
     
-    /// Combined, deduplicated vocabulary loaded strictly from user dictionary (~/.config/butterfly/dictionary.txt)
+    /// Ensures user dictionary file exists at ~/.config/butterfly/dictionary.txt, initializing it from bundled resource if missing
+    public static func ensureUserDictionaryExists() {
+        let fileManager = FileManager.default
+        let path = userDictionaryURL.path
+        if !fileManager.fileExists(atPath: path) {
+            let dir = userDictionaryURL.deletingLastPathComponent()
+            try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+            if let bundledURL = Bundle.module.url(forResource: "dictionary", withExtension: "txt"),
+               let bundledContent = try? String(contentsOf: bundledURL, encoding: .utf8) {
+                try? bundledContent.write(to: userDictionaryURL, atomically: true, encoding: .utf8)
+            }
+        }
+    }
+    
+    /// Dynamically loads standard software engineering vocabulary from bundled repository resource (Sources/ButterflyCore/Resources/dictionary.txt)
+    public static func loadBundledVocabulary() -> [String] {
+        guard let url = Bundle.module.url(forResource: "dictionary", withExtension: "txt"),
+              let content = try? String(contentsOf: url, encoding: .utf8) else {
+            return []
+        }
+        return parseVocabulary(from: content)
+    }
+
+    /// Combined, deduplicated vocabulary loaded from repository bundled dictionary and user overrides (~/.config/butterfly/dictionary.txt)
     public static var allVocabulary: [String] {
+        ensureUserDictionaryExists()
         var set = Set<String>()
         var result: [String] = []
         
-        for term in loadUserVocabulary() {
+        for term in loadBundledVocabulary() + loadUserVocabulary() {
             if !set.contains(term) {
                 set.insert(term)
                 result.append(term)
