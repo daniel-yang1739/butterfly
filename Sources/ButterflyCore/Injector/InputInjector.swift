@@ -18,11 +18,14 @@ public final class InputInjector: @unchecked Sendable {
         let pasteboard = NSPasteboard.general
         let previousString = pasteboard.string(forType: .string)
         
-        // 1. Copy to pasteboard so user has it ready
+        // 1. Copy to pasteboard so user has it ready in clipboard
         pasteboard.clearContents()
         pasteboard.setString(cleanText, forType: .string)
         
-        // 2. Direct Unicode typing into focused cursor (100% guaranteed delivery across all macOS apps)
+        // Short pause to ensure focus settlement
+        try? await Task.sleep(nanoseconds: 30_000_000) // 30ms
+        
+        // 2. Direct Chunked Unicode typing into focused cursor (100% guaranteed delivery across all macOS apps)
         typeUnicodeString(cleanText)
         
         // 3. Optional clipboard restoration after a generous safety window (2s)
@@ -37,18 +40,29 @@ public final class InputInjector: @unchecked Sendable {
         return true
     }
     
-    /// Live incremental Unicode typing directly into cursor via CGEvent (without touching pasteboard)
+    /// Live incremental Unicode typing directly into cursor via CGEvent (chunked safely to respect macOS 20-char limit)
     public func typeUnicodeString(_ string: String) {
         let utf16Chars = Array(string.utf16)
         guard !utf16Chars.isEmpty else { return }
         
-        if let eventDown = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: true),
-           let eventUp = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: false) {
-            eventDown.keyboardSetUnicodeString(stringLength: utf16Chars.count, unicodeString: utf16Chars)
-            eventDown.post(tap: .cghidEventTap)
+        let chunkSize = 15
+        var index = 0
+        while index < utf16Chars.count {
+            let end = min(index + chunkSize, utf16Chars.count)
+            let chunk = Array(utf16Chars[index..<end])
             
-            eventUp.keyboardSetUnicodeString(stringLength: utf16Chars.count, unicodeString: utf16Chars)
-            eventUp.post(tap: .cghidEventTap)
+            if let eventDown = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: true),
+               let eventUp = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: false) {
+                eventDown.keyboardSetUnicodeString(stringLength: chunk.count, unicodeString: chunk)
+                eventDown.post(tap: .cghidEventTap)
+                
+                eventUp.keyboardSetUnicodeString(stringLength: chunk.count, unicodeString: chunk)
+                eventUp.post(tap: .cghidEventTap)
+            }
+            index = end
+            if index < utf16Chars.count {
+                usleep(2000) // 2ms safety pause between chunks
+            }
         }
     }
     
