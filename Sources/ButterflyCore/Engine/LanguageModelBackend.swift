@@ -225,30 +225,16 @@ public final class LanguageModelCoordinator: @unchecked Sendable {
             return ""
         }
         
-        let dispatchTimeStr = LocalSLMInferenceBackend.timeFormatter.string(from: Date())
-        let startTime = DispatchTime.now()
-        
         let activeModel = ModelManager.shared.activeSLMModel
+        let systemPrompt = SystemPrompt.shared.prompt(for: .structuredNote)
+        let backend = LocalSLMInferenceBackend(spec: activeModel)
+        
+        if let result = try? await backend.restructureNote(transcript: transcript, systemPrompt: systemPrompt), !result.isEmpty {
+            return result
+        }
+        
         let polished = TextPolisher.shared.polish(transcript, mode: .structuredNote)
-        let traditional = OpenCCTranslator.shared.convert(polished)
-        
-        let endTime = DispatchTime.now()
-        let receiveTimeStr = LocalSLMInferenceBackend.timeFormatter.string(from: Date())
-        let elapsedMs = Double(endTime.uptimeNanoseconds - startTime.uptimeNanoseconds) / 1_000_000.0
-        
-        let samplePreview = transcript.count > 50 ? String(transcript.prefix(50)) + "..." : transcript
-        print("""
-        
-        ┌─── 🧠 [Mode 2 Note Telemetry: \(activeModel.displayName)] ──────────────────────────────
-        │ ⏰ Dispatched Time  : \(dispatchTimeStr)
-        │ 📥 Input Monologue   : (\(transcript.count) chars) "\(samplePreview)"
-        │ ⚡ Compute Engine    : Apple Silicon Unified Core (Zero-Latency Engine)
-        │ ⏰ Received Time    : \(receiveTimeStr) (⏱️ Total Latency: \(String(format: "%.1f", elapsedMs)) ms)
-        │ 📤 Output Note Size  : (\(traditional.count) chars)
-        └─────────────────────────────────────────────────────────────────────────────
-        """)
-        
-        return traditional
+        return OpenCCTranslator.shared.convert(polished)
     }
     
     /// Refine live streaming clause using active SLM model & SYSTEM_PROMPT.md
