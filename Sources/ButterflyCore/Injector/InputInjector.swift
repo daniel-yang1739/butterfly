@@ -66,7 +66,7 @@ public final class InputInjector: @unchecked Sendable {
                 eventDown.post(tap: .cghidEventTap)
                 eventUp.post(tap: .cghidEventTap)
             }
-            usleep(1500) // 1.5ms delay to ensure event queues process each backspace
+            usleep(3000) // 3ms delay to ensure OS text field event queues process each backspace
         }
     }
     
@@ -79,6 +79,7 @@ public final class InputInjector: @unchecked Sendable {
         case .replaceTail(let backspaces, let replacement):
             if backspaces > 0 {
                 sendBackspaces(count: backspaces)
+                usleep(5000) // 5ms settlement delay to guarantee clean cursor state before typing replacement
             }
             if !replacement.isEmpty {
                 typeUnicodeString(replacement)

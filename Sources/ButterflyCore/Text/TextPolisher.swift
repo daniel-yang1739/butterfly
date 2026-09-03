@@ -33,9 +33,10 @@ public final class TextPolisher {
         // For Mode 1 (Live Streaming Dictation):
         // 100% FAITHFUL TO USER SPEECH!
         // Apply number/unit conversions, Traditional Chinese, and tech dictionary restoration,
-        // but ZERO word deletions or stutter filtering so natural repetitions are preserved!
+        // while intelligently adding natural punctuation at 1.0s pause boundaries!
         if mode == .liveStream {
-            let spaced = TextFormatter.shared.insertSpacingBetweenCJKAndAlphanumeric(pass2)
+            let punctuated = enrichNaturalPausePunctuation(pass2)
+            let spaced = TextFormatter.shared.insertSpacingBetweenCJKAndAlphanumeric(punctuated)
             return spaced.trimmingCharacters(in: .whitespacesAndNewlines)
         }
         
@@ -101,7 +102,11 @@ public final class TextPolisher {
             // Units, Storage & Hardware
             ("messMessa\\s*messge\\s*mess\\s*RadarMadara|RadarMadara\\s*game\\s*getMadara", "Message"),
             ("Mata\\s*bite|Meta\\s*bite", "MB"),
-            ("音譜|應譜", "Input"),
+            ("(?i)(?:in\\s*泊|音譜|應譜|音泊|硬譜|硬泊|in\\s*put|im\\s*put)\\s*(?:裡面|中|框|視窗)?", "Input"),
+            ("(?i)\\b在\\s*IP\\s*(?:裡面|中|框|輸入框)\\b", "在 Input 裡面"),
+            ("(?i)\\bIP\\s*(?:裡面|中|框|輸入框|輸入區)\\b", "Input 裡面"),
+            ("(?i)\\bIP\\s*這個字\\b", "Input 這個字"),
+            ("(?i)\\bin\\s*泊\\b", "Input"),
             ("奧普|奧特普", "Output"),
             ("L\\s*O\\s*C\\s*O|L\\s*O\\s*C\\s*A\\s*L|(?i)\\bLoco\\b", "Local"),
             ("壞\\s*List|What\\s*last|what\\s*list|壞名單", "Whitelist"),
@@ -453,5 +458,47 @@ public final class TextPolisher {
         
         // 2. Default: Maintain large, cohesive thematic paragraphs without arbitrary sentence fragmentation
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    
+    // MARK: - Pass 2D: Natural Spoken Pause Punctuation
+    
+    /// Restore natural sentence punctuation for spoken pauses and modal particles in Mode 1
+    public func enrichNaturalPausePunctuation(_ text: String) -> String {
+        var result = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !result.isEmpty else { return "" }
+        
+        // 1. Question particles -> '？'
+        let questionPatterns = [
+            "(?:對吧|對不對|好不好|怎麼樣|是不是|行不行|可不可以|對嗎|好嗎|是嗎|對阿|對啊|嗎|吧|呢)$"
+        ]
+        for p in questionPatterns {
+            if let regex = try? NSRegularExpression(pattern: p, options: []) {
+                let range = NSRange(location: 0, length: result.utf16.count)
+                if regex.firstMatch(in: result, options: [], range: range) != nil {
+                    if !result.hasSuffix("？") && !result.hasSuffix("?") && !result.hasSuffix("！") && !result.hasSuffix("。") {
+                        result += "？"
+                        return result
+                    }
+                }
+            }
+        }
+        
+        // 2. Exclamation/emotion particles -> '！'
+        let exclamationPatterns = [
+            "(?:好奇怪喔|好奇怪阿|太棒了|太好了|天啊|哇|真假)$"
+        ]
+        for p in exclamationPatterns {
+            if let regex = try? NSRegularExpression(pattern: p, options: []) {
+                let range = NSRange(location: 0, length: result.utf16.count)
+                if regex.firstMatch(in: result, options: [], range: range) != nil {
+                    if !result.hasSuffix("！") && !result.hasSuffix("!") && !result.hasSuffix("？") && !result.hasSuffix("。") {
+                        result += "！"
+                        return result
+                    }
+                }
+            }
+        }
+        
+        return result
     }
 }
