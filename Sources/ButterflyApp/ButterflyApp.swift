@@ -434,11 +434,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             animationIndex = 0
             
             if mode == .liveStreaming {
-                self.statusItem.button?.title = " 🎙️ [00:00] 聆聽中 ·"
+                self.statusItem.button?.title = " 🎙️ [00:00] Streaming ·"
             } else {
-                self.statusItem.button?.title = " 🔴 [00:00] 思考錄音中 ·"
-                // Type dynamic placeholder indicator directly into user's focused input box
-                let placeholder = " 🔴 [思考錄音中... 按 Enter 產出筆記]"
+                self.statusItem.button?.title = " 🔴 [00:00] Recording ·"
+                // Type dynamic placeholder indicator directly into user's focused input box in English
+                let placeholder = " 🔴 [Listening... Press Enter to polish]"
                 InputInjector.shared.typeUnicodeString(placeholder)
                 mode2PlaceholderText = placeholder
             }
@@ -455,9 +455,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     
                     if self.latestTranscript.isEmpty {
                         if self.activeMode == .recordAndPolish {
-                            self.statusItem.button?.title = " 🔴 \(timeStr) 思考錄音中 \(dots)"
+                            self.statusItem.button?.title = " 🔴 \(timeStr) Recording \(dots)"
                         } else {
-                            self.statusItem.button?.title = " 🎙️ \(timeStr) 聆聽中 \(dots)"
+                            self.statusItem.button?.title = " 🎙️ \(timeStr) Streaming \(dots)"
                         }
                     }
                 }
@@ -487,7 +487,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         recordingTimer = nil
         
         let mode = activeMode
-        self.statusItem.button?.title = (mode == .recordAndPolish) ? " 🧠 筆記深度重構中..." : " ⏳ Finalizing..."
+        self.statusItem.button?.title = (mode == .recordAndPolish) ? " 🧠 Polishing notes..." : " ⏳ Finalizing..."
         self.updateMenu()
         
         // Asynchronously flush audio buffers and retrieve full finalized transcript
