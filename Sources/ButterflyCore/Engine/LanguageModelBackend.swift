@@ -54,11 +54,18 @@ public final class LocalSLMInferenceBackend: LanguageModelBackend {
     public func restructureNote(transcript: String, systemPrompt: String) async throws -> String {
         let modelPath = ModelManager.shared.localPath(for: spec)
         
-        // 1. If local GGUF model weights are present on disk, execute local inference
+        // 1. If local GGUF model weights are present on disk, execute local SLM inference
         if FileManager.default.fileExists(atPath: modelPath.path) {
-            let prompt = buildChatMLPrompt(transcript: transcript, systemPrompt: systemPrompt)
+            let prompt = spec.id.contains("llama")
+                ? buildLlama3Prompt(transcript: transcript, systemPrompt: systemPrompt)
+                : buildChatMLPrompt(transcript: transcript, systemPrompt: systemPrompt)
+            
+            print("🧠 Mode 2: Dispatched full \(transcript.count)-char monologue into \(spec.displayName)...")
             if let output = try? await executeLocalCLI(modelPath: modelPath.path, prompt: prompt), !output.isEmpty {
+                print("✨ Mode 2: \(spec.displayName) successfully restructured into \(output.count) chars of structured notes!")
                 return OpenCCTranslator.shared.convert(output)
+            } else {
+                print("⚠️ Mode 2: Local SLM returned empty, falling back to Cognitive Rule Engine")
             }
         }
         

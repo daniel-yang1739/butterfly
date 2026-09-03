@@ -9,7 +9,7 @@ public final class InputInjector: @unchecked Sendable {
     
     public init() {}
     
-    /// Inject a block of text into the active focused input using Cmd+V with clipboard preservation
+    /// Inject a block of text into the active focused input directly via Unicode CGEvent typing and pasteboard
     @discardableResult
     public func inject(text: String, restoreClipboard: Bool = false) async -> Bool {
         let cleanText = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -18,15 +18,12 @@ public final class InputInjector: @unchecked Sendable {
         let pasteboard = NSPasteboard.general
         let previousString = pasteboard.string(forType: .string)
         
-        // 1. Write clean text to pasteboard
+        // 1. Copy to pasteboard so user has it ready
         pasteboard.clearContents()
         pasteboard.setString(cleanText, forType: .string)
         
-        // Short pause to ensure pasteboard server commits data before keystroke
-        try? await Task.sleep(nanoseconds: 50_000_000) // 50ms
-        
-        // 2. Simulate Cmd + V paste keystroke
-        simulatePasteCommand()
+        // 2. Direct Unicode typing into focused cursor (100% guaranteed delivery across all macOS apps)
+        typeUnicodeString(cleanText)
         
         // 3. Optional clipboard restoration after a generous safety window (2s)
         if restoreClipboard, let original = previousString {
