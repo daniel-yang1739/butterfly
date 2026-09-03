@@ -33,9 +33,10 @@ public final class TextPolisher {
         // For Mode 1 (Live Streaming Dictation):
         // 100% FAITHFUL TO USER SPEECH!
         // Apply number/unit conversions, Traditional Chinese, and tech dictionary restoration,
-        // while intelligently adding natural punctuation at 1.0s pause boundaries!
+        // while intelligently adding natural punctuation at clause boundaries!
         if mode == .liveStream {
-            let punctuated = enrichNaturalPausePunctuation(pass2)
+            let cleaned = cleanIntraWordPunctuation(pass2)
+            let punctuated = enrichNaturalPausePunctuation(cleaned)
             let spaced = TextFormatter.shared.insertSpacingBetweenCJKAndAlphanumeric(punctuated)
             return spaced.trimmingCharacters(in: .whitespacesAndNewlines)
         }
@@ -552,6 +553,43 @@ public final class TextPolisher {
         result = result.replacingOccurrences(of: "，，", with: "，")
         result = result.replacingOccurrences(of: "。，", with: "。")
         result = result.replacingOccurrences(of: "，。", with: "。")
+        
+        return result
+    }
+    
+    // MARK: - Pass 2E: Clean Intra-Word Punctuation
+    
+    /// Clean erroneous punctuation inserted between single characters within standard words
+    public func cleanIntraWordPunctuation(_ text: String) -> String {
+        var result = text
+        
+        let intraWordPatterns = [
+            ("效[，。！？、]+果", "效果"),
+            ("但[，。！？、]+是", "但是"),
+            ("這[，。！？、]+個", "這個"),
+            ("這[，。！？、]+樣", "這樣"),
+            ("標[，。！？、]+點[，。！？、]+符[，。！？、]+號", "標點符號"),
+            ("標[，。！？、]+點", "標點"),
+            ("符[，。！？、]+號", "符號"),
+            ("對[，。！？、]+不[，。！？、]+對", "對不對"),
+            ("好[，。！？、]+不[，。！？、]+好", "好不好"),
+            ("怎[，。！？、]+麼[，。！？、]+樣", "怎麼樣"),
+            ("是[，。！？、]+不[，。！？、]+是", "是不是"),
+            ("甚[，。！？、]+麼|什[，。！？、]+麼", "什麼"),
+            ("哪[，。！？、]+個|那[，。！？、]+個", "那個"),
+            ("所[，。！？、]+以", "所以"),
+            ("然[，。！？、]+後", "然後"),
+            ("為[，。！？、]+什[，。！？、]+麼", "為什麼"),
+            ("調[，。！？、]+了[，。！？、]+什[，。！？、]+麼", "調了什麼"),
+            ("([，。！？])\\1+", "$1")
+        ]
+        
+        for (pattern, replacement) in intraWordPatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
+                let range = NSRange(location: 0, length: result.utf16.count)
+                result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: replacement)
+            }
+        }
         
         return result
     }
