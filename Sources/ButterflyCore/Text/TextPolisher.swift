@@ -30,19 +30,22 @@ public final class TextPolisher {
         pass2 = disambiguateSemanticIntent(pass2)
         pass2 = normalizePhoneticTypos(pass2)
         
-        // Pass 3: Multi-Clause Progressive Stutter & Loop Annihilation
+        // For Mode 1 (Live Streaming Dictation):
+        // 100% FAITHFUL TO USER SPEECH!
+        // Apply number/unit conversions, Traditional Chinese, and tech dictionary restoration,
+        // but ZERO word deletions or stutter filtering so natural repetitions are preserved!
+        if mode == .liveStream {
+            let spaced = TextFormatter.shared.insertSpacingBetweenCJKAndAlphanumeric(pass2)
+            return spaced.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        
+        // Pass 3 (Mode 2 Only): Multi-Clause Progressive Stutter & Loop Annihilation
         var pass3 = annihilateStuttersAndRestarts(pass2)
-        pass3 = removeFillerWords(pass3, aggressive: mode != .liveStream)
+        pass3 = removeFillerWords(pass3, aggressive: true)
         pass3 = cleanPunctuation(pass3)
         
-        // Pass 4: Typeless-Grade Structural Note Formatting
-        let structured: String
-        switch mode {
-        case .liveStream:
-            structured = pass3
-        case .structuredNote, .conciseSummary:
-            structured = structureIntoTypelessNotes(pass3)
-        }
+        // Pass 4 (Mode 2 Only): Typeless-Grade Structural Note Formatting
+        let structured = structureIntoTypelessNotes(pass3)
         
         // Step Final: Insert spacing between CJK and alphanumeric characters (Pangu Spacing)
         let formatted = TextFormatter.shared.insertSpacingBetweenCJKAndAlphanumeric(structured)
@@ -88,7 +91,8 @@ public final class TextPolisher {
             ("診斷\\s*(?:文字|錄音|文章|內容)", "整段內容"),
             ("診斷(?=[去做|分析|轉譯|處理])", "整段"),
             ("轉出轉進去", "轉進去"),
-            ("live\\s*saving|streamDreamin|Live\\s*Streaming\\s*streamDreamin", "Live Streaming"),
+            ("(?i)live\\s*(?:saving|dreaming|dreamin)|streamDreamin|Live\\s*Streaming\\s*streamDreamin", "Live Streaming"),
+            ("凹凸出|凹凸", "Output"),
             
             // Units, Storage & Hardware
             ("messMessa\\s*messge\\s*mess\\s*RadarMadara|RadarMadara\\s*game\\s*getMadara", "Message"),
