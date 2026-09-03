@@ -1,8 +1,9 @@
 import Foundation
+import os
 @preconcurrency import AVFoundation
 @preconcurrency import Speech
 
-/// Real-time live microphone speech recognition engine with multi-pass contextual biasing
+/// Real-time live microphone speech recognition engine with authentic single-source transcription
 public final class LiveSpeechEngine: NSObject, @unchecked Sendable, SFSpeechRecognizerDelegate {
     public static let shared = LiveSpeechEngine()
     
@@ -13,6 +14,13 @@ public final class LiveSpeechEngine: NSObject, @unchecked Sendable, SFSpeechReco
     
     public private(set) var isListening: Bool = false
     public var latestFullTranscript: String = ""
+    
+    private struct TranscriptState: Sendable {
+        var committed: [String] = []
+        var active: String = ""
+        var full: String = ""
+    }
+    private let stateLock = OSAllocatedUnfairLock(initialState: TranscriptState())
     
     public var onTranscriptUpdate: (@Sendable (String) -> Void)?
     public var onFullTranscriptUpdate: (@Sendable (String) -> Void)?
@@ -58,7 +66,11 @@ public final class LiveSpeechEngine: NSObject, @unchecked Sendable, SFSpeechReco
     public func startLiveListening() throws {
         guard !isListening else { return }
         
-        TranscriptAccumulator.shared.reset()
+        stateLock.withLock { state in
+            state.committed.removeAll()
+            state.active = ""
+            state.full = ""
+        }
         latestFullTranscript = ""
         
         recognitionTask?.cancel()
@@ -103,12 +115,25 @@ public final class LiveSpeechEngine: NSObject, @unchecked Sendable, SFSpeechReco
                 let traditional = OpenCCTranslator.shared.convert(raw)
                 let formatted = TextFormatter.shared.format(traditional)
                 
-                // Monotonically accumulate full text across pauses and sliding windows
-                let full = TranscriptAccumulator.shared.append(rawText: formatted)
-                self.latestFullTranscript = full
+                let currentFull = self.stateLock.withLock { state -> String in
+                    if result.isFinal {
+                        state.committed.append(formatted)
+                        state.active = ""
+                    } else {
+                        state.active = formatted
+                    }
+                    
+                    var all = state.committed
+                    if !state.active.isEmpty {
+                        all.append(state.active)
+                    }
+                    state.full = all.joined(separator: "，")
+                    return state.full
+                }
                 
+                self.latestFullTranscript = currentFull
                 self.onTranscriptUpdate?(formatted)
-                self.onFullTranscriptUpdate?(full)
+                self.onFullTranscriptUpdate?(currentFull)
             }
             
             if let error = error {
@@ -145,7 +170,9 @@ public final class LiveSpeechEngine: NSObject, @unchecked Sendable, SFSpeechReco
     /// Stop microphone recording and return 100% complete accumulated transcript
     @discardableResult
     public func stopLiveListening() async -> String {
-        guard isListening else { return TranscriptAccumulator.shared.getFullText() }
+        guard isListening else {
+            return stateLock.withLock { $0.full }
+        }
         isListening = false
         
         audioEngine.stop()
@@ -160,9 +187,16 @@ public final class LiveSpeechEngine: NSObject, @unchecked Sendable, SFSpeechReco
         recognitionTask?.cancel()
         recognitionTask = nil
         
-        let completeMonologue = TranscriptAccumulator.shared.getFullText()
-        latestFullTranscript = completeMonologue
+        let completeMonologue = stateLock.withLock { state -> String in
+            var all = state.committed
+            if !state.active.isEmpty {
+                all.append(state.active)
+            }
+            state.full = all.joined(separator: "，")
+            return state.full
+        }
         
+        latestFullTranscript = completeMonologue
         return completeMonologue
     }
 }

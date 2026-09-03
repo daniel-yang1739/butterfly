@@ -56,11 +56,20 @@ public final class TextPolisher {
         var result = text
         
         let tokenPatterns: [(pattern: String, replacement: String)] = [
-            // System Prompt variations
-            ("(?i)(?:secret|system|the\\s*season|season|stone|sistema)\\s*(?:stone|prom|prompt|pro)\\b", "System Prompt"),
+            // Fuzzy Mode 2 & Mode 1 phonetic variations (matches 冒著吐兔, 貓的兔, 夢的圖, 莫德圖, 墨得兔, etc.)
+            ("[貓冒墨莫夢帽][的德得著]*[兔圖吐土]+", "Mode 2"),
+            ("[貓冒墨莫夢帽][的德得著]*[萬玩完一1]+", "Mode 1"),
+            ("這兩個\\s*(?:mall|mode|毛|Mo)", "這兩個 Mode"),
+            ("第二個\\s*(?:ml|mode|毛|Mo)\\s*的?", "第二個 Mode "),
+            ("第一個\\s*(?:ml|mode|毛|Mo)\\s*的?", "第一個 Mode "),
+            
+            // System Prompt fuzzy variations (matches sister Prom, stone Prom, system Prom, season Prom, etc.)
+            ("(?i)(?:secret|system|sister|cister|the\\s*season|season|stone|sistema|sixteen)\\s*(?:stone|prom|prompt|pro|promt)\\b", "System Prompt"),
+            ("(?i)sister\\s*prom\\b", "System Prompt"),
             ("(?i)stone\\s*prom\\b", "System Prompt"),
             ("stone\\s*Prom", "System Prompt"),
-            ("塞\\s*(?:the\\s*season|season|system)?\\s*(?:prom|prompt|pro|stone)", "塞 System Prompt"),
+            ("sister\\s*Prom", "System Prompt"),
+            ("塞\\s*(?:the\\s*season|season|system|sister)?\\s*(?:prom|prompt|pro|stone)", "塞 System Prompt"),
             ("Theakston\\s*Brown|Theakston|brown\\s*所以", "System Prompt"),
             
             // Context & Token relations
@@ -75,12 +84,6 @@ public final class TextPolisher {
             ("診斷\\s*(?:文字|錄音|文章|內容)", "整段內容"),
             ("診斷(?=[去做|分析|轉譯|處理])", "整段"),
             ("轉出轉進去", "轉進去"),
-            
-            // Operating Modes
-            ("這兩個\\s*(?:mall|mode|毛|Mo)", "這兩個 Mode"),
-            ("第二個\\s*(?:ml|mode|毛|Mo)\\s*的?", "第二個 Mode "),
-            ("夢的圖|莫德圖|莫得圖", "Mode 2"),
-            ("莫德萬|莫得萬|夢的萬|墨的萬", "Mode 1"),
             ("live\\s*saving|streamDreamin|Live\\s*Streaming\\s*streamDreamin", "Live Streaming"),
             
             // Units, Storage & Hardware
@@ -193,7 +196,10 @@ public final class TextPolisher {
     public func annihilateStuttersAndRestarts(_ text: String) -> String {
         var result = text
         
-        // 1. Repetitive restarting clauses (e.g. "好，我再來試次，好我再試一次，好，我再試一次" -> "好，我再試一次，")
+        // 1. Sentence-level deduplication (removes duplicate clauses across the monologue)
+        result = deduplicateSentences(result)
+        
+        // 2. Repetitive restarting clauses (e.g. "好，我再來試次，好我再試一次，好，我再試一次" -> "好，我再試一次，")
         let restartPatterns = [
             ("(好[，、\\s]*我[再來|再]*試[一次|次]*[，、\\s]*)+", "好，我再試一次，"),
             ("(看[看]*能[不]*[，、\\s]*就是看能不能[錯別字別|把錯別字去]*[，、\\s]*)+", "看能不能把錯別字去掉，"),
@@ -207,7 +213,7 @@ public final class TextPolisher {
             }
         }
         
-        // 2. Progressive prefix clause stutter (e.g. "好我們來，好我們來測試" -> "好我們來測試")
+        // 3. Progressive prefix clause stutter (e.g. "好我們來，好我們來測試" -> "好我們來測試")
         let progressivePrefixPattern = "([，。！？\n\\s]|^)([\\u4e00-\\u9fa5A-Za-z0-9]{2,15})[，、\\s]+(?=\\2)"
         if let regex = try? NSRegularExpression(pattern: progressivePrefixPattern, options: []) {
             for _ in 0..<3 {
@@ -216,7 +222,7 @@ public final class TextPolisher {
             }
         }
         
-        // 3. Repeated full sentence deduplication (e.g. "盡可能地去呈現。盡可能地去呈現" -> "盡可能地去呈現。")
+        // 4. Repeated full sentence deduplication (e.g. "盡可能地去呈現。盡可能地去呈現" -> "盡可能地去呈現。")
         let sentenceRepeatPattern = "([^\\n。！？]{4,40}[。！？])[，、\\s]*\\1"
         if let regex = try? NSRegularExpression(pattern: sentenceRepeatPattern, options: []) {
             for _ in 0..<2 {
@@ -225,18 +231,11 @@ public final class TextPolisher {
             }
         }
         
-        // 4. Single character repeated 3+ times (e.g. "我我我" -> "我")
+        // 5. Single character repeated 3+ times (e.g. "我我我" -> "我")
         let triplePattern = "([\\u4e00-\\u9fa5])\\1{2,}"
         if let regex = try? NSRegularExpression(pattern: triplePattern, options: []) {
             let range = NSRange(location: 0, length: result.utf16.count)
             result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: "$1")
-        }
-        
-        // 5. Remove 2-character stutter pronouns/conjunctions at phrase starts (e.g. "我我覺得" -> "我覺得")
-        let cleanPattern = "([，。！？\n\\s]|^)(我|這|那|但|就|如|連|是|很|剛)\\2([\\u4e00-\\u9fa5])"
-        if let cleanRegex = try? NSRegularExpression(pattern: cleanPattern, options: []) {
-            let r = NSRange(location: 0, length: result.utf16.count)
-            result = cleanRegex.stringByReplacingMatches(in: result, options: [], range: r, withTemplate: "$1$2$3")
         }
         
         // 6. Two-character words repeated (e.g. "這個這個" -> "這個", "然後然後" -> "然後")
@@ -263,6 +262,30 @@ public final class TextPolisher {
         }
         
         return result
+    }
+    
+    /// Deduplicate identical or near-identical whole sentences across the monologue
+    private func deduplicateSentences(_ text: String) -> String {
+        let rawSentences = text.components(separatedBy: CharacterSet(charactersIn: "。！？\n"))
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        
+        var seenNormalized = Set<String>()
+        var cleaned: [String] = []
+        
+        for sentence in rawSentences {
+            let norm = sentence.replacingOccurrences(of: "，", with: "")
+                .replacingOccurrences(of: "、", with: "")
+                .replacingOccurrences(of: " ", with: "")
+            
+            if norm.count >= 4 && seenNormalized.contains(norm) {
+                continue
+            }
+            seenNormalized.insert(norm)
+            cleaned.append(sentence)
+        }
+        
+        return cleaned.joined(separator: "。")
     }
     
     // MARK: - Filler Word Filtering
