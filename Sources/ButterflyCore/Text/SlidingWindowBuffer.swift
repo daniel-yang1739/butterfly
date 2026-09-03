@@ -10,9 +10,15 @@ public enum SlidingDeltaAction: Equatable, Sendable {
     case noChange
 }
 
-/// Thread-safe, Index-Based Sliding Window Buffer with Full Context Awareness
-/// - Continuous speech: Streams forward smoothly in Active Gray without interruption
-/// - 1.0s Silence pause: Feeds full context to Polisher, refines only the active tail, and commits to Frozen White.
+/// Prepared refinement plan for Two-Phase Commit cursor synchronization
+public struct PreparedRefinement: Sendable {
+    public let action: SlidingDeltaAction
+    public let targetText: String
+    public let newFrozenIndex: Int
+}
+
+/// Thread-safe, Index-Based Sliding Window Buffer with Hardware-Locked Two-Phase Commit
+/// Prevents RAM pointer advancement from outpacing physical OS cursor keystroke injection.
 public final class SlidingWindowBuffer: @unchecked Sendable {
     private let lock = NSLock()
     
@@ -22,8 +28,8 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
     /// Character index demarcating Frozen Prefix (0..<frozenIndex) from Active Tail (frozenIndex...)
     public private(set) var frozenIndex: Int = 0
     
-    /// Flag to guarantee strictly serialized refinement
-    private var isPolishingActive: Bool = false
+    /// Mutex flag ensuring keystroke injection and buffer mutation are atomic
+    private var isCursorInjecting: Bool = false
     
     /// Maximum allowed backspaces in a single active tail refinement
     public let maxBackspaceLimit: Int
@@ -38,7 +44,7 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
         defer { lock.unlock() }
         screenText = ""
         frozenIndex = 0
-        isPolishingActive = false
+        isCursorInjecting = false
     }
     
     /// Returns the complete transcribed text
@@ -73,6 +79,9 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         
+        // If physical cursor is currently busy executing backspaces, defer to avoid race collision
+        guard !isCursorInjecting else { return .noChange }
+        
         let trimmed = rawFullText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return .noChange }
         
@@ -100,7 +109,7 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
                 return .replaceTail(backspaces: backspaces, replacement: replacement)
             }
         } else {
-            // Anti-freeze safety: Clamp backspaces to protected boundary so earlier text is NEVER deleted or repeated!
+            // Anti-freeze safety: Clamp backspaces to protected boundary
             if normalized.count > screenText.count {
                 let extraCount = normalized.count - screenText.count
                 let newSuffix = String(normalized.suffix(extraCount))
@@ -116,21 +125,14 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
         return .noChange
     }
     
-    // MARK: - Phase 2: Serialized 1.0s Pause-Gated Refinement (Full Context Input -> Active Tail Output)
+    // MARK: - Phase 2: Two-Phase Commit 1.0s Pause-Gated Refinement
     
-    /// Triggered when the speaker naturally pauses for >= 1.0 second.
-    /// - Sends FULL text (`screenText`) to the Polisher for comprehensive context disambiguation.
-    /// - Replaces ONLY the active tail (`screenText[frozenIndex...]`), leaving historical prefix 100% untouched.
-    /// - Advances `frozenIndex` to lock the finalized segment into Bright White.
-    public func onPauseTriggered() -> SlidingDeltaAction {
+    /// Step 1: Prepare refinement plan WITHOUT moving frozen pointer prematurely
+    public func preparePauseRefinement() -> PreparedRefinement? {
         lock.lock()
         defer { lock.unlock() }
         
-        guard !screenText.isEmpty else { return .noChange }
-        guard !isPolishingActive else { return .noChange }
-        
-        isPolishingActive = true
-        defer { isPolishingActive = false }
+        guard !screenText.isEmpty && !isCursorInjecting else { return nil }
         
         let splitIdx = screenText.index(screenText.startIndex, offsetBy: min(frozenIndex, screenText.count))
         let frozenPrefix = String(screenText[..<splitIdx])
@@ -138,7 +140,7 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
         
         guard !activeTail.isEmpty else {
             frozenIndex = screenText.count
-            return .noChange
+            return nil
         }
         
         // 1. Pass FULL text to Polisher for global contextual awareness
@@ -150,31 +152,59 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
             let tailIdx = refinedFull.index(refinedFull.startIndex, offsetBy: frozenPrefix.count)
             refinedTail = String(refinedFull[tailIdx...])
         } else {
-            // Fallback: If model slightly formatted prefix, polish only the active tail to guarantee prefix immutability
             refinedTail = TextPolisher.shared.polish(activeTail, mode: .liveStream)
         }
         
         let targetFull = frozenPrefix + refinedTail
         guard targetFull != screenText else {
             frozenIndex = screenText.count
-            return .noChange
+            return nil
         }
         
         let (backspaces, replacement) = computeTailDelta(from: screenText, to: targetFull, protectedLength: frozenIndex)
-        
-        if backspaces <= maxBackspaceLimit {
-            screenText = targetFull
-            frozenIndex = targetFull.count // Advance frozen checkpoint to current pause position
-            if backspaces == 0 && !replacement.isEmpty {
-                return .append(text: replacement)
-            } else if backspaces > 0 {
-                return .replaceTail(backspaces: backspaces, replacement: replacement)
-            }
-        } else {
+        guard backspaces <= maxBackspaceLimit else {
             frozenIndex = screenText.count
+            return nil
         }
         
-        return .noChange
+        let action: SlidingDeltaAction
+        if backspaces == 0 && !replacement.isEmpty {
+            action = .append(text: replacement)
+        } else if backspaces > 0 {
+            action = .replaceTail(backspaces: backspaces, replacement: replacement)
+        } else {
+            action = .noChange
+        }
+        
+        isCursorInjecting = true
+        return PreparedRefinement(action: action, targetText: targetFull, newFrozenIndex: targetFull.count)
+    }
+    
+    /// Step 2: Commit RAM pointers ONLY AFTER physical OS cursor keystrokes have finished executing
+    public func commitPauseRefinement(_ prepared: PreparedRefinement) {
+        lock.lock()
+        defer { lock.unlock() }
+        
+        self.screenText = prepared.targetText
+        self.frozenIndex = prepared.newFrozenIndex
+        self.isCursorInjecting = false
+    }
+    
+    /// Cancel in-flight injection lock if an error occurred
+    public func cancelPauseRefinement() {
+        lock.lock()
+        defer { lock.unlock() }
+        self.isCursorInjecting = false
+    }
+    
+    // MARK: - Legacy Compatibility Method
+    
+    public func onPauseTriggered() -> SlidingDeltaAction {
+        guard let prepared = preparePauseRefinement() else {
+            return .noChange
+        }
+        commitPauseRefinement(prepared)
+        return prepared.action
     }
     
     // MARK: - Protected Delta Computation

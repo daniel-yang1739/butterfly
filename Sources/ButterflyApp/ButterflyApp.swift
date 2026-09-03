@@ -73,13 +73,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         mode: .liveStreaming
                     )
                     
-                    // Mode 1 Phase 2: Reset 1.0s Pause-Gated Refinement Timer
+                    // Mode 1 Phase 2: Reset 1.0s Pause-Gated Refinement Timer (Two-Phase Commit)
                     self.pauseTimer?.invalidate()
                     self.pauseTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) { [weak self] _ in
                         Task { @MainActor [weak self] in
                             guard let self = self, self.isRecording, self.activeMode == .liveStreaming else { return }
-                            let pauseAction = self.slidingWindowBuffer.onPauseTriggered()
-                            InputInjector.shared.applySlidingDelta(pauseAction)
+                            
+                            // 1. Prepare refinement plan (Memory pointer does NOT advance yet)
+                            guard let prepared = self.slidingWindowBuffer.preparePauseRefinement() else {
+                                FloatingHUDWindow.shared.update(
+                                    frozenText: self.slidingWindowBuffer.frozenText,
+                                    activeTail: self.slidingWindowBuffer.activeTail,
+                                    timeStr: timeStr,
+                                    mode: .liveStreaming
+                                )
+                                return
+                            }
+                            
+                            // 2. Physically execute keystrokes in OS active cursor
+                            InputInjector.shared.applySlidingDelta(prepared.action)
+                            
+                            // 3. Commit pointer in RAM ONLY AFTER physical keystrokes are 100% complete!
+                            self.slidingWindowBuffer.commitPauseRefinement(prepared)
                             
                             // Re-sync Floating HUD with new frozen boundary (Turn committed segment to Bright White)
                             FloatingHUDWindow.shared.update(
