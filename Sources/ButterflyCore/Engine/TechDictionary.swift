@@ -32,6 +32,7 @@ public struct TechDictionary: Sendable {
         "Agent", "Prompt", "Prompting", "Context", "Fine-tune", "Fine-tuning", "RAG", "Zero-shot", "Few-shot",
         "Parameter", "Weight", "Tokenizer", "Inference", "Core ML", "Metal", "ANE", "Neural Engine",
         "PyTorch", "TensorFlow", "ONNX", "Transformer", "Speech-to-Text", "ASR", "TTS", "VAD",
+        "Antigravity", "Voice", "Slash Command", "Frozen Text", "Dynamic Window",
         
         // MARK: - Apple Ecosystem & Swift
         "Apple Silicon", "M1", "M2", "M3", "M4", "M1 Pro", "M2 Max", "M3 Ultra", "M4 Max",

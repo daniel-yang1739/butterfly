@@ -205,27 +205,28 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
             action = .noChange
         }
         
-        // 3. Mathematical Tri-Color Overlapping Progression:
+        // 3. Mathematical 20% Stride / 80% Dynamic Overlap Progression:
         // - Active span evaluated by the Model: previousFrozen ..< targetFull.count
-        // - First 50% of the active span (aligned to punctuation) is locked to ⚪ White (frozenIndex)!
-        // - Second 50% of the active span remains in 🟡 Amber Gold (polishedIndex = targetFull.count)!
+        // - First 20% of the active span (aligned to punctuation) is stably locked to ⚪ White (frozenIndex)!
+        // - 80% of the active span remains in 🟡 Amber Gold Dynamic Window (polishedIndex = targetFull.count)!
         // - The Gold segment is STILL within the active window (screenText[frozenIndex...])
         //   and will be sent to the Model again in the next cycle to be re-evaluated alongside new speech!
         let previousFrozen = frozenIndex
         let activeSpan = targetFull.count - previousFrozen
         let newFrozenIndex: Int
         if activeSpan > 8 {
-            let rawMid = previousFrozen + (activeSpan / 2)
-            var aligned = rawMid
+            let advanceStep = max(1, Int(Double(activeSpan) * 0.20))
+            let rawTarget = previousFrozen + advanceStep
+            var aligned = rawTarget
             let chars = Array(targetFull)
             let puncts: [Character] = ["，", "。", "！", "？", "；", "\n"]
-            for offset in 0...min(6, activeSpan / 3) {
-                let r = rawMid + offset
+            for offset in 0...min(6, Int(Double(activeSpan) * 0.35)) {
+                let r = rawTarget + offset
                 if r < chars.count && puncts.contains(chars[r]) {
                     aligned = r + 1
                     break
                 }
-                let l = rawMid - offset
+                let l = rawTarget - offset
                 if l > previousFrozen && puncts.contains(chars[l]) {
                     aligned = l + 1
                     break

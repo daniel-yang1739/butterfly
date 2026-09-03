@@ -105,6 +105,17 @@ public final class TextPolisher {
             ("(?i)\\bGit\\s*Lab\\b", "GitLab"),
             ("(?i)\\bGit\\s*Hub\\b", "GitHub"),
             
+            // AI Assistants & Antigravity Terms
+            ("(?i)\\b(?:Andy\\s*gravity|Anti\\s*gravity|And\\s*gravity|any\\s*gravity)\\b", "Antigravity"),
+            ("(?i)\\b(?:Lelash|lash|slash)\\s*command\\b", "Slash Command"),
+            ("(?i)\\b(?:Voice\\s*command|voice)\\s*那個\\b", "/voice 那個"),
+            ("(?i)\\b(?:Poozenn|Poozen|frozen)\\s*(?:thek|Take|talk|Text)\\b", "Frozen Text"),
+            ("(?i)\\bDynamic\\s*Windows?\\b", "Dynamic Window"),
+            
+            // Acoustic Trailing Homophone Repairs ('世界/是界' -> '試一下')
+            ("(?<=[再來測])\\s*(?:世界|是界|視界|試界)", "試一下"),
+            ("(?i)\\b(?:是界|視界|試界|試一界)\\b", "試一下"),
+            
             // Units, Storage & Hardware
             ("messMessa\\s*messge\\s*mess\\s*RadarMadara|RadarMadara\\s*game\\s*getMadara", "Message"),
             ("Mata\\s*bite|Meta\\s*bite", "MB"),
