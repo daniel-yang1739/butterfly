@@ -143,7 +143,21 @@ public final class LiveSpeechEngine: NSObject, @unchecked Sendable, SFSpeechReco
                     if !state.active.isEmpty {
                         all.append(state.active)
                     }
-                    state.full = all.joined(separator: "，")
+                    
+                    var combined = ""
+                    for piece in all {
+                        guard !piece.isEmpty else { continue }
+                        if combined.isEmpty {
+                            combined = piece
+                        } else {
+                            if let last = combined.last, (last == "。" || last == "，" || last == "！" || last == "？" || last == "；") {
+                                combined += piece
+                            } else {
+                                combined += "，" + piece
+                            }
+                        }
+                    }
+                    state.full = combined
                     return state.full
                 }
                 

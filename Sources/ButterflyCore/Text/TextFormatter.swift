@@ -11,8 +11,8 @@ public final class TextFormatter {
         _ text: String,
         normalizeNumbersAndUnits: Bool = true,
         insertCJKSpacing: Bool = true,
-        removeStutter: Bool = true,
-        trimTrailingPunctuation: Bool = true
+        removeStutter: Bool = false,
+        trimTrailingPunctuation: Bool = false
     ) -> String {
         guard !text.isEmpty else { return text }
         
@@ -34,7 +34,7 @@ public final class TextFormatter {
             result = insertSpacingBetweenCJKAndAlphanumeric(result)
         }
         
-        // 4. Trim trailing punctuation for short phrases
+        // 4. Trim trailing punctuation only if explicitly requested
         if trimTrailingPunctuation {
             result = trimTrailingPunctuationIfNeeded(result)
         }
