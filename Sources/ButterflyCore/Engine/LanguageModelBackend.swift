@@ -26,6 +26,8 @@ public final class LocalSLMInferenceBackend: @unchecked Sendable {
     
     /// Restructure monologue transcript using true local SLM inference on Metal GPU with full telemetry
     public func restructureNote(transcript: String, systemPrompt: String) async throws -> String {
+        // Pre-clean with homophone self-healing
+        let precleaned = TextPolisher.shared.polish(transcript, mode: .liveStream)
         let modelPath = ModelManager.shared.localPath(for: spec)
         
         // 1. If local GGUF model weights are present on disk, execute REAL SLM neural inference
@@ -35,13 +37,13 @@ public final class LocalSLMInferenceBackend: @unchecked Sendable {
             let dispatchTimeStr = Self.timeFormatter.string(from: Date())
             let startTime = DispatchTime.now()
             
-            if let output = try? await executeLocalCLI(modelPath: modelPath.path, sysPrompt: sysDirective, userTranscript: transcript), !output.isEmpty {
+            if let output = try? await executeLocalCLI(modelPath: modelPath.path, sysPrompt: sysDirective, userTranscript: precleaned), !output.isEmpty {
                 let endTime = DispatchTime.now()
                 let receiveTimeStr = Self.timeFormatter.string(from: Date())
                 let elapsedMs = Double(endTime.uptimeNanoseconds - startTime.uptimeNanoseconds) / 1_000_000.0
                 
-                var cleaned = cleanSLMOutput(output, userTranscript: transcript)
-                if !cleaned.isEmpty {
+                var cleaned = cleanSLMOutput(output, userTranscript: precleaned)
+                if isHighQualityNote(cleaned) {
                     if !cleaned.hasPrefix("- ") && !cleaned.hasPrefix("1. ") && !cleaned.hasPrefix("#") {
                         cleaned = "- " + cleaned
                     }
@@ -66,6 +68,15 @@ public final class LocalSLMInferenceBackend: @unchecked Sendable {
         // 2. High-performance cognitive polishing fallback
         let polished = TextPolisher.shared.polish(transcript, mode: .structuredNote)
         return polished
+    }
+    
+    private func isHighQualityNote(_ text: String) -> Bool {
+        guard !text.isEmpty else { return false }
+        let forbidden = ["使用者口述", "Butterfly AI", "專業筆記秘書", "使用者的描述", "角色定義", "Prompt, 他, 優先"]
+        for f in forbidden {
+            if text.contains(f) { return false }
+        }
+        return true
     }
     
     /// Refine live streaming clause using active SLM model on Metal GPU with full telemetry
