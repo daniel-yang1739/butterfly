@@ -116,4 +116,20 @@ public final class LanguageModelCoordinator: @unchecked Sendable {
         return (try? await slmBackend.restructureNote(transcript: transcript, systemPrompt: systemPrompt))
             ?? TextPolisher.shared.polish(transcript, mode: .structuredNote)
     }
+    
+    /// Refine live streaming clause using active SLM model & SYSTEM_PROMPT.md
+    public func refineLiveStream(transcript: String) async -> String {
+        guard !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return ""
+        }
+        
+        let activeModel = ModelManager.shared.activeSLMModel
+        let systemPrompt = SystemPrompt.shared.content
+        let slmBackend = LocalSLMInferenceBackend(spec: activeModel)
+        
+        let polished = (try? await slmBackend.restructureNote(transcript: transcript, systemPrompt: systemPrompt))
+            ?? TextPolisher.shared.polish(transcript, mode: .liveStream)
+        
+        return TextPolisher.shared.polish(polished, mode: .liveStream)
+    }
 }

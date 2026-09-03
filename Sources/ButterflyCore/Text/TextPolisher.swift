@@ -108,11 +108,13 @@ public final class TextPolisher {
             // Units, Storage & Hardware
             ("messMessa\\s*messge\\s*mess\\s*RadarMadara|RadarMadara\\s*game\\s*getMadara", "Message"),
             ("Mata\\s*bite|Meta\\s*bite", "MB"),
+            ("(?i)\\b(?:Paano|Panno|Pano|Panal|Peano)\\b", "Panel"),
             ("(?i)(?:in\\s*泊|音譜|應譜|音泊|硬譜|硬泊|in\\s*put|im\\s*put)\\s*(?:裡面|中|框|視窗)?", "Input"),
             ("(?i)\\b在\\s*IP\\s*(?:裡面|中|框|輸入框)\\b", "在 Input 裡面"),
             ("(?i)\\bIP\\s*(?:裡面|中|框|輸入框|輸入區)\\b", "Input 裡面"),
             ("(?i)\\bIP\\s*這個字\\b", "Input 這個字"),
             ("(?i)\\bin\\s*泊\\b", "Input"),
+            ("音波的文字|音泊的文字|應波的文字", "輸入框的文字"),
             ("奧普|奧特普", "Output"),
             ("L\\s*O\\s*C\\s*O|L\\s*O\\s*C\\s*A\\s*L|(?i)\\bLoco\\b", "Local"),
             ("壞\\s*List|What\\s*last|what\\s*list|壞名單", "Whitelist"),
@@ -146,9 +148,11 @@ public final class TextPolisher {
         
         let semanticRegexes: [(pattern: String, replacement: String)] = [
             ("羽翼(?=如果|明顯|表達|理解|上下文|順序|判定|變得|非常|很|清|正)", "語意"),
-            ("(?:好的|做有|這叫做有|這才叫做有|進行|經過|文字|文章|內容)\\s*認識", "好的潤飾"),
+            ("(?:好的|做有|這叫做有|這才叫做有|進行|經過|文字|文章|內容|幫我們|請他|讓它|可以幫我們)\\s*認識", "好的潤飾"),
+            ("幫我們認識", "幫我們潤飾"),
+            ("可以幫我們認識", "可以幫我們潤飾"),
             ("經過好的認識", "經過好的潤飾"),
-            ("認識(?=文字|文章|一下|的多一點|一下下|的|內容|輸出|結果|效果|功能)", "潤飾"),
+            ("認識(?=我們|我|文字|文章|一下|的多一點|一下下|的|內容|輸出|結果|效果|功能|講的話|說的話)", "潤飾"),
             ("潤濕", "潤飾"),
             ("把蚊子", "把文字"),
             ("布拉布布拉|不拉布拉|布拉布拉", "等等"),

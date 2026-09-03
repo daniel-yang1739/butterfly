@@ -50,7 +50,7 @@ public struct TechDictionary: Sendable {
         "Electron", "Tauri", "Flutter", "Dart", "PWA",
         
         // MARK: - UI & Component Jargon
-        "Component", "Layout", "Container", "Modal", "Dialog", "Popup", "Dropdown", "Menu", "Tooltip",
+        "Component", "Layout", "Container", "Modal", "Dialog", "Popup", "Dropdown", "Menu", "Tooltip", "Panel",
         "Sidebar", "Navbar", "Header", "Footer", "Button", "Input", "Form", "Card", "Table", "List", "Grid",
         "Flex", "Flexbox", "Margin", "Padding", "Border", "Shadow", "Icon", "SVG", "Asset",
         "State", "Props", "Context", "Hook", "Reducer", "Dispatch", "Middleware", "Service", "Controller", "View",
