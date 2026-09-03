@@ -15,20 +15,24 @@ public struct PreparedRefinement: Sendable {
     public let action: SlidingDeltaAction
     public let targetText: String
     public let newFrozenIndex: Int
+    public let newPolishedIndex: Int
 }
 
-/// Thread-safe, Index-Based Sliding Window Buffer with 50% Overlapping Windows and Two-Phase Commit
-/// - 0.8s Silence Pause triggers refinement.
-/// - Full Context input to Polisher with external TechDictionary reference.
-/// - Midpoint Frozen Checkpoint (50% Overlap) ensures continuous smooth sliding window refinement!
+/// Thread-safe, Index-Based Sliding Window Buffer with Tri-Color Cognitive Visual Model & 2PC
+/// - ⚪ White (0 ..< frozenIndex): Confirmed historical text (100% Locked & Immutable)
+/// - 🟡 Amber Gold (frozenIndex ..< polishedIndex): AI Polished in the current active wave (Review period)
+/// - 🔘 Subtle Gray (polishedIndex ..< screenText.count): Raw incoming speech currently being spoken
 public final class SlidingWindowBuffer: @unchecked Sendable {
     private let lock = NSLock()
     
     /// Single source of truth: Exact cumulative string physically typed on screen
     public private(set) var screenText: String = ""
     
-    /// Character index demarcating Frozen Prefix (0..<frozenIndex) from Active Tail (frozenIndex...)
+    /// Character index for ⚪ Locked White text (0..<frozenIndex)
     public private(set) var frozenIndex: Int = 0
+    
+    /// Character index for 🟡 AI Polished Amber Gold text (frozenIndex..<polishedIndex)
+    public private(set) var polishedIndex: Int = 0
     
     /// Mutex flag ensuring keystroke injection and buffer mutation are atomic
     private var isCursorInjecting: Bool = false
@@ -46,14 +50,16 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
         defer { lock.unlock() }
         screenText = ""
         frozenIndex = 0
+        polishedIndex = 0
         isCursorInjecting = false
     }
     
-    /// Finalize and lock the entire transcript when recording session concludes
+    /// Finalize and lock the entire transcript when recording session concludes (All turns ⚪ White)
     public func finalizeAll() {
         lock.lock()
         defer { lock.unlock() }
         frozenIndex = screenText.count
+        polishedIndex = screenText.count
         isCursorInjecting = false
     }
     
@@ -64,21 +70,31 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
         return screenText
     }
     
-    /// Historical confirmed text locked on overlapping sliding checkpoints (Rendered in Bright White)
+    /// ⚪ Tier 1: Historical confirmed text permanently locked (Rendered in Bright White)
     public var frozenText: String {
         lock.lock()
         defer { lock.unlock() }
         guard frozenIndex > 0 && frozenIndex <= screenText.count else { return "" }
-        let idx = screenText.index(screenText.startIndex, offsetBy: frozenIndex)
+        let idx = screenText.index(screenText.startIndex, offsetBy: min(frozenIndex, screenText.count))
         return String(screenText[..<idx])
     }
     
-    /// Active text currently being spoken and refined in overlapping window (Rendered in Subtle Gray)
+    /// 🟡 Tier 2: AI Polished segment in the active wave (Rendered in Amber Gold)
+    public var polishedText: String {
+        lock.lock()
+        defer { lock.unlock() }
+        guard polishedIndex > frozenIndex && polishedIndex <= screenText.count else { return "" }
+        let start = screenText.index(screenText.startIndex, offsetBy: min(frozenIndex, screenText.count))
+        let end = screenText.index(screenText.startIndex, offsetBy: min(polishedIndex, screenText.count))
+        return String(screenText[start..<end])
+    }
+    
+    /// 🔘 Tier 3: Raw incoming speech currently being spoken (Rendered in Subtle Gray)
     public var activeTail: String {
         lock.lock()
         defer { lock.unlock() }
-        guard frozenIndex < screenText.count else { return "" }
-        let idx = screenText.index(screenText.startIndex, offsetBy: frozenIndex)
+        guard polishedIndex < screenText.count else { return "" }
+        let idx = screenText.index(screenText.startIndex, offsetBy: min(polishedIndex, screenText.count))
         return String(screenText[idx...])
     }
     
@@ -135,9 +151,9 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
         return .noChange
     }
     
-    // MARK: - Phase 2: Overlapping Sliding Window 0.8s Pause-Gated Refinement
+    // MARK: - Phase 2: Tri-Color Pause-Gated Refinement (Two-Phase Commit)
     
-    /// Step 1: Prepare refinement plan with 50% Overlapping Window Midpoint Checkpoint
+    /// Step 1: Prepare refinement plan with Tri-Color progression
     public func preparePauseRefinement() -> PreparedRefinement? {
         lock.lock()
         defer { lock.unlock() }
@@ -150,6 +166,7 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
         
         guard !activeTail.isEmpty else {
             frozenIndex = screenText.count
+            polishedIndex = screenText.count
             return nil
         }
         
@@ -167,13 +184,15 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
         
         let targetFull = frozenPrefix + refinedTail
         guard targetFull != screenText else {
-            frozenIndex = screenText.count
+            frozenIndex = polishedIndex
+            polishedIndex = screenText.count
             return nil
         }
         
         let (backspaces, replacement) = computeTailDelta(from: screenText, to: targetFull, protectedLength: frozenIndex)
         guard backspaces <= maxBackspaceLimit else {
             frozenIndex = screenText.count
+            polishedIndex = screenText.count
             return nil
         }
         
@@ -186,11 +205,19 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
             action = .noChange
         }
         
-        // 3. Once refined by the Model, the entire polished segment is 100% committed to Bright White!
-        let newFrozenIndex = targetFull.count
+        // 3. Tri-Color Pointer Progression:
+        // - The previous polished boundary (polishedIndex) promotes to permanent ⚪ White (frozenIndex)!
+        // - The newly polished segment becomes 🟡 Amber Gold (polishedIndex)!
+        let newFrozenIndex = min(polishedIndex, targetFull.count)
+        let newPolishedIndex = targetFull.count
         
         isCursorInjecting = true
-        return PreparedRefinement(action: action, targetText: targetFull, newFrozenIndex: newFrozenIndex)
+        return PreparedRefinement(
+            action: action,
+            targetText: targetFull,
+            newFrozenIndex: newFrozenIndex,
+            newPolishedIndex: newPolishedIndex
+        )
     }
     
     /// Step 2: Commit RAM pointers ONLY AFTER physical OS cursor keystrokes have finished executing
@@ -200,6 +227,7 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
         
         self.screenText = prepared.targetText
         self.frozenIndex = prepared.newFrozenIndex
+        self.polishedIndex = prepared.newPolishedIndex
         self.isCursorInjecting = false
     }
     

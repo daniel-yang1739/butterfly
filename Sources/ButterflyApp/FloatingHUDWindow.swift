@@ -105,10 +105,11 @@ public final class FloatingHUDWindow: NSPanel {
         isVisibleOnScreen = true
     }
     
-    /// Update HUD text with Two-Tone Coloring:
-    /// - `frozenText` -> Bright White (Confirmed & locked)
-    /// - `activeTail` -> Subtle Gray (Currently being spoken)
-    public func update(frozenText: String, activeTail: String, timeStr: String, mode: ButterflyMode) {
+    /// Update HUD text with Tri-Color Cognitive Visual Model:
+    /// - `frozenText` -> ⚪ Bright White (100% Locked & confirmed)
+    /// - `polishedText` -> 🟡 Amber Gold (AI Refined in active wave)
+    /// - `activeTail` -> 🔘 Subtle Gray (Raw incoming speech)
+    public func update(frozenText: String, polishedText: String, activeTail: String, timeStr: String, mode: ButterflyMode) {
         guard isVisibleOnScreen else { return }
         
         let modeIcon = (mode == .liveStreaming) ? "🎙️ Live Streaming" : "🔴 Smart Recording"
@@ -116,7 +117,7 @@ public final class FloatingHUDWindow: NSPanel {
         
         let attributedString = NSMutableAttributedString()
         
-        // 1. Frozen prefix in Bright White
+        // 1. Frozen prefix in Bright White (⚪ Tier 1: 100% Locked)
         if !frozenText.isEmpty {
             let whiteAttr: [NSAttributedString.Key: Any] = [
                 .foregroundColor: NSColor.white,
@@ -125,14 +126,24 @@ public final class FloatingHUDWindow: NSPanel {
             attributedString.append(NSAttributedString(string: frozenText, attributes: whiteAttr))
         }
         
-        // 2. Active tail in Subtle Gray
+        // 2. AI Polished segment in Amber Gold (🟡 Tier 2: AI Refined in active wave)
+        if !polishedText.isEmpty {
+            let goldColor = NSColor(calibratedRed: 1.0, green: 0.82, blue: 0.35, alpha: 1.0) // Amber gold / warm yellow
+            let goldAttr: [NSAttributedString.Key: Any] = [
+                .foregroundColor: goldColor,
+                .font: NSFont.systemFont(ofSize: 14, weight: .regular)
+            ]
+            attributedString.append(NSAttributedString(string: polishedText, attributes: goldAttr))
+        }
+        
+        // 3. Raw active tail in Subtle Gray (🔘 Tier 3: Raw incoming speech)
         if !activeTail.isEmpty {
             let grayAttr: [NSAttributedString.Key: Any] = [
-                .foregroundColor: NSColor(white: 0.7, alpha: 0.9), // Light subtle gray
+                .foregroundColor: NSColor(white: 0.68, alpha: 0.9), // Subtle silver gray
                 .font: NSFont.systemFont(ofSize: 14, weight: .regular)
             ]
             attributedString.append(NSAttributedString(string: activeTail, attributes: grayAttr))
-        } else if frozenText.isEmpty {
+        } else if frozenText.isEmpty && polishedText.isEmpty {
             let placeholderAttr: [NSAttributedString.Key: Any] = [
                 .foregroundColor: NSColor.systemGray,
                 .font: NSFont.systemFont(ofSize: 14, weight: .regular)

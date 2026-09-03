@@ -65,15 +65,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     let action = self.slidingWindowBuffer.appendStreamingText(formattedText)
                     InputInjector.shared.applySlidingDelta(action)
                     
-                    // Update Floating HUD with Two-Tone Coloring (White: Frozen, Gray: Active Tail)
+                    // Update Floating HUD with Tri-Color Cognitive Model (White: Locked, Gold: AI Refined, Gray: Raw Speech)
                     FloatingHUDWindow.shared.update(
                         frozenText: self.slidingWindowBuffer.frozenText,
+                        polishedText: self.slidingWindowBuffer.polishedText,
                         activeTail: self.slidingWindowBuffer.activeTail,
                         timeStr: timeStr,
                         mode: .liveStreaming
                     )
                     
-                    // Mode 1 Phase 2: Reset 0.8s Pause-Gated Refinement Timer (50% Overlapping Sliding Window + 2PC)
+                    // Mode 1 Phase 2: Reset 0.8s Pause-Gated Refinement Timer (Tri-Color Model + 2PC)
                     self.pauseTimer?.invalidate()
                     self.pauseTimer = Timer.scheduledTimer(withTimeInterval: 0.8, repeats: false) { [weak self] _ in
                         Task { @MainActor [weak self] in
@@ -83,6 +84,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             guard let prepared = self.slidingWindowBuffer.preparePauseRefinement() else {
                                 FloatingHUDWindow.shared.update(
                                     frozenText: self.slidingWindowBuffer.frozenText,
+                                    polishedText: self.slidingWindowBuffer.polishedText,
                                     activeTail: self.slidingWindowBuffer.activeTail,
                                     timeStr: timeStr,
                                     mode: .liveStreaming
@@ -96,9 +98,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             // 3. Commit pointer in RAM ONLY AFTER physical keystrokes are 100% complete!
                             self.slidingWindowBuffer.commitPauseRefinement(prepared)
                             
-                            // Re-sync Floating HUD with new frozen boundary (Turn committed segment to Bright White)
+                            // Re-sync Floating HUD with updated Tri-Color regions
                             FloatingHUDWindow.shared.update(
                                 frozenText: self.slidingWindowBuffer.frozenText,
+                                polishedText: self.slidingWindowBuffer.polishedText,
                                 activeTail: self.slidingWindowBuffer.activeTail,
                                 timeStr: timeStr,
                                 mode: .liveStreaming
@@ -112,6 +115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     // Mode 2: Live feedback in floating HUD and menu bar
                     FloatingHUDWindow.shared.update(
                         frozenText: "",
+                        polishedText: "",
                         activeTail: formattedText,
                         timeStr: timeStr,
                         mode: .recordAndPolish
