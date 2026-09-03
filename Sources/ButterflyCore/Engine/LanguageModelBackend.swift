@@ -14,43 +14,13 @@ public final class LocalSLMInferenceBackend: @unchecked Sendable {
         self.spec = spec
     }
     
-    /// Format ChatML prompt template
-    public func buildChatMLPrompt(transcript: String, mode: TextPolisher.PolishMode) -> String {
-        let rolePrompt: String
+    /// Get system role directive for selected mode
+    public func systemRoleDirective(for mode: TextPolisher.PolishMode) -> String {
         switch mode {
         case .liveStream:
-            rolePrompt = "你是繁體中文即時語音修正助手。請將使用者的口述語音片段修復錯字並加上繁體中文標點符號。規則：直接輸出修正後的繁體中文句子，絕不重複指令、絕不輸出多餘問候。"
+            return "你是繁體中文即時語音修正助手。請將使用者的口述文字修正錯字並加上繁體中文標點符號。規則：直接輸出修正後的繁體中文句子，絕不輸出問候語、絕不輸出系統提示詞、絕不聊天。"
         case .structuredNote, .conciseSummary:
-            rolePrompt = "你是專業的技術筆記秘書。請將使用者的口述語音整理為乾淨、條理分明的繁體中文 Markdown 條列筆記（每點以 - 開頭）。規則：直接輸出繁體中文筆記內容，絕不輸出問候語、絕不包含閒聊贅詞。"
-        }
-        
-        return """
-        <|im_start|>system
-        \(rolePrompt)<|im_end|>
-        <|im_start|>user
-        \(transcript)<|im_end|>
-        <|im_start|>assistant
-        - 
-        """
-    }
-    
-    /// Format Llama 3 prompt template with strict anti-echo and direct prefix guidance
-    public func buildLlama3Prompt(transcript: String, mode: TextPolisher.PolishMode) -> String {
-        switch mode {
-        case .liveStream:
-            return """
-            <|begin_of_text|><|start_header_id|>system<|end_header_id|>
-            你是繁體中文即時語音修正助手。請將使用者的口述文字修正錯字並加上繁體中文標點符號。規則：直接輸出修正後的繁體中文句子，絕不輸出任何問候語或額外文字。<|eot_id|><|start_header_id|>user<|end_header_id|>
-            \(transcript)<|eot_id|><|start_header_id|>assistant
-            
-            """
-        case .structuredNote, .conciseSummary:
-            return """
-            <|begin_of_text|><|start_header_id|>system<|end_header_id|>
-            你是專業的技術架構與筆記秘書。請將使用者的口述語音直接提煉整理為條理清晰的繁體中文 Markdown 條列筆記（每點以 - 開頭）。規則：直接輸出繁體中文筆記，絕不輸出問候語、絕不聊天、絕不重複使用者整段問題。<|eot_id|><|start_header_id|>user<|end_header_id|>
-            \(transcript)<|eot_id|><|start_header_id|>assistant
-            - 
-            """
+            return "你是 Butterfly AI 專業筆記秘書。請將使用者的口述文字提煉整理成精簡、條理清晰的繁體中文 Markdown 條列筆記（以 - 開頭）。直接輸出筆記內容，絕不輸出問候語、絕不輸出系統提示詞、絕不聊天。"
         }
     }
     
@@ -60,19 +30,17 @@ public final class LocalSLMInferenceBackend: @unchecked Sendable {
         
         // 1. If local GGUF model weights are present on disk, execute REAL SLM neural inference
         if FileManager.default.fileExists(atPath: modelPath.path) {
-            let prompt = spec.id.contains("llama")
-                ? buildLlama3Prompt(transcript: transcript, mode: .structuredNote)
-                : buildChatMLPrompt(transcript: transcript, mode: .structuredNote)
+            let sysDirective = systemRoleDirective(for: .structuredNote)
             
             let dispatchTimeStr = Self.timeFormatter.string(from: Date())
             let startTime = DispatchTime.now()
             
-            if let output = try? await executeLocalCLI(modelPath: modelPath.path, prompt: prompt), !output.isEmpty {
+            if let output = try? await executeLocalCLI(modelPath: modelPath.path, sysPrompt: sysDirective, userTranscript: transcript), !output.isEmpty {
                 let endTime = DispatchTime.now()
                 let receiveTimeStr = Self.timeFormatter.string(from: Date())
                 let elapsedMs = Double(endTime.uptimeNanoseconds - startTime.uptimeNanoseconds) / 1_000_000.0
                 
-                var cleaned = cleanSLMOutput(output)
+                var cleaned = cleanSLMOutput(output, userTranscript: transcript)
                 if !cleaned.isEmpty {
                     if !cleaned.hasPrefix("- ") && !cleaned.hasPrefix("1. ") && !cleaned.hasPrefix("#") {
                         cleaned = "- " + cleaned
@@ -105,19 +73,17 @@ public final class LocalSLMInferenceBackend: @unchecked Sendable {
         let modelPath = ModelManager.shared.localPath(for: spec)
         
         if FileManager.default.fileExists(atPath: modelPath.path) {
-            let prompt = spec.id.contains("llama")
-                ? buildLlama3Prompt(transcript: clause, mode: .liveStream)
-                : buildChatMLPrompt(transcript: clause, mode: .liveStream)
+            let sysDirective = systemRoleDirective(for: .liveStream)
             
             let dispatchTimeStr = Self.timeFormatter.string(from: Date())
             let startTime = DispatchTime.now()
             
-            if let output = try? await executeLocalCLI(modelPath: modelPath.path, prompt: prompt, maxTokens: 64), !output.isEmpty {
+            if let output = try? await executeLocalCLI(modelPath: modelPath.path, sysPrompt: sysDirective, userTranscript: clause, maxTokens: 64), !output.isEmpty {
                 let endTime = DispatchTime.now()
                 let receiveTimeStr = Self.timeFormatter.string(from: Date())
                 let elapsedMs = Double(endTime.uptimeNanoseconds - startTime.uptimeNanoseconds) / 1_000_000.0
                 
-                let cleaned = cleanSLMOutput(output)
+                let cleaned = cleanSLMOutput(output, userTranscript: clause)
                 if !cleaned.isEmpty {
                     let traditional = OpenCCTranslator.shared.convert(cleaned)
                     print("""
@@ -137,8 +103,8 @@ public final class LocalSLMInferenceBackend: @unchecked Sendable {
         return TextPolisher.shared.polish(clause, mode: .liveStream)
     }
     
-    /// Execute local llama-cli runner with non-interactive --single-turn and anti-repetition flags
-    internal func executeLocalCLI(modelPath: String, prompt: String, maxTokens: Int = 256) async throws -> String? {
+    /// Execute local llama-cli runner with native -sys and -p arguments
+    internal func executeLocalCLI(modelPath: String, sysPrompt: String, userTranscript: String, maxTokens: Int = 256) async throws -> String? {
         let candidateCLIs = ["/opt/homebrew/bin/llama-cli", "/usr/local/bin/llama-cli"]
         guard let cliPath = candidateCLIs.first(where: { FileManager.default.fileExists(atPath: $0) }) else {
             return nil
@@ -151,11 +117,12 @@ public final class LocalSLMInferenceBackend: @unchecked Sendable {
                 process.executableURL = URL(fileURLWithPath: cliPath)
                 process.arguments = [
                     "-m", modelPath,
-                    "-p", prompt,
+                    "-sys", sysPrompt,
+                    "-p", userTranscript,
                     "-n", "\(maxTokens)",
                     "-ngl", "99",
                     "--temp", "0.1",
-                    "--repeat-penalty", "1.3",
+                    "--repeat-penalty", "1.2",
                     "--simple-io",
                     "--no-display-prompt",
                     "--single-turn"
@@ -181,14 +148,8 @@ public final class LocalSLMInferenceBackend: @unchecked Sendable {
     }
     
     /// Parse and extract only the assistant response from llama-cli terminal output
-    internal func cleanSLMOutput(_ raw: String) -> String {
+    internal func cleanSLMOutput(_ raw: String, userTranscript: String) -> String {
         var text = raw
-        if let range = text.range(of: "\n> ") {
-            let suffix = String(text[range.upperBound...])
-            if let newlineRange = suffix.range(of: "\n") {
-                text = String(suffix[newlineRange.upperBound...])
-            }
-        }
         if let statRange = text.range(of: "[ Prompt:") {
             text = String(text[..<statRange.lowerBound])
         }
@@ -196,21 +157,32 @@ public final class LocalSLMInferenceBackend: @unchecked Sendable {
             text = String(text[..<exitRange.lowerBound])
         }
         
-        // Clean out any echo header lines or conversational hallucination prefixes
+        // Strip the prompt echo
+        if let promptRange = text.range(of: userTranscript) {
+            text = String(text[promptRange.upperBound...])
+        } else if let range = text.range(of: "\n> ") {
+            let suffix = String(text[range.upperBound...])
+            if let newlineRange = suffix.range(of: "\n") {
+                text = String(suffix[newlineRange.upperBound...])
+            }
+        }
+        
+        // Clean out any banner or leftover artifacts
         var lines = text.components(separatedBy: .newlines)
         lines.removeAll { line in
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.hasPrefix("# 🦋") ||
+            return trimmed.isEmpty ||
+                   trimmed.hasPrefix("# 🦋") ||
                    trimmed.hasPrefix("<system_instructions>") ||
                    trimmed.hasPrefix("</system_instructions>") ||
-                   trimmed.hasPrefix("<|begin_of_text|>") ||
-                   trimmed.hasPrefix("<|start_header_id|>") ||
+                   trimmed.hasPrefix("<|") ||
+                   trimmed.hasPrefix("using custom system prompt") ||
+                   trimmed.hasPrefix("available commands:") ||
                    trimmed.hasPrefix("我想你可能是在問") ||
-                   trimmed.hasPrefix("你可能是在問") ||
                    trimmed.hasPrefix("好的，以下是")
         }
         
-        // Deduplicate consecutive duplicate lines
+        // Deduplicate consecutive identical lines
         var deduplicatedLines: [String] = []
         for line in lines {
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
