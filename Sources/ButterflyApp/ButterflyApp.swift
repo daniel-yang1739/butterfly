@@ -409,10 +409,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let fullRawTranscript = await liveEngine.stopLiveListening()
         
         if mode == .recordAndPolish {
+            print("\n[Mode 2: Full Monologue Captured (\(fullRawTranscript.count) chars)]:\n\(fullRawTranscript)")
             // Mode 2: Record & Smart Polish (Paste structured note)
             let polishedText = TextPolisher.shared.polish(fullRawTranscript, mode: .structuredNote)
             if !polishedText.isEmpty {
-                print("\n[Polished Result]:\n\(polishedText)\n")
+                print("\n[Mode 2: Polished Note Result]:\n\(polishedText)\n")
                 await InputInjector.shared.inject(text: polishedText)
             }
         } else {
