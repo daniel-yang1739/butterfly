@@ -100,12 +100,7 @@ public final class LiveSpeechEngine: NSObject, @unchecked Sendable, SFSpeechReco
         
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.taskHint = .dictation
-        request.contextualStrings = TechDictionary.engineeringVocabulary + [
-            "System Prompt", "Prompt", "Typeless", "Record", "Smart Polish", "Polish",
-            "Live Streaming", "Dictation", "Speech-to-Text", "Context", "Local", "Source Code",
-            "Hardcode", "Whitelist", "Blacklist", "Esc", "Option", "Space", "Command",
-            "Shift", "Bullet", "Markdown", "MB", "GB", "TB", "kg", "Mode 1", "Mode 2"
-        ]
+        request.contextualStrings = TechDictionary.allVocabulary
         if #available(macOS 13.0, *) {
             request.addsPunctuation = true
         }
