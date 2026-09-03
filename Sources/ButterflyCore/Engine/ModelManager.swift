@@ -118,11 +118,11 @@ public final class ModelManager: @unchecked Sendable {
             id: "qwen2.5-0.5b-instruct",
             displayName: "Qwen2.5-0.5B-Instruct",
             category: .languageModel,
-            parameterCount: "367 MB",
-            sizeBytes: 367 * 1024 * 1024,
-            downloadURL: URL(string: "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2_5_0_5b_instruct_q8_0.gguf"),
+            parameterCount: "644 MB",
+            sizeBytes: 675_840_000,
+            downloadURL: URL(string: "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q8_0.gguf"),
             recommendedHardware: .appleNeuralEngine,
-            description: "Rank 1: State-of-the-art Chinese & English note restructuring, summaries, and action points (~367 MB)"
+            description: "Rank 1: State-of-the-art Chinese & English note restructuring, summaries, and action points (~644 MB)"
         ),
         ModelSpec(
             id: "llama-3.2-1b-instruct",
