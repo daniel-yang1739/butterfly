@@ -21,8 +21,9 @@ public final class TextPolisher {
         // 1. Ensure 100% Traditional Chinese (Taiwan standard)
         let traditional = OpenCCTranslator.shared.convert(trimmed)
         
-        // 2. Normalize spoken English/Chinese numbers into Arabic digits (0-9)
+        // 2. Normalize spoken English/Chinese numbers into Arabic digits (0-9) and standard unit abbreviations
         var normalized = TextFormatter.shared.normalizeNumbersToDigits(traditional)
+        normalized = TextFormatter.shared.normalizeUnitsAndTechTerms(normalized)
         normalized = normalizePhoneticTypos(normalized)
         
         // 3. Remove stutters, repeated characters, and duplicated phrases

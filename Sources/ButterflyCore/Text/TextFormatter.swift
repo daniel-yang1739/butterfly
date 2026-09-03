@@ -1,6 +1,6 @@
 import Foundation
 
-/// Text layout, CJK-alphanumeric spacing, punctuation, and number normalization formatter
+/// Text layout, CJK-alphanumeric spacing, punctuation, and number/unit normalization formatter
 public final class TextFormatter {
     public static let shared = TextFormatter()
     
@@ -9,7 +9,7 @@ public final class TextFormatter {
     /// Full text formatting pipeline
     public func format(
         _ text: String,
-        normalizeNumbers: Bool = true,
+        normalizeNumbersAndUnits: Bool = true,
         insertCJKSpacing: Bool = true,
         removeStutter: Bool = true,
         trimTrailingPunctuation: Bool = true
@@ -18,9 +18,10 @@ public final class TextFormatter {
         
         var result = text.trimmingCharacters(in: .whitespacesAndNewlines)
         
-        // 1. Normalize spoken English/Chinese numbers to Arabic digits (0-9)
-        if normalizeNumbers {
+        // 1. Normalize spoken English/Chinese numbers and metric/digital units
+        if normalizeNumbersAndUnits {
             result = normalizeNumbersToDigits(result)
+            result = normalizeUnitsAndTechTerms(result)
         }
         
         // 2. Remove speech stutter and repetitions
@@ -59,13 +60,7 @@ public final class TextFormatter {
             "IE S C": "Esc",
             "IE S": "Esc",
             "E S C": "Esc",
-            "S C": "Esc",
-            "八百多 M B": "800 多 MB",
-            "八百多 MB": "800 多 MB",
-            "八百 MB": "800 MB",
-            "M B": "MB",
-            "G B": "GB",
-            "K B": "KB"
+            "S C": "Esc"
         ]
         for (typo, replacement) in speechAcroMap {
             result = result.replacingOccurrences(of: typo, with: replacement)
@@ -123,7 +118,7 @@ public final class TextFormatter {
             result = result.replacingOccurrences(of: cn, with: digit)
         }
         
-        // 4. Quantifiers with units (e.g. "第一點" -> "第 1 點", "第二點" -> "第 2 點", "第800" -> "第 800")
+        // 4. Quantifiers with units (e.g. "第一點" -> "第 1 點", "第二點" -> "第 2 點")
         let quantifierUnits = [
             ("第一點", "第 1 點"),
             ("第二點", "第 2 點"),
@@ -141,6 +136,73 @@ public final class TextFormatter {
         ]
         for (cn, digit) in quantifierUnits {
             result = result.replacingOccurrences(of: cn, with: digit)
+        }
+        
+        return result
+    }
+    
+    // MARK: - Unit & Tech Terms Normalization
+    
+    /// Normalize spoken technical, memory, metric, and time units into standard abbreviations
+    public func normalizeUnitsAndTechTerms(_ text: String) -> String {
+        var result = text
+        
+        // 1. Spoken tech jargon & phonetic homophones
+        let techJargonMap = [
+            "收 call": "Source Code",
+            "so call": "Source Code",
+            "so co": "Source Code",
+            "so col": "Source Code",
+            "哈扣寫": "Hardcode",
+            "哈扣": "Hardcode",
+            "扣寫進去": "Code 寫進去",
+            "come 進去": "Commit 進去",
+            "co me 進去": "Commit 進去",
+            "com Commit": "Commit",
+            "Loco Data": "Local Data",
+            "Loco": "Local",
+            "telegram": "kg",
+            "Telegram": "kg",
+            "Tarab bite": "TB",
+            "tara bite": "TB",
+            "Tara bite": "TB",
+            "tarabyte": "TB",
+            "Mega bite": "MB",
+            "mega bite": "MB",
+            "Giga bite": "GB",
+            "giga bite": "GB",
+            "Kilo bite": "KB",
+            "kilo bite": "KB"
+        ]
+        for (typo, replacement) in techJargonMap {
+            result = result.replacingOccurrences(of: typo, with: replacement)
+        }
+        
+        // 2. Unit regexes (Digital, Metric, Time, Frequency)
+        let unitPatterns: [(pattern: String, replacement: String)] = [
+            ("(?i)\\b(megabytes?|mega\\s*bytes?)\\b", "MB"),
+            ("(?i)\\b(gigabytes?|giga\\s*bytes?)\\b", "GB"),
+            ("(?i)\\b(terabytes?|tera\\s*bytes?)\\b", "TB"),
+            ("(?i)\\b(kilobytes?|kilo\\s*bytes?)\\b", "KB"),
+            ("(?i)\\b(petabytes?|peta\\s*bytes?)\\b", "PB"),
+            ("(?i)\\b(kilograms?|kilo\\s*grams?|kilos?)\\b", "kg"),
+            ("(?i)\\b(grams?)\\b", "g"),
+            ("(?i)\\b(milligrams?|milli\\s*grams?)\\b", "mg"),
+            ("(?i)\\b(kilometers?|kilo\\s*meters?)\\b", "km"),
+            ("(?i)\\b(centimeters?|centi\\s*meters?)\\b", "cm"),
+            ("(?i)\\b(millimeters?|milli\\s*meters?)\\b", "mm"),
+            ("(?i)\\b(milliseconds?|milli\\s*seconds?)\\b", "ms"),
+            ("(?i)\\b(microseconds?|micro\\s*seconds?)\\b", "µs"),
+            ("(?i)\\b(nanoseconds?|nano\\s*seconds?)\\b", "ns"),
+            ("(?i)\\b(frames?\\s*per\\s*second)\\b", "FPS"),
+            ("(?i)\\b(percentages?|percents?)\\b", "%")
+        ]
+        
+        for item in unitPatterns {
+            if let regex = try? NSRegularExpression(pattern: item.pattern, options: []) {
+                let range = NSRange(location: 0, length: result.utf16.count)
+                result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: item.replacement)
+            }
         }
         
         return result

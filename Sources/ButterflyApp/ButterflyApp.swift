@@ -101,7 +101,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "docs/assets/menu_bar_icon.png",
                 "docs/assets/menu_bar_icon@2x.png",
                 URL(fileURLWithPath: fileManager.currentDirectoryPath).appendingPathComponent("docs/assets/menu_bar_icon.png").path,
-                "/Users/daniel_y_yang/Documents/self/butterfly/docs/assets/menu_bar_icon.png"
+                URL(fileURLWithPath: fileManager.currentDirectoryPath).appendingPathComponent("docs/assets/menu_bar_icon@2x.png").path,
+                fileManager.homeDirectoryForCurrentUser.appendingPathComponent(".cache/butterfly/assets/menu_bar_icon.png").path
             ]
             
             var loadedImage: NSImage? = nil
