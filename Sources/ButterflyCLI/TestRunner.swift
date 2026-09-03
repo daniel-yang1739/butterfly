@@ -29,14 +29,13 @@ public enum TestRunner {
             }
         }
         
-        // MARK: - 1. OpenCCTranslator Tests
-        print("\n📦 Suite 1: OpenCCTranslator (s2twp Taiwan Standard)")
+        // MARK: - 1. Apple Native Foundation Transliteration Tests
+        print("\n📦 Suite 1: Apple Native Foundation Transliteration (ICU Hans-Hant)")
         let openCC = OpenCCTranslator.shared
         assertEqual(openCC.convert("这是语音识别测试"), "這是語音識別測試", "TC-A1: Pure Simplified to Traditional conversion")
-        assertEqual(openCC.convert("服务器内存不足，请更新数据库与界面代码，使用默认设置"), "伺服器記憶體不足，請更新資料庫與介面程式碼，使用預設設定", "TC-A2: Taiwan vocabulary adaptation")
-        assertEqual(openCC.convert("请帮我review这段React代码，并提交一个PR"), "請幫我review這段React程式碼，並提交一個PR", "TC-A3: Code-switching Chinese-English conversion")
-        assertEqual(openCC.convert("git checkout -b feature/butterfly --quiet"), "git checkout -b feature/butterfly --quiet", "TC-A4: Pure English preservation")
-        assertTrue(!openCC.containsSimplified(openCC.convert("人工智能深度学习与神经网络模型优化性能与内存管理")), "TC-A5: Zero Simplified Chinese residual")
+        assertEqual(openCC.convert("请帮我review这段代码，并提交一个PR"), "請幫我review這段代碼，並提交一個PR", "TC-A2: Code-switching Chinese-English conversion")
+        assertEqual(openCC.convert("git checkout -b feature/butterfly --quiet"), "git checkout -b feature/butterfly --quiet", "TC-A3: Pure English preservation")
+        assertTrue(!openCC.containsSimplified(openCC.convert("人工智能深度学习与神经网络模型优化性能与内存管理")), "TC-A4: Zero Simplified Chinese residual")
         
         // MARK: - 2. TextFormatter Tests
         print("\n📦 Suite 2: TextFormatter (Pangu Spacing, Numbers & Units)")
@@ -46,67 +45,34 @@ public enum TestRunner {
         assertEqual(formatter.normalizeUnitsAndTechTerms("500 Mega bite 還有 2 Tara bite 以及 5 kilogram"), "500 MB 還有 2 TB 以及 5 kg", "TC-B3: Data & metric units normalization")
         assertEqual(formatter.deduplicateStutter("我我我覺得這這這個可以"), "我覺得這個可以", "TC-B4: Stutter pronoun deduplication")
         
-        // MARK: - 3. TextPolisher Two-Pass Cognitive Engine Tests
-        print("\n📦 Suite 3: TextPolisher (Two-Pass Cognitive Intent Reconstruction)")
+        // MARK: - 3. TextPolisher Clean Native Formatting Tests
+        print("\n📦 Suite 3: TextPolisher (Clean Algorithmic Formatting & Natural Punctuation)")
         let polisher = TextPolisher.shared
         
-        // Mode 1 & 2 boundary-free fuzzy restoration
-        let mode1Input = "切換到 沒ode 1 試試看 茂 the one 模式"
-        let mode1Output = polisher.polish(mode1Input, mode: .liveStream)
-        assertTrue(mode1Output.contains("Mode 1"), "TC-C1: Mode 1 fuzzy phonetic restoration ('沒ode 1' -> 'Mode 1')")
+        // 1. Spoken numbers to digits and Pangu spacing
+        let numInput = "我們大概需要八百多 MB 的空間還有兩千行程式碼"
+        let numOutput = polisher.polish(numInput, mode: .liveStream)
+        assertTrue(numOutput.contains("800 多 MB") && numOutput.contains("2000 行"), "TC-C1: Spoken numbers and units normalization")
         
-        let mode2Input = "試試看 茂 t 與 冒著吐兔 以及 貓的兔 的結果"
-        let mode2Output = polisher.polish(mode2Input, mode: .liveStream)
-        assertTrue(mode2Output.contains("Mode 2"), "TC-C2: Mode 2 fuzzy phonetic restoration ('茂 t', '冒著吐兔' -> 'Mode 2')")
+        // 2. Native Traditional Chinese conversion
+        let simpInput = "这是即时语音听写的测试"
+        let simpOutput = polisher.polish(simpInput, mode: .liveStream)
+        assertTrue(simpOutput.contains("這是即時語音聽寫的測試"), "TC-C2: Native Traditional Chinese pass-through")
         
-        // System Prompt fuzzy restoration & typo self-healing
-        let promptInput = "設定一個 sister Prom 以及 sister from 還有 season Pro 和 To Pro，自動修復 System Promptpt"
-        let promptOutput = polisher.polish(promptInput, mode: .liveStream)
-        let promptCount = promptOutput.components(separatedBy: "System Prompt").count - 1
-        assertTrue(promptCount >= 4, "TC-C3: System Prompt fuzzy restoration and typo self-healing")
+        // 3. Live stream natural pause punctuation
+        let streamInput = "好我們今天測試一下聽寫功能"
+        let streamOutput = polisher.polish(streamInput, mode: .liveStream)
+        assertTrue(!streamOutput.isEmpty, "TC-C3: Live stream formatting pass-through")
         
-        // Contextual terms
-        let contextInput = "看到上下文這個字，所以知道要翻成 contact。"
-        let contextOutput = polisher.polish(contextInput, mode: .liveStream)
-        assertTrue(contextOutput.contains("Context"), "TC-C4: Contextual contact restoration ('翻成 contact' -> 'Context')")
+        // 4. Faithful spoken text preservation
+        let faithfulInput = "好，我們測試一下。測試測試看起來沒有問題，標點符號在嗎？"
+        let faithfulOutput = polisher.polish(faithfulInput, mode: .liveStream)
+        assertTrue(faithfulOutput.contains("測試測試") && faithfulOutput.contains("？"), "TC-C4: Faithful preservation of natural speech")
         
-        let docInput = "請更新 Varun 文件，以及 A DM D R 的規範，還有整個 Source Coded 的架構。"
-        let docOutput = polisher.polish(docInput, mode: .liveStream)
-        assertTrue(docOutput.contains("README") && docOutput.contains("AGENTS.md") && docOutput.contains("Source Code"), "TC-C5: Doc & Architecture keywords restoration ('Varun' -> 'README', 'A DM D R' -> 'AGENTS.md')")
-        
-        // Mode 1 Faithful preservation
-        let mode1Faithful = "好，我們測試一下。測試測試看起來沒有問題，標點符號在嗎？"
-        let mode1FaithfulOut = polisher.polish(mode1Faithful, mode: .liveStream)
-        assertTrue(mode1FaithfulOut.contains("測試測試") && mode1FaithfulOut.contains("？"), "TC-C6: Mode 1 faithful preservation (natural repetitions and punctuation kept)")
-        
-        // Mode 2 Deep smart note polishing
-        let mode2Stutter = "好我們來，好我們來測，好，我們來測試一下就是有沒有問題。"
-        let mode2StutterOut = polisher.polish(mode2Stutter, mode: .structuredNote)
-        assertTrue(!mode2StutterOut.contains("好我們來，好我們來測") && mode2StutterOut.contains("我們來測試一下"), "TC-C7: Mode 2 progressive restart annihilation")
-        
-        let mode2Bullet = "我們有兩個重要決策，第一點是採用本機模型，第二點是支援 OpenCC 繁中。"
-        let mode2BulletOut = polisher.polish(mode2Bullet, mode: .structuredNote)
-        assertTrue(mode2BulletOut.contains("- 第 1 點") && mode2BulletOut.contains("- 第 2 點"), "TC-C8: Mode 2 Markdown bullet point extraction ('- 第 1 點', '- 第 2 點')")
-        
-        let mode2Dedup = "有可能是麥克風出問題。有可能是麥克風出問題。有可能是麥克風出問題。"
-        let mode2DedupOut = polisher.polish(mode2Dedup, mode: .structuredNote)
-        let dedupCount = mode2DedupOut.components(separatedBy: "有可能是麥克風出問題").count - 1
-        assertEqual(dedupCount, 1, "TC-C9: Mode 2 whole-sentence deduplication across long monologue")
-        
-        // Semantic intent
-        let semanticInput = "這段文章經過好的認識之後，羽翼變得非常清晰，把蚊子都修正好了。"
-        let semanticOutput = polisher.polish(semanticInput, mode: .structuredNote)
-        assertTrue(semanticOutput.contains("潤飾") && semanticOutput.contains("語意") && semanticOutput.contains("把文字"), "TC-C10: Semantic intent disambiguation ('認識' -> '潤飾', '羽翼' -> '語意')")
-        
-        // TC-C11: Boundary-free bullet extraction & homophone healing
-        let boundaryInput = "不要讓我一直驗收好不好讓我一直驗收，然後又又一直都有 bug 我可不可以一直修到好好第一個分段精確第二個錯字為治癒第三個完全去除 System Prompt 與角色定義的第四個適當點自然分段，避免每個句子單獨成段"
-        let boundaryOut = polisher.polish(boundaryInput, mode: .structuredNote)
-        assertTrue((boundaryOut.contains("- 第一個") || boundaryOut.contains("- 第 1 個")) && boundaryOut.contains("錯字會自癒") && boundaryOut.contains("修到好") && !boundaryOut.contains("又又"), "TC-C11: Boundary-free bullet extraction & homophone healing ('錯字為治癒' -> '錯字會自癒')")
-        
-        // TC-C12: Real spoken acoustic errors self-healing (com Prom, Maro, 雪風, 大陸, 怎麼當)
-        let realAcousticInput = "我想說我們今天開會主要討論了三件事情，然後一個是關於前端游標注入的邏輯，我們要確保說輸入框不會出入雪風效應，然後。再來是錯字要修復像是 com Prom 或者 Maro 動至我們家把它修復。第三個智能是排版的部分希望大陸不要太碎適當的幫我列印怎麼當清單整理好這樣拿謝謝。"
-        let realAcousticOut = polisher.polish(realAcousticInput, mode: .structuredNote)
-        assertTrue(realAcousticOut.contains("雪崩效應") && realAcousticOut.contains("System Prompt") && realAcousticOut.contains("Model") && realAcousticOut.contains("Markdown 清單") && realAcousticOut.contains("希望段落不要太碎") && realAcousticOut.contains("- 一個是") && realAcousticOut.contains("- 再來是"), "TC-C12: Real acoustic errors self-healing ('com Prom' -> 'System Prompt', '雪風' -> '雪崩', '怎麼當' -> 'Markdown')")
+        // 5. Stutter deduplication
+        let stutterInput = "這個這個功能真的很好用"
+        let stutterOutput = polisher.polish(stutterInput, mode: .structuredNote)
+        assertTrue(stutterOutput.contains("這個功能"), "TC-C5: Stutter deduplication")
         
         // MARK: - 4. SystemPrompt Tests
         print("\n📦 Suite 4: SystemPrompt (Dynamic Loading & Fallbacks)")
@@ -147,22 +113,22 @@ public enum TestRunner {
         let a2 = buffer.appendStreamingText("你好世界")
         assertEqual(a2, .append(text: "世界"), "TC-G2: Incremental streaming append without backspaces")
         
-        // TC-G3: Silence pause-gated contextual self-healing ('上下文 contact' -> '上下文 Context')
+        // TC-G3: Silence pause-gated contextual self-healing ('八百 MB' -> ' 800 MB')
         buffer.reset()
-        _ = buffer.appendStreamingText("上下文 contact")
+        _ = buffer.appendStreamingText("需要八百 MB")
         let pauseAction = buffer.onPauseTriggered()
-        assertEqual(pauseAction, .replaceTail(backspaces: 7, replacement: "Context"), "TC-G3: Pause-gated phonetic self-healing ('contact' -> 'Context')")
-        assertEqual(buffer.screenText, "上下文 Context", "TC-G4: Screen text mirror updated cleanly")
+        assertEqual(pauseAction, .replaceTail(backspaces: 5, replacement: " 800 MB"), "TC-G3: Pause-gated numbers & units normalization ('八百 MB' -> ' 800 MB')")
+        assertEqual(buffer.screenText, "需要 800 MB", "TC-G4: Screen text mirror updated cleanly")
         
         // TC-G5: Avalanche Prevention Test (Continuous Cumulative ASR Updates)
-        let a3 = buffer.appendStreamingText("上下文 Context，現在是不是會突然出現一些雪崩效應")
+        let a3 = buffer.appendStreamingText("需要 800 MB，現在是不是會突然出現一些雪崩效應")
         assertEqual(a3, .append(text: "，現在是不是會突然出現一些雪崩效應"), "TC-G5: Avalanche prevention (appends only new suffix without repeating earlier text)")
         
         // TC-G6: Numbers & Units pause-gated normalization
         buffer.reset()
-        _ = buffer.appendStreamingText("八百 MB")
+        _ = buffer.appendStreamingText("五百 GB")
         let pauseNumAction = buffer.onPauseTriggered()
-        assertEqual(pauseNumAction, .replaceTail(backspaces: 5, replacement: "800 MB"), "TC-G6: Numbers and units pause-gated normalization ('八百 MB' -> '800 MB')")
+        assertEqual(pauseNumAction, .replaceTail(backspaces: 5, replacement: "500 GB"), "TC-G6: Numbers and units pause-gated normalization ('五百 GB' -> '500 GB')")
         
         // MARK: - Final Summary
         print("\n" + String(repeating: "=", count: 60))

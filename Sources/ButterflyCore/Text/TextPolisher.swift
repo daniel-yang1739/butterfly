@@ -54,272 +54,28 @@ public final class TextPolisher {
         return formatted.trimmingCharacters(in: .whitespacesAndNewlines)
     }
     
-    // MARK: - Pass 2A: Acoustic & Phonetic Token Restoration
+    // MARK: - Pass 2: Clean Native Algorithmic Pipeline
     
-    /// Restore acoustically misheard tech tokens and code-switching terms based on domain context
+    /// Pure native pass-through without artificial hardcoded regexes
     public func restoreAcousticAndPhoneticTokens(_ text: String) -> String {
-        var result = text
-        
-        let tokenPatterns: [(pattern: String, replacement: String)] = [
-            // Fuzzy Mode 2 & Mode 1 phonetic variations (matches 茂 t, 茂 the one, me 兔, 沒ode 1, 冒著吐兔, etc.)
-            ("(?i)\\b(?:ml|m\\s*l)\\s*(?:的|得|之)?\\s*(?:to|two|2|兔|圖)\\b|ml\\s*的\\s*to", "Mode 2"),
-            ("(?i)\\b(?:ml|m\\s*l)\\s*(?:的|得|之)?\\s*(?:one|1|萬|玩)\\b|ml\\s*的\\s*one", "Mode 1"),
-            ("(?i)茂\\s*(?:the\\s*one|one|1|萬)", "Mode 1"),
-            ("(?i)(?:me\\s*兔|茂\\s*[tT2二兔圖吐]|茂\\s*the\\s*two)", "Mode 2"),
-            ("沒\\s*ode\\s*1", "Mode 1"),
-            ("沒\\s*ode\\s*2", "Mode 2"),
-            ("[貓冒墨莫夢帽茂][的德得著]*[兔圖吐土tT2二]+", "Mode 2"),
-            ("[貓冒墨莫夢帽茂][的德得著]*[萬玩完一1]+", "Mode 1"),
-            ("Mode 2\\s*的萬\\s*Mode 1", "Mode 2 與 Mode 1"),
-            ("這兩個\\s*(?:mall|mode|毛|Mo)", "這兩個 Mode"),
-            ("第二個\\s*(?:ml|mode|毛|Mo)\\s*的?", "第二個 Mode "),
-            ("第一個\\s*(?:ml|mode|毛|Mo)\\s*的?", "第一個 Mode "),
-            
-            // System Prompt fuzzy variations (matches sister Prom, sister Pat, sister from, season from, season Pro, To Pro, System Promptpt, System Promptm, etc.)
-            ("(?i)\\bSystem\\s*Prompt[a-zA-Z]*\\b", "System Prompt"),
-            ("(?i)\\b(?:secret|system|sister|cister|season|the\\s*season|stone|sistema|sixteen|set)\\s*(?:stone|prom|prompt|pro|promt|pat|pad|from)\\b", "System Prompt"),
-            ("(?i)\\b(?:To\\s*Pro|top\\s*To\\s*Pro)\\b", "System Prompt"),
-            ("(?i)(?:sister\\s*Pat|set\\s*Pro|sister\\s*prom|sister\\s*prompt|stone\\s*prom|stone\\s*prompt|season\\s*from|season\\s*Pro)", "System Prompt"),
-            ("塞\\s*(?:the\\s*season|season|system|sister)?\\s*(?:prom|prompt|pro|stone|pat|pad|from)", "塞 System Prompt"),
-            ("Theakston\\s*Brown|Theakston|brown\\s*所以", "System Prompt"),
-            
-            // Context & Token relations (matches 上下文 Context, 翻成 Context, contact/contest in context)
-            ("(?i)\\bContext(?:t|x|ts|s)+\\b", "Context"),
-            ("(?i)(?:上下文|前後文|前後)\\s*(?:康泰(?:\\s*克斯)?|context[a-z]*|contact|contest|contex\\b)", "上下文 Context"),
-            ("(?i)(?:翻成|變成|轉成|翻譯成|看成)\\s*(?:context[a-z]*|contact|contest|contex\\b)", "翻成 Context"),
-            ("(?i)\\b(?:康泰|contact|contest|contex)\\s*Token\\b", "Context Token"),
-            ("康泰(?=[可以|能夠|去做|分析|之間的關係|之間的|長度|視窗])", "Context"),
-            
-            // Speech-to-Text & Transcription mechanics
-            ("Speech\\s+(?:the\\s+talk|to|the)\\s+Text|switch\\s+t\\s+Text", "Speech-to-Text"),
-            ("竹子稿|桌子稿", "逐字稿"),
-            ("診斷\\s*逐字稿", "整段逐字稿"),
-            ("診斷\\s*(?:文字|錄音|文章|內容)", "整段內容"),
-            ("診斷(?=[去做|分析|轉譯|處理])", "整段"),
-            ("轉出轉進去", "轉進去"),
-            ("(?i)live\\s*(?:saving|dreaming|dreamin)|streamDreamin|Live\\s*Streaming\\s*streamDreamin", "Live Streaming"),
-            ("凹凸出|凹凸", "Output"),
-            
-            // Security & Engineering Terms
-            ("(?i)\\b(?:Brat|Track|Brad|Bread|Thread|Threat|Treat|Fred|Fleet)\\s*Model(?:ing|lings)?\\b", "Threat Modeling"),
-            ("(?i)\\b(?:Brat|Track|Brad|Bread|Thread|Threat|Treat|Fred|Fleet)\\s*Model\\b", "Threat Model"),
-            ("(?i)\\bGit\\s*Lab\\b", "GitLab"),
-            ("(?i)\\bGit\\s*Hub\\b", "GitHub"),
-            
-            // AI Assistants & Antigravity Terms
-            ("(?i)\\b(?:Andy\\s*gravity|Anti\\s*gravity|And\\s*gravity|any\\s*gravity)\\b", "Antigravity"),
-            ("(?i)\\b(?:Lelash|lash|slash)\\s*command\\b", "Slash Command"),
-            ("(?i)\\b(?:Voice\\s*command|voice)\\s*那個\\b", "/voice 那個"),
-            ("(?i)\\b(?:Poozenn|Poozen|frozen)\\s*(?:thek|Take|talk|Text)\\b", "Frozen Text"),
-            ("(?i)\\bDynamic\\s*Windows?\\b", "Dynamic Window"),
-            ("(?i)\\b(?:Traegler|treater|triger|triegle|trig)\\b", "Trigger"),
-            ("(?i)\\bS\\s*L\\s*M\\b", "SLM"),
-            ("(?i)\\bL\\s*L\\s*M\\b", "LLM"),
-            
-            // Acoustic Trailing Homophone Repairs ('世界/是界' -> '試一下')
-            ("(?<=[再來測])\\s*(?:世界|是界|視界|試界)", "試一下"),
-            ("(?i)\\b(?:是界|視界|試界|試一界)\\b", "試一下"),
-            
-            // UI, Menu & macOS Architecture Terms
-            ("(?i)\\b(?:Manu|妹妞|免扭)\\b", "Menu"),
-            ("(?i)\\b(?:Tool\\s*bar|拖把|脫把|托把)(?=\\s*(?:那邊|上面|裡面|按鈕|功能|位置|選單|列|區域|圖示|顯示|改|不要))", "Toolbar"),
-            ("(?i)(?:在|到|從|看)\\s*(?:拖把|脫把|托把)", "$0"),
-            ("拖把那邊|拖把上面|拖把裡面|拖把改", "Toolbar 那邊"),
-            ("只剩\\s*Manu|Manu\\s*那邊", "Menu 那邊"),
-            
-            // Units, Storage & Hardware
-            ("messMessa\\s*messge\\s*mess\\s*RadarMadara|RadarMadara\\s*game\\s*getMadara", "Message"),
-            ("Mata\\s*bite|Meta\\s*bite", "MB"),
-            ("(?i)\\b(?:Paano|Panno|Pano|Panal|Peano)\\b", "Panel"),
-            ("(?i)(?:in\\s*泊|音譜|應譜|音泊|硬譜|硬泊|in\\s*put|im\\s*put)\\s*(?:裡面|中|框|視窗)?", "Input"),
-            ("(?i)\\b在\\s*IP\\s*(?:裡面|中|框|輸入框)\\b", "在 Input 裡面"),
-            ("(?i)\\bIP\\s*(?:裡面|中|框|輸入框|輸入區)\\b", "Input 裡面"),
-            ("(?i)\\bIP\\s*這個字\\b", "Input 這個字"),
-            ("(?i)\\bin\\s*泊\\b", "Input"),
-            ("音波的文字|音泊的文字|應波的文字", "輸入框的文字"),
-            ("奧普|奧特普", "Output"),
-            ("L\\s*O\\s*C\\s*O|L\\s*O\\s*C\\s*A\\s*L|(?i)\\bLoco\\b", "Local"),
-            ("壞\\s*List|What\\s*last|what\\s*list|壞名單", "Whitelist"),
-            ("(?i)\\b(?:Varun|Vera|Read\\s*me|Red\\s*me)\\b", "README"),
-            ("(?i)\\b(?:A\\s*DM\\s*D\\s*R|Agent\\s*M\\s*D|agents?\\s*m\\s*d)\\b", "AGENTS.md"),
-            ("(?i)\\bSource\\s*Coded?\\b|收\\s*call|so\\s*call|so\\s*co", "Source Code"),
-            ("(?i)\\b(?:Doux|D\\s*O\\s*C\\s*S)\\b", "docs/"),
-            ("(?i)\\b(?:coming\\s*com\\s*meet|com\\s*meet|c\\s*o\\s*m\\s*m\\s*i\\s*t|c\\s*o\\s*n\\s*m\\s*i\\s*t)\\b|com\\s*一版|come\\s*一版", "Commit"),
-            ("哈扣寫|哈扣", "Hardcode"),
-            ("拍森|拍省", "Python"),
-            ("達克", "Docker"),
-            ("一到兩輪", "1 到 2 輪"),
-            ("做次分析", "做一次分析"),
-            
-            // Real Spoken Acoustic Error Homophone Self-Healing
-            ("(?i)雪[風|豐|峰]\\s*效應|出入\\s*雪風|出入\\s*雪崩", "出現雪崩效應"),
-            ("(?i)(?:com|con|come|sister|season|犧牲)\\s*Prom(?:pt)?", "System Prompt"),
-            ("(?i)(?:Maro|Marlo|Mro|Model|Mdl)\\s*(?:動至|凍至|動字|等詞彙|等字)", "Model 等詞彙"),
-            ("(?i)\\b(?:Maro|Marlo|Mro)\\b", "Model"),
-            ("(?i)(?:列印|列成|寫成|做成)?\\s*(?:怎麼當|買當|馬克當|麥當|末當|默當|Mark\\s*down)\\s*(?:清單|列表|語法|格式)?", "列成 Markdown 清單"),
-            ("希望\\s*(?:大陸|斷落|大路)\\s*(?:不要|太碎|太細|分段)?", "希望段落不要太碎"),
-            ("我們家把它|我們家把", "我們要把它"),
-            ("第三個\\s*(?:智能|只能|智力|智慧)\\s*是", "第三個是"),
-            ("這樣拿\\s*謝謝|這樣拿|這樣啦", "這樣，謝謝。")
-        ]
-        
-        for item in tokenPatterns {
-            if let regex = try? NSRegularExpression(pattern: item.pattern, options: [.caseInsensitive]) {
-                let range = NSRange(location: 0, length: result.utf16.count)
-                result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: item.replacement)
-            }
-        }
-        
-        return result
+        return text
     }
     
-    // MARK: - Pass 2B: Semantic Intent & Homophone Disambiguation
-    
-    /// Context-aware disambiguation for homophones based on full-sentence narrative intent
+    /// Pure native pass-through without artificial hardcoded regexes
     public func disambiguateSemanticIntent(_ text: String) -> String {
-        var result = text
-        
-        let semanticRegexes: [(pattern: String, replacement: String)] = [
-            // Spoken Punctuation Nouns vs. Punctuation Symbols Disambiguation
-            ("(?i)(?:把|將|被)\\s*[，、]+\\s*(?:刪掉|拿掉|去掉|加上|輸入|修改|替換|移除)", "把「逗號」刪掉"),
-            ("(?i)(?:把|將|被)\\s*[。]+\\s*(?:刪掉|拿掉|去掉|加上|輸入|修改|替換|移除)", "把「句號」刪掉"),
-            ("(?i)(?:把|將|被)\\s*[？?]+\\s*(?:刪掉|拿掉|去掉|加上|輸入|修改|替換|移除)", "把「問號」刪掉"),
-            ("(?i)(?:把|將|被)\\s*[！!]+\\s*(?:刪掉|拿掉|去掉|加上|輸入|修改|替換|移除)", "把「驚嘆號」刪掉"),
-            ("(?i)(?:講|說|念|唸|寫)\\s*[，、]+(?=\\s*(?:是|這|文字|這兩個字|兩個字|符號|本人))", "講「逗號」"),
-            ("(?i)(?:講|說|念|唸|寫)\\s*[。]+(?=\\s*(?:是|這|文字|這兩個字|兩個字|符號|本人))", "講「句號」"),
-            ("(?i)[，、]+\\s*(?:這兩個字|這三個字|文字本人|這個符號|這個標點)", "「逗號」$1"),
-            ("(?i)[。]+\\s*(?:這兩個字|這三個字|文字本人|這個符號|這個標點)", "「句號」$1"),
-            ("(?i)[？?]+\\s*(?:這兩個字|這三個字|文字本人|這個符號|這個標點)", "「問號」$1"),
-            ("(?i)[！!]+\\s*(?:這兩個字|這三個字|文字本人|這個符號|這個標點)", "「驚嘆號」$1"),
-            ("(?i)是[，、]+(?=\\s*(?:這個符號|這個標點|這兩個字))", "是「逗號」"),
-            ("(?i)是[。]+(?=\\s*(?:這個符號|這個標點|這兩個字))", "是「句號」"),
-            ("(?i)顯示\\s*(?:\\[\\]|，|。|、|「」)?\\s*(?:這兩個字|兩個字)", "顯示「逗號」兩個字"),
-            ("(?i)判斷\\s*[，、]+\\s*的", "判斷「逗號」的"),
-            
-            // Trigger Disambiguation (處罰 -> 觸發)
-            ("處罰(?=\\s*(?:這件事情|機制|條件|點|時間|就是|要把|SLM|LLM|Model|事件|動作|發送|流程|邏輯|這個|一次|現在))", "觸發"),
-            ("(?<=(?:什麼時候會|會不會|怎麼|如何|去|來|要|再次|重新|自動|何時會|會))\\s*處罰", "觸發"),
-            ("處罰這件事情", "觸發這件事情"),
-            ("處罰就是", "觸發就是"),
-            ("處罰現在", "觸發現在"),
-            
-            // General Semantic Intent & Disambiguation
-            ("羽翼(?=如果|明顯|表達|理解|上下文|順序|判定|變得|非常|很|清|正)", "語意"),
-            ("(?:好的|做有|這叫做有|這才叫做有|進行|經過|文字|文章|內容|幫我們|請他|讓它|可以幫我們)\\s*認識", "好的潤飾"),
-            ("幫我們認識", "幫我們潤飾"),
-            ("可以幫我們認識", "可以幫我們潤飾"),
-            ("經過好的認識", "經過好的潤飾"),
-            ("認識(?=我們|我|文字|文章|一下|的多一點|一下下|的|內容|輸出|結果|效果|功能|講的話|說的話)", "潤飾"),
-            ("潤濕", "潤飾"),
-            ("把蚊子", "把文字"),
-            ("布拉布布拉|不拉布拉|布拉布拉", "等等"),
-            ("字字", "字"),
-            ("段類", "段之類"),
-            ("類類", "類"),
-            ("夠夠", "夠"),
-            ("別別", "別")
-        ]
-        
-        for item in semanticRegexes {
-            if let regex = try? NSRegularExpression(pattern: item.pattern, options: []) {
-                let range = NSRange(location: 0, length: result.utf16.count)
-                result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: item.replacement)
-            }
-        }
-        
-        return result
+        return text
     }
     
-    // MARK: - Pass 2C: Static Phonetic Typos Normalization
-    
-    /// Static dictionary for explicit spoken acronyms and platform terms
+    /// Pure native pass-through without artificial hardcoded regexes
     public func normalizePhoneticTypos(_ text: String) -> String {
-        var result = text
-        
-        let typoMap = [
-            "S C N S C": "Esc",
-            "yes C": "Esc",
-            "S C": "Esc",
-            "E S C": "Esc",
-            "lifetime": "Live Streaming",
-            "Line streaming": "Live Streaming",
-            "line streaming": "Live Streaming",
-            "stm": "Streaming",
-            "sting": "Streaming",
-            "typees": "Typeless",
-            "Temples": "Typeless",
-            "T Y P E L E S S": "Typeless",
-            "Mdl": "Model",
-            "犧牲 Prom": "System Prompt",
-            "犧牲 prom": "System Prompt",
-            "Chat 的點": "Check 的點",
-            "分開系": "分開細",
-            "錯字為治癒": "錯字會自癒",
-            "錯字會治癒": "錯字會自癒",
-            "成斷": "成段",
-            "第四次第四個": "第四個",
-            "修到好好": "修到好",
-            "又又": "又",
-            "郵輪邏輯": "邏輯",
-            "於最近": "贅字",
-            "拗不出來": "Output 出來",
-            "拗出來": "Output 出來",
-            "雜雜訊": "雜訊",
-            "雜項": "雜訊",
-            "第二二點": "第 2 點",
-            "第一一點": "第 1 點",
-            "第三三點": "第 3 點",
-            "所做的西西": "所做的東西",
-            "整理過字": "整理過的字",
-            "像對是": "相對是",
-            "之什麼之後呢": "之後",
-            "然後呢然後": "然後",
-            "我也不知道我也不知道": "我也不知道",
-            "一模一樣一模一樣": "一模一樣",
-            "順序順序": "順序",
-            "希望希望": "希望",
-            "文字字": "文字"
-        ]
-        
-        for (typo, replacement) in typoMap {
-            result = result.replacingOccurrences(of: typo, with: replacement)
-        }
-        
-        return result
+        return text
     }
     
-    // MARK: - Pass 3: Multi-Clause Stutter & Loop Annihilation
+    // MARK: - Pass 3: Multi-Clause Stutter Deduplication
     
-    /// Remove progressive clause restarts, repetition loops, and stuttered fragments
+    /// Remove consecutive duplicate sentences and obvious stuttered loops
     public func annihilateStuttersAndRestarts(_ text: String) -> String {
         var result = text
-        
-        // 1. Sentence-level deduplication (removes duplicate clauses across the monologue)
-        result = deduplicateSentences(result)
-        
-        // 2. Repetitive restarting clauses (e.g. "好，我再來試次，好我再試一次，好，我再試一次" -> "好，我再試一次，")
-        let restartPatterns = [
-            ("(不要讓我一直驗收[好不好，\\s]*)+(讓我一直驗收[，\\s]*)+", "不要讓我一直驗收，"),
-            ("(好[，、\\s]*我[再來|再]*試[一次|次]*[，、\\s]*)+", "好，我再試一次，"),
-            ("(看[看]*能[不]*[，、\\s]*就是看能不能[錯別字別|把錯別字去]*[，、\\s]*)+", "看能不能把錯別字去掉，"),
-            ("是錯的。[，、\\s\n]*但是因為你知道", "但是因為你知道"),
-            ("(有我們會產生一個逐字稿嗎[。，\\s\n]*)+(逐字稿[，。\\s\n]*)+", "我們會產生一個逐字稿。")
-        ]
-        for (pat, rep) in restartPatterns {
-            if let regex = try? NSRegularExpression(pattern: pat, options: []) {
-                let range = NSRange(location: 0, length: result.utf16.count)
-                result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: rep)
-            }
-        }
-        
-        // 3. Progressive prefix clause stutter (e.g. "好我們來，好我們來測試" -> "好我們來測試")
-        let progressivePrefixPattern = "([，。！？\n\\s]|^)([\\u4e00-\\u9fa5A-Za-z0-9]{2,15})[，、\\s]+(?=\\2)"
-        if let regex = try? NSRegularExpression(pattern: progressivePrefixPattern, options: []) {
-            for _ in 0..<3 {
-                let range = NSRange(location: 0, length: result.utf16.count)
-                result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: "$1")
-            }
-        }
         
         // 4. Repeated full sentence deduplication (e.g. "盡可能地去呈現。盡可能地去呈現" -> "盡可能地去呈現。")
         let sentenceRepeatPattern = "([^\\n。！？]{4,40}[。！？])[，、\\s]*\\1"
