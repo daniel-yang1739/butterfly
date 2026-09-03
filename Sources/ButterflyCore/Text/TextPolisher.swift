@@ -1,6 +1,6 @@
 import Foundation
 
-/// Intelligent text polishing, filler word removal, and Typeless-grade note structuring engine
+/// Intelligent text polishing, contextual homophone correction, filler word removal, and Typeless-grade note structuring engine
 public final class TextPolisher {
     public static let shared = TextPolisher()
     
@@ -21,21 +21,24 @@ public final class TextPolisher {
         // 1. Ensure 100% Traditional Chinese (Taiwan standard)
         let traditional = OpenCCTranslator.shared.convert(trimmed)
         
-        // 2. Normalize spoken English/Chinese numbers into Arabic digits (0-9) and standard unit abbreviations
+        // 2. Normalize spoken numbers & unit abbreviations
         var normalized = TextFormatter.shared.normalizeNumbersToDigits(traditional)
         normalized = TextFormatter.shared.normalizeUnitsAndTechTerms(normalized)
+        
+        // 3. Deep contextual homophone & tech terms correction
+        normalized = correctContextualHomophones(normalized)
         normalized = normalizePhoneticTypos(normalized)
         
-        // 3. Remove stutters, repeated characters, and duplicated phrases
+        // 4. Remove multi-clause progressive stutters and immediate repetitions
         normalized = removeStutterAndRepetitions(normalized)
         
-        // 4. Remove conversational filler words and oral crutches
+        // 5. Remove conversational filler words and oral crutches
         normalized = removeFillerWords(normalized, aggressive: mode != .liveStream)
         
-        // 5. Clean messy and consecutive punctuation marks
+        // 6. Clean messy and consecutive punctuation marks
         normalized = cleanPunctuation(normalized)
         
-        // 6. Apply structural organization based on mode (Typeless-grade structuring)
+        // 7. Apply structural organization based on mode (Typeless-grade structuring)
         let structured: String
         switch mode {
         case .liveStream:
@@ -44,10 +47,50 @@ public final class TextPolisher {
             structured = structureIntoTypelessNotes(normalized)
         }
         
-        // 7. Insert spacing between CJK and alphanumeric characters (Pangu Spacing)
+        // 8. Insert spacing between CJK and alphanumeric characters (Pangu Spacing)
         let formatted = TextFormatter.shared.insertSpacingBetweenCJKAndAlphanumeric(structured)
         
         return formatted.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    
+    // MARK: - Contextual Homophone Correction
+    
+    /// Context-aware disambiguation for spoken homophones and technical jargon
+    public func correctContextualHomophones(_ text: String) -> String {
+        var result = text
+        
+        // Regex patterns for context-dependent corrections
+        let contextualRegexes: [(pattern: String, replacement: String)] = [
+            ("羽翼(?=如果|明顯|表達|理解|上下文|順序|判定)", "語意"),
+            ("(稍微|多|幫我|進行|文字|文章|內容)認識", "$1潤飾"),
+            ("認識(?=文字|文章|一下|的多一點|一下下|的|內容)", "潤飾"),
+            ("音譜", "Input"),
+            ("應譜", "Input"),
+            ("奧普", "Output"),
+            ("奧特普", "Output"),
+            ("L\\s*O\\s*C\\s*O", "Local"),
+            ("L\\s*O\\s*C\\s*A\\s*L", "Local"),
+            ("(?i)\\bLoco\\b", "Local"),
+            ("壞\\s*List|What\\s*last|what\\s*list|壞名單", "Whitelist"),
+            ("com\\s*一版|come\\s*一版", "Commit 一版"),
+            ("扣核心", "Core 核心"),
+            ("收\\s*call|so\\s*call|so\\s*co", "Source Code"),
+            ("哈扣寫|哈扣", "Hardcode"),
+            ("拍森|拍省", "Python"),
+            ("達克", "Docker"),
+            ("字字", "字"),
+            ("段類", "段之類"),
+            ("類類", "類")
+        ]
+        
+        for item in contextualRegexes {
+            if let regex = try? NSRegularExpression(pattern: item.pattern, options: []) {
+                let range = NSRange(location: 0, length: result.utf16.count)
+                result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: item.replacement)
+            }
+        }
+        
+        return result
     }
     
     // MARK: - Phonetic & Colloquial Normalization
@@ -75,9 +118,9 @@ public final class TextPolisher {
             "拗出來": "Output 出來",
             "雜雜訊": "雜訊",
             "雜項": "雜訊",
-            "第二二點": "第二點",
-            "第一一點": "第一點",
-            "第三三點": "第三點",
+            "第二二點": "第 2 點",
+            "第一一點": "第 1 點",
+            "第三三點": "第 3 點",
             "認識認識": "潤飾",
             "所做的西西": "所做的東西",
             "整理過字": "整理過的字",
@@ -87,7 +130,8 @@ public final class TextPolisher {
             "我也不知道我也不知道": "我也不知道",
             "一模一樣一模一樣": "一模一樣",
             "順序順序": "順序",
-            "希望希望": "希望"
+            "希望希望": "希望",
+            "文字字": "文字"
         ]
         
         for (typo, replacement) in typoMap {
@@ -158,27 +202,61 @@ public final class TextPolisher {
     
     // MARK: - Stutter & Repetition Removal
     
-    /// Remove stuttering and consecutive character/word repetitions
+    /// Remove progressive clause stutters and character/phrase repetitions
     public func removeStutterAndRepetitions(_ text: String) -> String {
         var result = text
         
-        // 1. Single character repeated 3+ times (e.g. "我我我" -> "我")
+        // 1. Progressive prefix clause stutter (e.g. "好我們來，好我們來測試" -> "好我們來測試")
+        let progressivePrefixPattern = "([，。！？\n\\s]|^)([\\u4e00-\\u9fa5A-Za-z0-9]{2,15})[，、\\s]+(?=\\2)"
+        if let regex = try? NSRegularExpression(pattern: progressivePrefixPattern, options: []) {
+            for _ in 0..<3 {
+                let range = NSRange(location: 0, length: result.utf16.count)
+                result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: "$1")
+            }
+        }
+        
+        // 2. Repeated full sentence deduplication (e.g. "盡可能地去呈現。盡可能地去呈現" -> "盡可能地去呈現。")
+        let sentenceRepeatPattern = "([^\\n。！？]{4,40}[。！？])[，、\\s]*\\1"
+        if let regex = try? NSRegularExpression(pattern: sentenceRepeatPattern, options: []) {
+            for _ in 0..<2 {
+                let range = NSRange(location: 0, length: result.utf16.count)
+                result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: "$1")
+            }
+        }
+        
+        // 3. Single character repeated 3+ times (e.g. "我我我" -> "我")
         let triplePattern = "([\\u4e00-\\u9fa5])\\1{2,}"
         if let regex = try? NSRegularExpression(pattern: triplePattern, options: []) {
             let range = NSRange(location: 0, length: result.utf16.count)
             result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: "$1")
         }
         
-        // 2. Remove 2-character stutter pronouns/conjunctions at phrase starts (e.g. "我我覺得" -> "我覺得")
+        // 4. Remove 2-character stutter pronouns/conjunctions at phrase starts (e.g. "我我覺得" -> "我覺得")
         let cleanPattern = "([，。！？\n\\s]|^)(我|這|那|但|就|如|連|是|很|剛)\\2([\\u4e00-\\u9fa5])"
         if let cleanRegex = try? NSRegularExpression(pattern: cleanPattern, options: []) {
             let r = NSRange(location: 0, length: result.utf16.count)
             result = cleanRegex.stringByReplacingMatches(in: result, options: [], range: r, withTemplate: "$1$2$3")
         }
         
-        // 3. Two-character words repeated (e.g. "這個這個" -> "這個", "然後然後" -> "然後")
+        // 5. Two-character words repeated (e.g. "這個這個" -> "這個", "然後然後" -> "然後")
         let doubleCharPattern = "([\\u4e00-\\u9fa5]{2})\\1+"
         if let regex = try? NSRegularExpression(pattern: doubleCharPattern, options: []) {
+            let range = NSRange(location: 0, length: result.utf16.count)
+            result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: "$1")
+        }
+        
+        // 6. Multi-character phrase repetitions (2 to 10 characters, e.g. "我們試試看我們試試看" -> "我們試試看")
+        let multiPhrasePattern = "([\\u4e00-\\u9fa5A-Za-z0-9]{2,10})\\1+"
+        if let regex = try? NSRegularExpression(pattern: multiPhrasePattern, options: []) {
+            for _ in 0..<2 {
+                let range = NSRange(location: 0, length: result.utf16.count)
+                result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: "$1")
+            }
+        }
+        
+        // 7. Repeated phrases separated by comma or space (e.g. "你真的覺得，你真的覺得" -> "你真的覺得")
+        let commaPhrasePattern = "([\\u4e00-\\u9fa5A-Za-z0-9]{2,12})[，、\\s]+\\1"
+        if let regex = try? NSRegularExpression(pattern: commaPhrasePattern, options: []) {
             let range = NSRange(location: 0, length: result.utf16.count)
             result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: "$1")
         }
@@ -210,7 +288,7 @@ public final class TextPolisher {
         }
         
         // Convert trailing conjunction commas before transition keywords into full stops
-        let transitionBreakPattern = "，(?=(另外|此外|不過|但是|然而|因此|總結來說|總之|第一點|第二點|第三點|首先|其次|最後))"
+        let transitionBreakPattern = "，(?=(另外|此外|不過|但是|然而|因此|總結來說|總之|第一點|第二點|第三點|首先|其次|最後|第 1 點|第 2 點|第 3 點))"
         if let regex = try? NSRegularExpression(pattern: transitionBreakPattern, options: []) {
             let range = NSRange(location: 0, length: result.utf16.count)
             result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: "。")
@@ -226,7 +304,7 @@ public final class TextPolisher {
         guard text.count > 15 else { return text }
         
         // 1. Check for enumerated list indicators
-        let listPattern = "(?<=[。！？\n]|^|，)\\s*(第一種模式|第二種模式|第[一二三四五六七八九十0-9]+[點個項件、，事]|首先|一來|其次|二來|再來|最後[一點項事]?|總結來說|總結[：:]?|另外[一點項件事]?|此外[一點項件事]?)"
+        let listPattern = "(?<=[。！？\n]|^|，)\\s*(第一種模式|第二種模式|第\\s*[一二三四五六七八九十0-9]+\\s*[點個項件、，事]|首先|一來|其次|二來|再來|最後[一點項事]?|總結來說|總結[：:]?|另外[一點項件事]?|此外[一點項件事]?)"
         
         if let regex = try? NSRegularExpression(pattern: listPattern, options: []) {
             let nsString = text as NSString
@@ -281,7 +359,6 @@ public final class TextPolisher {
     
     /// Break monologue into clean logical paragraphs
     public func formatAsParagraphs(_ text: String) -> String {
-        // Split by full stops, exclamation marks, question marks, or double commas
         let sentences = text.components(separatedBy: CharacterSet(charactersIn: "。！？\n"))
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
