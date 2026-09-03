@@ -10,20 +10,20 @@ public enum SlidingDeltaAction: Equatable, Sendable {
     case noChange
 }
 
-/// Thread-safe Cumulative Streaming & Serialized Pause-Gated Refiner (Zero Freeze & Zero Avalanche)
+/// Thread-safe Strict Clause-Level Sliding Window Buffer (Zero Avalanche, True Prefix Immutability, Two-Tone Dynamic HUD)
 public final class SlidingWindowBuffer: @unchecked Sendable {
     private let lock = NSLock()
     
     /// Exact cumulative text that has physically been typed into the active OS cursor
     public private(set) var injectedCumulativeText: String = ""
     
-    /// Confirmed historical text locked on pauses
+    /// Confirmed historical text permanently locked and rendered in Bright White
     public private(set) var frozenText: String = ""
     
     /// Flag to guarantee strictly serialized, non-overlapping refinement passes
     private var isPolishingActive: Bool = false
     
-    /// Active unfrozen text currently being spoken
+    /// Active unfrozen text currently being spoken (rendered in Subtle Gray)
     public var activeTail: String {
         guard !frozenText.isEmpty && injectedCumulativeText.hasPrefix(frozenText) else {
             return injectedCumulativeText
@@ -55,7 +55,7 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
         return injectedCumulativeText
     }
     
-    // MARK: - Phase 1: Continuous Acoustic Streaming (Append-Only Fast Path)
+    // MARK: - Phase 1: Continuous Acoustic Streaming (Append-Only Fast Path + Clause Auto-Freeze)
     
     /// Process incoming real-time acoustic text from ASR stream while user is speaking
     public func appendStreamingText(_ rawFullText: String) -> SlidingDeltaAction {
@@ -65,7 +65,7 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
         let trimmed = rawFullText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return .noChange }
         
-        // Mode 1: Convert to Taiwan Traditional Chinese and light tech formatting
+        // Mode 1: Convert to Taiwan Traditional Chinese
         let normalized = OpenCCTranslator.shared.convert(trimmed)
         
         // 1. Direct forward append fast-path (Append-Only, 0 Backspaces)
@@ -74,46 +74,62 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
             let delta = String(normalized[suffixIndex...])
             if !delta.isEmpty {
                 injectedCumulativeText = normalized
+                autoCommitCompletedClauses()
                 return .append(text: delta)
             }
             return .noChange
         }
         
-        // 2. In-place tail refinement when ASR adjusts acoustic homophones at the tail
+        // 2. In-place tail refinement when ASR adjusts acoustic homophones at the active tail
         let (backspaces, replacement) = computeMinimalDelta(from: injectedCumulativeText, to: normalized)
         if backspaces <= maxBackspaceLimit {
             injectedCumulativeText = normalized
+            autoCommitCompletedClauses()
             if backspaces == 0 && !replacement.isEmpty {
                 return .append(text: replacement)
             } else if backspaces > 0 {
                 return .replaceTail(backspaces: backspaces, replacement: replacement)
             }
         } else {
-            // 3. CRITICAL ANTI-FREEZE RECOVERY:
-            // If backspaces > maxBackspaceLimit (ASR modified text far in the past that was already frozen),
-            // NEVER block or freeze typing! Keep the existing screen text intact, extract only newly appended suffix,
-            // and continue streaming forward seamlessly!
+            // 3. Anti-freeze recovery: preserve screen text and append new suffix
             if normalized.count > injectedCumulativeText.count {
                 let extraCount = normalized.count - injectedCumulativeText.count
                 let newSuffix = String(normalized.suffix(extraCount))
                 if !newSuffix.isEmpty {
                     injectedCumulativeText += newSuffix
+                    autoCommitCompletedClauses()
                     return .append(text: newSuffix)
                 }
             } else {
-                // If length is the same or shorter, update internal state to stay synchronized
                 injectedCumulativeText = normalized
+                autoCommitCompletedClauses()
             }
         }
         
         return .noChange
     }
     
+    // MARK: - Clause Auto-Freeze Helper
+    
+    /// Automatically advances `frozenText` when punctuation marks (，。？！；) are completed
+    /// This immediately turns completed sentences into Bright White on the HUD while you continue speaking!
+    private func autoCommitCompletedClauses() {
+        // If current text has a punctuation mark that extends beyond frozenText
+        let delimiters: [Character] = ["，", "。", "！", "？", "；", "…", "\n"]
+        if let lastPunctuationIndex = injectedCumulativeText.lastIndex(where: { delimiters.contains($0) }) {
+            let nextIndex = injectedCumulativeText.index(after: lastPunctuationIndex)
+            let committedPrefix = String(injectedCumulativeText[..<nextIndex])
+            if committedPrefix.count > frozenText.count {
+                frozenText = committedPrefix
+            }
+        }
+    }
+    
     // MARK: - Phase 2: Serialized Pause-Gated Refinement (Strict 1-at-a-time Model Queue)
     
     /// Triggered when the speaker naturally pauses (e.g. 350ms silence)
-    /// Refines the active text with domain vocabulary, Pangu spacing, numbers & units.
-    /// Strictly serialized: Only allows ONE refinement pass at a time.
+    /// Refines ONLY the active unfrozen tail with domain vocabulary, Pangu spacing, numbers & units.
+    /// Strictly serialized: Never touches or passes earlier frozen history to the model.
     public func onPauseTriggered() -> SlidingDeltaAction {
         lock.lock()
         defer { lock.unlock() }
@@ -124,15 +140,29 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
         isPolishingActive = true
         defer { isPolishingActive = false }
         
-        // Refine with Mode 1 live dictation polisher (Pangu spacing, numbers, tech terms like Context)
-        let refined = TextPolisher.shared.polish(injectedCumulativeText, mode: .liveStream)
+        // 1. Extract ONLY the active unfrozen tail
+        let tailToPolish: String
+        if !frozenText.isEmpty && injectedCumulativeText.hasPrefix(frozenText) {
+            let suffixIdx = injectedCumulativeText.index(injectedCumulativeText.startIndex, offsetBy: frozenText.count)
+            tailToPolish = String(injectedCumulativeText[suffixIdx...])
+        } else {
+            tailToPolish = injectedCumulativeText
+        }
         
-        let (backspaces, replacement) = computeMinimalDelta(from: injectedCumulativeText, to: refined)
+        guard !tailToPolish.isEmpty else {
+            frozenText = injectedCumulativeText
+            return .noChange
+        }
         
-        // Only apply if the change is within safe backspace limits
+        // 2. Refine ONLY the active tail (domain tech terms, numbers, units, Pangu spacing)
+        let refinedTail = TextPolisher.shared.polish(tailToPolish, mode: .liveStream)
+        let targetFull = frozenText + refinedTail
+        
+        let (backspaces, replacement) = computeMinimalDelta(from: injectedCumulativeText, to: targetFull)
+        
         if backspaces <= maxBackspaceLimit {
-            injectedCumulativeText = refined
-            frozenText = refined
+            injectedCumulativeText = targetFull
+            frozenText = targetFull // Lock the finalized clause into frozen history
             if backspaces == 0 && !replacement.isEmpty {
                 return .append(text: replacement)
             } else if backspaces > 0 {
