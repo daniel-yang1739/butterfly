@@ -46,7 +46,10 @@ public final class LocalWhisperStreamEngine: @unchecked Sendable {
     private static let ringBufferSampleCount = sampleRate * 8
     private static let ringBufferTrimThreshold = ringBufferSampleCount + sampleRate
     private static let minimumInitialSampleCount = sampleRate
-    private static let minimumNewSampleCount = sampleRate / 2
+    private static let inferenceWindowOverlapRatio = 0.5
+    private static let inferenceWindowStepSampleCount = Int(
+        Double(inferenceWindowSampleCount) * (1 - inferenceWindowOverlapRatio)
+    )
     private static let minimumVoiceRMS: Float = 0.004
 
     public init(backend: AppleSiliconInferenceBackend = AppleSiliconInferenceBackend()) {
@@ -173,7 +176,14 @@ public final class LocalWhisperStreamEngine: @unchecked Sendable {
     private func transcribeLatestAudio(force: Bool) async {
         let snapshot = stateLock.withLock { state -> AudioSnapshot? in
             let newSampleCount = state.capturedSampleCount - state.lastTranscribedSampleCount
-            let minimumNewSamples = force ? 1 : Self.minimumNewSampleCount
+            let minimumNewSamples: Int
+            if force {
+                minimumNewSamples = 1
+            } else if state.lastTranscribedSampleCount == 0 {
+                minimumNewSamples = Self.minimumInitialSampleCount
+            } else {
+                minimumNewSamples = Self.inferenceWindowStepSampleCount
+            }
             guard !state.isTranscribing,
                   (force || state.capturedSampleCount >= Self.minimumInitialSampleCount),
                   state.lastVoicedSampleCount > state.lastTranscribedVoicedSampleCount,
