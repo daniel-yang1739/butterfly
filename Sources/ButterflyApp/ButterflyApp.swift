@@ -83,7 +83,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           • [Option + Shift + Space] -> Start Record & Smart Polish (auto-structured notes)
           • [Enter] / [Esc]          -> Stop & Finalize (First Enter stops recording, Second Enter sends)
         
-        Active Model: \(activeModelSpec.displayName)
+        Active ASR Model: \(ModelManager.shared.activeASRModel.displayName)
+        Active SLM Model: \(ModelManager.shared.activeSLMModel.displayName)
         Model Cache Path: \(ModelManager.shared.cacheDirectory.path)
         Click the Butterfly menu bar icon to switch or manage models.
         --------------------------------------------------
@@ -183,29 +184,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         modeParentItem.submenu = modeMenu
         menu.addItem(modeParentItem)
         
-        // Local models selector submenu (Interactive Model Switcher)
-        let modelMenu = NSMenu()
-        for model in ModelManager.defaultModels {
-            let isSelected = model.id == activeModelSpec.id
+        // Track A: Speech Recognition (ASR) Submenu
+        let asrMenu = NSMenu()
+        for model in ModelManager.defaultASRModels {
+            let isSelected = model.id == ModelManager.shared.activeASRModel.id
             let isDownloaded = ModelManager.shared.isModelDownloaded(model)
             
-            let selectionMark = isSelected ? "● " : "   "
-            let downloadStatus = isDownloaded ? " [Downloaded]" : " [Click to Download]"
+            let selectionMark = isSelected ? "✓ " : "   "
+            let downloadStatus = isDownloaded ? " [Ready]" : " [Click to Download]"
             let sizeDesc = model.sizeBytes > 0 ? " (\(model.formattedSize))" : " (Built-in)"
             
             let itemTitle = "\(selectionMark)\(model.displayName)\(sizeDesc)\(downloadStatus)"
             let modelItem = NSMenuItem(
                 title: itemTitle,
-                action: #selector(selectModelSpec(_:)),
+                action: #selector(selectASRModelSpec(_:)),
                 keyEquivalent: ""
             )
             modelItem.target = self
             modelItem.representedObject = model
-            modelMenu.addItem(modelItem)
+            asrMenu.addItem(modelItem)
         }
-        let modelParentItem = NSMenuItem(title: "Active Model: \(activeModelSpec.displayName)", action: nil, keyEquivalent: "")
-        modelParentItem.submenu = modelMenu
-        menu.addItem(modelParentItem)
+        let asrParentItem = NSMenuItem(title: "🎙️ Speech Recognition (ASR): \(ModelManager.shared.activeASRModel.displayName)", action: nil, keyEquivalent: "")
+        asrParentItem.submenu = asrMenu
+        menu.addItem(asrParentItem)
+        
+        // Track B: Smart Note Language Model (SLM) Submenu
+        let slmMenu = NSMenu()
+        for model in ModelManager.defaultSLMModels {
+            let isSelected = model.id == ModelManager.shared.activeSLMModel.id
+            let isDownloaded = ModelManager.shared.isModelDownloaded(model)
+            
+            let selectionMark = isSelected ? "✓ " : "   "
+            let downloadStatus = isDownloaded ? " [Ready]" : " [Click to Download]"
+            let sizeDesc = model.sizeBytes > 0 ? " (\(model.formattedSize))" : " (Built-in)"
+            
+            let itemTitle = "\(selectionMark)\(model.displayName)\(sizeDesc)\(downloadStatus)"
+            let modelItem = NSMenuItem(
+                title: itemTitle,
+                action: #selector(selectSLMModelSpec(_:)),
+                keyEquivalent: ""
+            )
+            modelItem.target = self
+            modelItem.representedObject = model
+            slmMenu.addItem(modelItem)
+        }
+        let slmParentItem = NSMenuItem(title: "🧠 Smart Note Language Model (SLM): \(ModelManager.shared.activeSLMModel.displayName)", action: nil, keyEquivalent: "")
+        slmParentItem.submenu = slmMenu
+        menu.addItem(slmParentItem)
         
         // Manage Model Storage & Uninstall Submenu
         let cacheMenu = NSMenu()
@@ -272,16 +297,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     
-    @objc private func selectModelSpec(_ sender: NSMenuItem) {
+    @objc private func selectASRModelSpec(_ sender: NSMenuItem) {
         guard let spec = sender.representedObject as? ModelSpec else { return }
         
         if ModelManager.shared.isModelDownloaded(spec) {
-            self.activeModelSpec = spec
+            ModelManager.shared.activeASRModel = spec
             updateMenu()
-            print("Butterfly: Switched active model to \(spec.displayName)")
+            print("Butterfly: Switched active ASR model to \(spec.displayName)")
             return
         }
         
+        downloadModelSpec(spec)
+    }
+    
+    @objc private func selectSLMModelSpec(_ sender: NSMenuItem) {
+        guard let spec = sender.representedObject as? ModelSpec else { return }
+        
+        if ModelManager.shared.isModelDownloaded(spec) {
+            ModelManager.shared.activeSLMModel = spec
+            updateMenu()
+            print("Butterfly: Switched active SLM language model to \(spec.displayName)")
+            return
+        }
+        
+        downloadModelSpec(spec)
+    }
+    
+    private func downloadModelSpec(_ spec: ModelSpec) {
         guard !isDownloadingModel else { return }
         isDownloadingModel = true
         
@@ -296,7 +338,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                 }
                 
-                self.activeModelSpec = spec
+                if spec.category == .speechToText {
+                    ModelManager.shared.activeASRModel = spec
+                } else {
+                    ModelManager.shared.activeSLMModel = spec
+                }
+                
                 self.isDownloadingModel = false
                 self.statusItem.button?.title = " ✅ Ready!"
                 self.updateMenu()
@@ -319,9 +366,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let spec = sender.representedObject as? ModelSpec else { return }
         do {
             try ModelManager.shared.deleteModel(spec)
-            if activeModelSpec.id == spec.id {
-                activeModelSpec = ModelManager.shared.getBestAvailableModel()
-            }
             updateMenu()
             print("Butterfly: Deleted model \(spec.displayName)")
         } catch {
@@ -332,7 +376,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func clearAllModelCache() {
         do {
             try ModelManager.shared.clearAllCache()
-            activeModelSpec = ModelManager.shared.getBestAvailableModel()
             updateMenu()
             print("Butterfly: Cleared all model cache")
         } catch {
@@ -387,7 +430,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.updateMenu()
             
             try liveEngine.startLiveListening()
-            print("Butterfly: Started \(mode.title) using [\(activeModelSpec.displayName)]...")
+            print("Butterfly: Started \(mode.title) [ASR: \(ModelManager.shared.activeASRModel.displayName), SLM: \(ModelManager.shared.activeSLMModel.displayName)]...")
         } catch {
             print("Failed to start recording: \(error.localizedDescription)")
             isRecording = false
@@ -410,8 +453,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         
         if mode == .recordAndPolish {
             print("\n[Mode 2: Full Monologue Captured (\(fullRawTranscript.count) chars)]:\n\(fullRawTranscript)")
-            // Mode 2: Record & Smart Polish (Paste structured note)
-            let polishedText = TextPolisher.shared.polish(fullRawTranscript, mode: .structuredNote)
+            // Mode 2: Record & Smart Polish via Dual-Track SLM Coordinator
+            let polishedText = await LanguageModelCoordinator.shared.restructure(transcript: fullRawTranscript)
             if !polishedText.isEmpty {
                 print("\n[Mode 2: Polished Note Result]:\n\(polishedText)\n")
                 await InputInjector.shared.inject(text: polishedText)

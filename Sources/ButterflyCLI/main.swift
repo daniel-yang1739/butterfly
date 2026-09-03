@@ -12,12 +12,22 @@ case "test", "test-all", "test-logic":
     exit(0)
 
 case "models":
-    print("\nSupported Local Models:")
-    for model in ModelManager.defaultModels {
+    print("\n🎙️ Track A: Speech Recognition Models (ASR):")
+    for model in ModelManager.defaultASRModels {
+        let isSelected = model.id == ModelManager.shared.activeASRModel.id ? " [Active ✓]" : ""
         let downloaded = ModelManager.shared.isModelDownloaded(model) ? "Downloaded" : "Not Downloaded"
-        print("  • \(model.displayName) [\(model.parameterCount) params, \(model.formattedSize)] - \(downloaded)")
-        print("    Description: \(model.description)")
-        print("    Recommended Accelerator: \(model.recommendedHardware.rawValue)\n")
+        print("  • \(model.displayName) [\(model.parameterCount), \(model.formattedSize)] - \(downloaded)\(isSelected)")
+        print("    ID: \(model.id)")
+        print("    Description: \(model.description)\n")
+    }
+    
+    print("🧠 Track B: Smart Note Language Models (SLM):")
+    for model in ModelManager.defaultSLMModels {
+        let isSelected = model.id == ModelManager.shared.activeSLMModel.id ? " [Active ✓]" : ""
+        let downloaded = ModelManager.shared.isModelDownloaded(model) ? "Downloaded" : "Not Downloaded"
+        print("  • \(model.displayName) [\(model.parameterCount), \(model.formattedSize)] - \(downloaded)\(isSelected)")
+        print("    ID: \(model.id)")
+        print("    Description: \(model.description)\n")
     }
 
 case "download":

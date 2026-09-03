@@ -1,9 +1,16 @@
 import Foundation
 
-/// Specification definition for on-device ASR models
+/// Category of on-device AI model
+public enum ModelCategory: String, Codable, Sendable {
+    case speechToText = "Speech-to-Text (ASR)"
+    case languageModel = "Smart Note (SLM)"
+}
+
+/// Specification definition for on-device ASR and SLM models
 public struct ModelSpec: Identifiable, Equatable, Hashable, Sendable {
     public let id: String
     public let displayName: String
+    public let category: ModelCategory
     public let parameterCount: String
     public let sizeBytes: Int64
     public let formattedSize: String
@@ -14,6 +21,7 @@ public struct ModelSpec: Identifiable, Equatable, Hashable, Sendable {
     public init(
         id: String,
         displayName: String,
+        category: ModelCategory = .speechToText,
         parameterCount: String,
         sizeBytes: Int64,
         downloadURL: URL?,
@@ -22,6 +30,7 @@ public struct ModelSpec: Identifiable, Equatable, Hashable, Sendable {
     ) {
         self.id = id
         self.displayName = displayName
+        self.category = category
         self.parameterCount = parameterCount
         self.sizeBytes = sizeBytes
         self.formattedSize = sizeBytes > 0 ? ByteCountFormatter.string(fromByteCount: sizeBytes, countStyle: .file) : "Built-in"
@@ -35,20 +44,24 @@ public struct ModelSpec: Identifiable, Equatable, Hashable, Sendable {
 public final class ModelManager: @unchecked Sendable {
     public static let shared = ModelManager()
     
-    /// Whitelist sorted by strength from STRONGEST (Rank 1) to WEAKEST fallback (Rank 6)
-    public static let prioritizedWhitelist: [ModelSpec] = [
+    // MARK: - Track A: Speech-to-Text (ASR) Whitelist
+    
+    /// Whitelist sorted from STRONGEST (Rank 1) to WEAKEST fallback (Rank 6)
+    public static let defaultASRModels: [ModelSpec] = [
         ModelSpec(
             id: "whisper-large-v3-turbo",
-            displayName: "Whisper Large-v3-Turbo (Flagship)",
+            displayName: "Whisper Large-v3-Turbo (809M)",
+            category: .speechToText,
             parameterCount: "809M",
-            sizeBytes: 809 * 1024 * 1024,
+            sizeBytes: 848_300_000,
             downloadURL: URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin"),
             recommendedHardware: .appleNeuralEngine,
-            description: "Rank 1: State-of-the-art flagship accuracy (809 MB), highest precision for complex speech"
+            description: "Rank 1: Flagship accuracy (848 MB), highest precision for complex code-switching speech"
         ),
         ModelSpec(
             id: "whisper-small",
-            displayName: "Whisper Small (Code-Switching)",
+            displayName: "Whisper Small (244M)",
+            category: .speechToText,
             parameterCount: "244M",
             sizeBytes: 466 * 1024 * 1024,
             downloadURL: URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin"),
@@ -57,7 +70,8 @@ public final class ModelManager: @unchecked Sendable {
         ),
         ModelSpec(
             id: "sensevoice-small",
-            displayName: "SenseVoice Small (FunASR)",
+            displayName: "SenseVoice Small (234M)",
+            category: .speechToText,
             parameterCount: "234M",
             sizeBytes: 220 * 1024 * 1024,
             downloadURL: URL(string: "https://huggingface.co/FunAudioLLM/SenseVoiceSmall/resolve/main/model.onnx"),
@@ -66,7 +80,8 @@ public final class ModelManager: @unchecked Sendable {
         ),
         ModelSpec(
             id: "whisper-base",
-            displayName: "Whisper Base (Balanced)",
+            displayName: "Whisper Base (74M)",
+            category: .speechToText,
             parameterCount: "74M",
             sizeBytes: 142 * 1024 * 1024,
             downloadURL: URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin"),
@@ -75,7 +90,8 @@ public final class ModelManager: @unchecked Sendable {
         ),
         ModelSpec(
             id: "whisper-tiny",
-            displayName: "Whisper Tiny (Lightweight)",
+            displayName: "Whisper Tiny (39M)",
+            category: .speechToText,
             parameterCount: "39M",
             sizeBytes: 75 * 1024 * 1024,
             downloadURL: URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin"),
@@ -84,7 +100,8 @@ public final class ModelManager: @unchecked Sendable {
         ),
         ModelSpec(
             id: "apple-speech-native",
-            displayName: "Apple Speech (Native Fallback)",
+            displayName: "Apple Speech Native (Built-in)",
+            category: .speechToText,
             parameterCount: "Built-in",
             sizeBytes: 0,
             downloadURL: nil,
@@ -93,11 +110,55 @@ public final class ModelManager: @unchecked Sendable {
         )
     ]
     
+    // MARK: - Track B: Smart Note Language Models (SLM) Whitelist
+    
+    /// Whitelist sorted from STRONGEST (Rank 1) to WEAKEST fallback (Rank 3)
+    public static let defaultSLMModels: [ModelSpec] = [
+        ModelSpec(
+            id: "qwen2.5-0.5b-instruct",
+            displayName: "Qwen2.5-0.5B-Instruct (~350MB)",
+            category: .languageModel,
+            parameterCount: "0.49B",
+            sizeBytes: 350 * 1024 * 1024,
+            downloadURL: URL(string: "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2_5_0_5b_instruct_q8_0.gguf"),
+            recommendedHardware: .appleNeuralEngine,
+            description: "Rank 1: State-of-the-art Chinese & English note restructuring, summaries, and action points (~350 MB)"
+        ),
+        ModelSpec(
+            id: "llama-3.2-1b-instruct",
+            displayName: "Llama-3.2-1B-Instruct (~700MB)",
+            category: .languageModel,
+            parameterCount: "1.23B",
+            sizeBytes: 700 * 1024 * 1024,
+            downloadURL: URL(string: "https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf"),
+            recommendedHardware: .appleNeuralEngine,
+            description: "Rank 2: High-speed reasoning and deep structural outline generation (~700 MB)"
+        ),
+        ModelSpec(
+            id: "builtin-cognitive-polisher",
+            displayName: "Built-in Cognitive Rule Engine (Built-in)",
+            category: .languageModel,
+            parameterCount: "Rule-Based",
+            sizeBytes: 0,
+            downloadURL: nil,
+            recommendedHardware: .cpuFallback,
+            description: "Rank 3: Zero-download native Two-Pass Cognitive Intent Reconstruction Engine (0 MB, 0 latency)"
+        )
+    ]
+    
     public static var defaultModels: [ModelSpec] {
-        return prioritizedWhitelist
+        return defaultASRModels + defaultSLMModels
+    }
+    
+    public static var prioritizedWhitelist: [ModelSpec] {
+        return defaultASRModels
     }
     
     public let cacheDirectory: URL
+    
+    // User active model overrides
+    private let activeASRKey = "butterfly_active_asr_model"
+    private let activeSLMKey = "butterfly_active_slm_model"
     
     public init(customCacheDir: URL? = nil) {
         if let customCacheDir = customCacheDir {
@@ -110,10 +171,41 @@ public final class ModelManager: @unchecked Sendable {
         try? FileManager.default.createDirectory(at: self.cacheDirectory, withIntermediateDirectories: true)
     }
     
-    /// Returns the highest-ranked (strongest) model available locally in the cache.
-    /// Scans the whitelist from Rank 1 down to Rank 6.
-    public func getBestAvailableModel() -> ModelSpec {
-        for model in ModelManager.prioritizedWhitelist {
+    // MARK: - Active Model Discovery & Selection
+    
+    /// Get the active ASR Model (User selected or best available fallback)
+    public var activeASRModel: ModelSpec {
+        get {
+            if let savedId = UserDefaults.standard.string(forKey: activeASRKey),
+               let found = ModelManager.defaultASRModels.first(where: { $0.id == savedId }),
+               isModelDownloaded(found) {
+                return found
+            }
+            return getBestAvailableASRModel()
+        }
+        set {
+            UserDefaults.standard.set(newValue.id, forKey: activeASRKey)
+        }
+    }
+    
+    /// Get the active SLM Model (User selected or best available fallback)
+    public var activeSLMModel: ModelSpec {
+        get {
+            if let savedId = UserDefaults.standard.string(forKey: activeSLMKey),
+               let found = ModelManager.defaultSLMModels.first(where: { $0.id == savedId }),
+               isModelDownloaded(found) {
+                return found
+            }
+            return getBestAvailableSLMModel()
+        }
+        set {
+            UserDefaults.standard.set(newValue.id, forKey: activeSLMKey)
+        }
+    }
+    
+    /// Returns the highest-ranked ASR model available locally in the cache.
+    public func getBestAvailableASRModel() -> ModelSpec {
+        for model in ModelManager.defaultASRModels {
             if model.id == "apple-speech-native" {
                 continue
             }
@@ -122,8 +214,28 @@ public final class ModelManager: @unchecked Sendable {
             }
         }
         // Baseline fallback (Apple Speech Native)
-        return ModelManager.prioritizedWhitelist.last!
+        return ModelManager.defaultASRModels.last!
     }
+    
+    /// Returns the highest-ranked SLM model available locally in the cache.
+    public func getBestAvailableSLMModel() -> ModelSpec {
+        for model in ModelManager.defaultSLMModels {
+            if model.id == "builtin-cognitive-polisher" {
+                continue
+            }
+            if isModelDownloaded(model) {
+                return model
+            }
+        }
+        // Baseline fallback (Built-in Cognitive Rule Engine)
+        return ModelManager.defaultSLMModels.last!
+    }
+    
+    public func getBestAvailableModel() -> ModelSpec {
+        return getBestAvailableASRModel()
+    }
+    
+    // MARK: - File Path & Cache Management
     
     /// Get the local cache file path for a model specification
     public func localPath(for spec: ModelSpec) -> URL {
@@ -133,7 +245,7 @@ public final class ModelManager: @unchecked Sendable {
     
     /// Check if a model is downloaded locally
     public func isModelDownloaded(_ spec: ModelSpec) -> Bool {
-        if spec.id == "apple-speech-native" {
+        if spec.id == "apple-speech-native" || spec.id == "builtin-cognitive-polisher" {
             return true
         }
         let path = localPath(for: spec)
@@ -143,7 +255,7 @@ public final class ModelManager: @unchecked Sendable {
     /// Download a model specification to local cache directory with progress reporting
     public func downloadModel(_ spec: ModelSpec, progress: (@Sendable (Double) -> Void)? = nil) async throws -> URL {
         guard let downloadURL = spec.downloadURL else {
-            if spec.id == "apple-speech-native" {
+            if spec.id == "apple-speech-native" || spec.id == "builtin-cognitive-polisher" {
                 return cacheDirectory
             }
             throw ButterflyError.modelNotFound("No download URL provided for model \(spec.id)")
@@ -156,7 +268,7 @@ public final class ModelManager: @unchecked Sendable {
         try? FileManager.default.removeItem(at: temporaryURL)
         
         var request = URLRequest(url: downloadURL)
-        request.timeoutInterval = 300 // 5 minute timeout for large models
+        request.timeoutInterval = 600 // 10 minute timeout for large models
         
         let (bytes, response) = try await URLSession.shared.bytes(for: request)
         
@@ -207,7 +319,7 @@ public final class ModelManager: @unchecked Sendable {
     
     /// Delete a downloaded model from the cache directory
     public func deleteModel(_ spec: ModelSpec) throws {
-        guard spec.id != "apple-speech-native" else { return }
+        guard spec.id != "apple-speech-native" && spec.id != "builtin-cognitive-polisher" else { return }
         let path = localPath(for: spec)
         if FileManager.default.fileExists(atPath: path.path) {
             try FileManager.default.removeItem(at: path)
@@ -241,7 +353,7 @@ public final class ModelManager: @unchecked Sendable {
         #if arch(arm64)
         return .appleNeuralEngine
         #else
-        return .cpu
+        return .cpuFallback
         #endif
     }
 }

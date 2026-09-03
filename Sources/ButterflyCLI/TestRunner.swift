@@ -104,13 +104,19 @@ public enum TestRunner {
         assertTrue(!sysPrompt.content.isEmpty, "TC-D1: System Prompt content loaded")
         assertTrue(sysPrompt.content.contains("Butterfly"), "TC-D2: System Prompt contains Butterfly role definition")
         
-        // MARK: - 5. ModelManager Tests
-        print("\n📦 Suite 5: ModelManager (Whitelist & Hardware Detection)")
-        let models = ModelManager.defaultModels
-        assertEqual(models[0].id, "whisper-large-v3-turbo", "TC-E1: Model whitelist Rank 1 is Whisper Large-v3-Turbo")
-        assertEqual(models[0].formattedSize, "848.3 MB", "TC-E2: Whisper Large-v3-Turbo formatted size")
-        let bestModel = ModelManager.shared.getBestAvailableModel()
-        assertTrue(!bestModel.id.isEmpty && !bestModel.displayName.isEmpty, "TC-E3: Best available model auto-discovery")
+        // MARK: - 5. ModelManager Dual-Track & SLM Tests
+        print("\n📦 Suite 5: ModelManager Dual-Track (ASR & SLM Whitelists)")
+        let asrModels = ModelManager.defaultASRModels
+        assertEqual(asrModels[0].id, "whisper-large-v3-turbo", "TC-E1: ASR whitelist Rank 1 is Whisper Large-v3-Turbo")
+        assertEqual(asrModels[0].formattedSize, "848.3 MB", "TC-E2: Whisper Large-v3-Turbo formatted size")
+        
+        let slmModels = ModelManager.defaultSLMModels
+        assertEqual(slmModels[0].id, "qwen2.5-0.5b-instruct", "TC-E3: SLM whitelist Rank 1 is Qwen2.5-0.5B-Instruct")
+        assertEqual(slmModels.last?.id, "builtin-cognitive-polisher", "TC-E4: SLM baseline fallback is Built-in Cognitive Rule Engine")
+        
+        let bestASR = ModelManager.shared.getBestAvailableASRModel()
+        let bestSLM = ModelManager.shared.getBestAvailableSLMModel()
+        assertTrue(!bestASR.id.isEmpty && !bestSLM.id.isEmpty, "TC-E5: Dual-track best available model auto-discovery")
         
         // MARK: - 6. InputInjector Tests
         print("\n📦 Suite 6: InputInjector (Streaming In-Place Delta)")
@@ -127,7 +133,7 @@ public enum TestRunner {
         print("\n" + String(repeating: "=", count: 60))
         print("🎯 Test Summary: \(passed) Passed, \(failed) Failed (Total: \(passed + failed) Assertions)")
         if failed == 0 {
-            print("✨ ALL 26 CORE LOGIC TESTS PASSED WITH 100% SUCCESS!\n")
+            print("✨ ALL 28 CORE LOGIC TESTS PASSED WITH 100% SUCCESS!\n")
         } else {
             print("⚠️ Some tests failed. Please review the output above.\n")
             exit(1)
