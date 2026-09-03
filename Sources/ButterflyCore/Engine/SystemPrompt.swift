@@ -37,22 +37,25 @@ public final class SystemPrompt: @unchecked Sendable {
         self.content = SystemPrompt.loadFromDisk()
     }
     
-    /// Returns the System Prompt tailored for Real-Time Live Dictation
-    public func prompt(for mode: TextPolisher.PolishMode = .liveStream) -> String {
-        return """
-        \(content)
-        
-        [Active Mode Directive: Real-Time Live Streaming Voice Dictation]
-        - Priority: 100% Faithful Reproduction & Fluid Sentence Punctuation.
-        - Do NOT summarize, reorder, or omit the speaker's ideas.
-        - Accurately add natural punctuation (，, 。, ！, ？), format numbers and units, and insert Pangu spacing.
-        """
+    /// Formatted Whisper Initial Prompt (Prime attention for code-switching & technical speech)
+    public var whisperInitialPrompt: String {
+        let vocab = TechDictionary.allVocabulary
+        let topKeywords = vocab.prefix(35).joined(separator: ", ")
+        if topKeywords.isEmpty {
+            return "以下是標準繁體中文（台灣）即時語音聽寫，請忠實記錄語音內容並保留正確標點符號。"
+        }
+        return "以下是繁體中文（台灣）即時語音聽寫，包含專業軟體與資安術語：\(topKeywords)。請忠實辨識並保持正確大小寫與標點符號。"
+    }
+    
+    /// Returns the active System Prompt directive for Speech-to-Text
+    public func prompt() -> String {
+        return content
     }
     
     /// Default embedded System Prompt fallback
     public static let defaultSystemPromptText: String = """
-    # Butterfly AI Speech & Semantic Polishing System Prompt
-    You are Butterfly, a high-precision, on-device AI speech-to-text cognitive reconstruction assistant.
-    Transform spoken Chinese-English code-switching transcriptions into clean, beautifully structured notes.
+    # Butterfly AI - Voice Dictation & Speech-to-Text System Prompt
+    You are Butterfly, a high-precision, on-device AI speech-to-text assistant running on Apple Silicon.
+    Transcribe spoken Chinese-English code-switching voice dictation into 100% faithful, beautifully formatted Traditional Chinese text.
     """
 }

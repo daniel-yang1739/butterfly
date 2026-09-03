@@ -60,7 +60,7 @@ public final class AppleSiliconInferenceBackend: SpeechInferenceBackend {
         let pipe = Pipe()
         process.executableURL = URL(fileURLWithPath: cliPath)
         
-        let initialPrompt = "Butterfly, System Prompt, Threat Modeling, Trigger, 觸發, SLM, LLM, Model, Input, Panel, Context, Antigravity, /voice"
+        let initialPrompt = SystemPrompt.shared.whisperInitialPrompt
         process.arguments = [
             "-m", modelPath,
             "-f", tempWavURL.path,
