@@ -184,7 +184,8 @@ public final class LiveSpeechEngine: NSObject, @unchecked Sendable, SFSpeechReco
             }
         }
         
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
+        inputNode.removeTap(onBus: 0)
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
             self?.recognitionRequest?.append(buffer)
             
             if let channelData = buffer.floatChannelData?[0] {
