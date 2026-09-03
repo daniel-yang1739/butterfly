@@ -99,6 +99,12 @@ public final class TextPolisher {
             ("(?i)live\\s*(?:saving|dreaming|dreamin)|streamDreamin|Live\\s*Streaming\\s*streamDreamin", "Live Streaming"),
             ("凹凸出|凹凸", "Output"),
             
+            // Security & Engineering Terms
+            ("(?i)\\b(?:Brat|Track|Brad|Bread|Thread|Threat|Treat|Fred|Fleet)\\s*Model(?:ing|lings)?\\b", "Threat Modeling"),
+            ("(?i)\\b(?:Brat|Track|Brad|Bread|Thread|Threat|Treat|Fred|Fleet)\\s*Model\\b", "Threat Model"),
+            ("(?i)\\bGit\\s*Lab\\b", "GitLab"),
+            ("(?i)\\bGit\\s*Hub\\b", "GitHub"),
+            
             // Units, Storage & Hardware
             ("messMessa\\s*messge\\s*mess\\s*RadarMadara|RadarMadara\\s*game\\s*getMadara", "Message"),
             ("Mata\\s*bite|Meta\\s*bite", "MB"),

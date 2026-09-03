@@ -22,6 +22,11 @@ public struct TechDictionary: Sendable {
         "SQL", "NoSQL", "MySQL", "PostgreSQL", "SQLite", "MongoDB", "Cassandra", "DynamoDB",
         "Vector Database", "Embedding", "Vector", "Index", "Query", "Schema", "Migration", "ORM", "Prisma",
         
+        // MARK: - Security & Threat Modeling
+        "Threat Modeling", "Threat Model", "Threat Intelligence", "STRIDE", "Zero Trust",
+        "Vulnerability", "CVE", "Exploit", "Penetration Test", "Pen Test", "OAuth", "SAML",
+        "SSO", "RBAC", "ABAC", "Encryption", "Hashing", "Salt", "HMAC", "Bcrypt",
+        
         // MARK: - AI & Machine Learning
         "AI", "LLM", "GPT", "Claude", "Gemini", "Whisper", "WhisperKit", "DeepSeek", "Llama", "Mistral",
         "Agent", "Prompt", "Prompting", "Context", "Fine-tune", "Fine-tuning", "RAG", "Zero-shot", "Few-shot",

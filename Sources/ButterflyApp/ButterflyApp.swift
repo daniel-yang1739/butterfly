@@ -73,9 +73,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         mode: .liveStreaming
                     )
                     
-                    // Mode 1 Phase 2: Reset 1.0s Pause-Gated Refinement Timer (Two-Phase Commit)
+                    // Mode 1 Phase 2: Reset 0.8s Pause-Gated Refinement Timer (50% Overlapping Sliding Window + 2PC)
                     self.pauseTimer?.invalidate()
-                    self.pauseTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) { [weak self] _ in
+                    self.pauseTimer = Timer.scheduledTimer(withTimeInterval: 0.8, repeats: false) { [weak self] _ in
                         Task { @MainActor [weak self] in
                             guard let self = self, self.isRecording, self.activeMode == .liveStreaming else { return }
                             
@@ -567,9 +567,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 await InputInjector.shared.inject(text: polishedText)
             }
         } else {
-            // Mode 1: Final clause refinement flush
+            // Mode 1: Final clause refinement flush & complete freeze
             let finalAction = slidingWindowBuffer.onPauseTriggered()
             InputInjector.shared.applySlidingDelta(finalAction)
+            slidingWindowBuffer.finalizeAll()
             print("\n[Mode 1: Live Streaming Completed]: \(fullRawTranscript)")
         }
         

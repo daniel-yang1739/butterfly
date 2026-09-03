@@ -17,8 +17,10 @@ public struct PreparedRefinement: Sendable {
     public let newFrozenIndex: Int
 }
 
-/// Thread-safe, Index-Based Sliding Window Buffer with Hardware-Locked Two-Phase Commit
-/// Prevents RAM pointer advancement from outpacing physical OS cursor keystroke injection.
+/// Thread-safe, Index-Based Sliding Window Buffer with 50% Overlapping Windows and Two-Phase Commit
+/// - 0.8s Silence Pause triggers refinement.
+/// - Full Context input to Polisher with external TechDictionary reference.
+/// - Midpoint Frozen Checkpoint (50% Overlap) ensures continuous smooth sliding window refinement!
 public final class SlidingWindowBuffer: @unchecked Sendable {
     private let lock = NSLock()
     
@@ -47,6 +49,14 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
         isCursorInjecting = false
     }
     
+    /// Finalize and lock the entire transcript when recording session concludes
+    public func finalizeAll() {
+        lock.lock()
+        defer { lock.unlock() }
+        frozenIndex = screenText.count
+        isCursorInjecting = false
+    }
+    
     /// Returns the complete transcribed text
     public var fullTranscript: String {
         lock.lock()
@@ -54,7 +64,7 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
         return screenText
     }
     
-    /// Historical confirmed text locked on 1.0s pauses (Rendered in Bright White)
+    /// Historical confirmed text locked on overlapping sliding checkpoints (Rendered in Bright White)
     public var frozenText: String {
         lock.lock()
         defer { lock.unlock() }
@@ -63,7 +73,7 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
         return String(screenText[..<idx])
     }
     
-    /// Active text currently being spoken (Rendered in Subtle Gray)
+    /// Active text currently being spoken and refined in overlapping window (Rendered in Subtle Gray)
     public var activeTail: String {
         lock.lock()
         defer { lock.unlock() }
@@ -125,9 +135,9 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
         return .noChange
     }
     
-    // MARK: - Phase 2: Two-Phase Commit 1.0s Pause-Gated Refinement
+    // MARK: - Phase 2: Overlapping Sliding Window 0.8s Pause-Gated Refinement
     
-    /// Step 1: Prepare refinement plan WITHOUT moving frozen pointer prematurely
+    /// Step 1: Prepare refinement plan with 50% Overlapping Window Midpoint Checkpoint
     public func preparePauseRefinement() -> PreparedRefinement? {
         lock.lock()
         defer { lock.unlock() }
@@ -176,8 +186,34 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
             action = .noChange
         }
         
+        // 3. Compute 50% Overlapping Sliding Window Midpoint Checkpoint
+        let previousFrozen = frozenIndex
+        let activeLength = targetFull.count - previousFrozen
+        let newFrozenIndex: Int
+        if activeLength > 10 {
+            let midpoint = previousFrozen + (activeLength / 2)
+            let delimiters: [Character] = ["，", "。", "！", "？", "；", "\n"]
+            var alignedPoint = midpoint
+            let targetChars = Array(targetFull)
+            for offset in 0...min(6, activeLength / 3) {
+                let rightIdx = midpoint + offset
+                if rightIdx < targetChars.count && delimiters.contains(targetChars[rightIdx]) {
+                    alignedPoint = rightIdx + 1
+                    break
+                }
+                let leftIdx = midpoint - offset
+                if leftIdx > previousFrozen && delimiters.contains(targetChars[leftIdx]) {
+                    alignedPoint = leftIdx + 1
+                    break
+                }
+            }
+            newFrozenIndex = max(previousFrozen, min(alignedPoint, targetFull.count))
+        } else {
+            newFrozenIndex = targetFull.count
+        }
+        
         isCursorInjecting = true
-        return PreparedRefinement(action: action, targetText: targetFull, newFrozenIndex: targetFull.count)
+        return PreparedRefinement(action: action, targetText: targetFull, newFrozenIndex: newFrozenIndex)
     }
     
     /// Step 2: Commit RAM pointers ONLY AFTER physical OS cursor keystrokes have finished executing
