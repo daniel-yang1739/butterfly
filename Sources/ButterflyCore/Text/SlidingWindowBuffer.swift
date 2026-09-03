@@ -18,9 +18,10 @@ public struct PreparedRefinement: Sendable {
     public let newPolishedIndex: Int
 }
 
-/// Thread-safe, Index-Based Sliding Window Buffer with Tri-Color Cognitive Visual Model & 2PC
+/// Thread-safe, Index-Based Sliding Window Buffer with Punctuation Conservation & Tri-Color 2PC
+/// - Punctuation Conservation: Existing punctuation marks (，, 。, ！, ？, ；) are 100% STICKY and NEVER erased by ASR stream fluctuations!
 /// - ⚪ White (0 ..< frozenIndex): Confirmed historical text (100% Locked & Immutable)
-/// - 🟡 Amber Gold (frozenIndex ..< polishedIndex): AI Polished in the current active wave (Review period)
+/// - 🟡 Amber Gold (frozenIndex ..< polishedIndex): AI Polished Dynamic Window (80% Depth, eligible for future refinement)
 /// - 🔘 Subtle Gray (polishedIndex ..< screenText.count): Raw incoming speech currently being spoken
 public final class SlidingWindowBuffer: @unchecked Sendable {
     private let lock = NSLock()
@@ -98,7 +99,7 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
         return String(screenText[idx...])
     }
     
-    // MARK: - Phase 1: Continuous Acoustic Streaming (Append-Only Fast Path)
+    // MARK: - Phase 1: Continuous Acoustic Streaming with Sticky Punctuation Conservation
     
     /// Process incoming real-time acoustic text from ASR stream while user is speaking
     public func appendStreamingText(_ rawFullText: String) -> SlidingDeltaAction {
@@ -114,21 +115,25 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
         // Convert incoming acoustic text to Taiwan Traditional Chinese
         let normalized = OpenCCTranslator.shared.convert(trimmed)
         
+        // Punctuation Conservation Law: Re-inject established punctuation marks into normalized text
+        // so raw ASR incoming speech NEVER erases question marks, commas, or periods!
+        let preservedNormalized = preserveEstablishedPunctuation(from: screenText, to: normalized, protectedLength: frozenIndex)
+        
         // 1. Direct forward append fast-path (Append-Only, 0 Backspaces)
-        if normalized.hasPrefix(screenText) {
-            let suffixIndex = normalized.index(normalized.startIndex, offsetBy: screenText.count)
-            let delta = String(normalized[suffixIndex...])
+        if preservedNormalized.hasPrefix(screenText) {
+            let suffixIndex = preservedNormalized.index(preservedNormalized.startIndex, offsetBy: screenText.count)
+            let delta = String(preservedNormalized[suffixIndex...])
             if !delta.isEmpty {
-                screenText = normalized
+                screenText = preservedNormalized
                 return .append(text: delta)
             }
             return .noChange
         }
         
         // 2. In-place tail adjustment when ASR revises phonetics at the active tail
-        let (backspaces, replacement) = computeTailDelta(from: screenText, to: normalized, protectedLength: frozenIndex)
+        let (backspaces, replacement) = computeTailDelta(from: screenText, to: preservedNormalized, protectedLength: frozenIndex)
         if backspaces <= maxBackspaceLimit {
-            screenText = normalized
+            screenText = preservedNormalized
             if backspaces == 0 && !replacement.isEmpty {
                 return .append(text: replacement)
             } else if backspaces > 0 {
@@ -136,24 +141,24 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
             }
         } else {
             // Anti-freeze safety: Clamp backspaces to protected boundary
-            if normalized.count > screenText.count {
-                let extraCount = normalized.count - screenText.count
-                let newSuffix = String(normalized.suffix(extraCount))
+            if preservedNormalized.count > screenText.count {
+                let extraCount = preservedNormalized.count - screenText.count
+                let newSuffix = String(preservedNormalized.suffix(extraCount))
                 if !newSuffix.isEmpty {
                     screenText += newSuffix
                     return .append(text: newSuffix)
                 }
             } else {
-                screenText = normalized
+                screenText = preservedNormalized
             }
         }
         
         return .noChange
     }
     
-    // MARK: - Phase 2: Tri-Color Pause-Gated Refinement (Two-Phase Commit)
+    // MARK: - Phase 2: Tri-Color 20% Stride Dynamic Window Refinement (Two-Phase Commit)
     
-    /// Step 1: Prepare refinement plan with Tri-Color progression
+    /// Step 1: Prepare refinement plan with 20% Stride / 80% Dynamic Overlap Window
     public func preparePauseRefinement() -> PreparedRefinement? {
         lock.lock()
         defer { lock.unlock() }
@@ -184,7 +189,7 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
         
         let targetFull = frozenPrefix + refinedTail
         guard targetFull != screenText else {
-            frozenIndex = polishedIndex
+            frozenIndex = min(polishedIndex, screenText.count)
             polishedIndex = screenText.count
             return nil
         }
@@ -206,11 +211,6 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
         }
         
         // 3. Mathematical 20% Stride / 80% Dynamic Overlap Progression:
-        // - Active span evaluated by the Model: previousFrozen ..< targetFull.count
-        // - First 20% of the active span (aligned to punctuation) is stably locked to ⚪ White (frozenIndex)!
-        // - 80% of the active span remains in 🟡 Amber Gold Dynamic Window (polishedIndex = targetFull.count)!
-        // - The Gold segment is STILL within the active window (screenText[frozenIndex...])
-        //   and will be sent to the Model again in the next cycle to be re-evaluated alongside new speech!
         let previousFrozen = frozenIndex
         let activeSpan = targetFull.count - previousFrozen
         let newFrozenIndex: Int
@@ -265,14 +265,58 @@ public final class SlidingWindowBuffer: @unchecked Sendable {
         self.isCursorInjecting = false
     }
     
-    // MARK: - Legacy Compatibility Method
-    
+    /// Legacy Compatibility Method for testing
     public func onPauseTriggered() -> SlidingDeltaAction {
         guard let prepared = preparePauseRefinement() else {
             return .noChange
         }
         commitPauseRefinement(prepared)
         return prepared.action
+    }
+    
+    // MARK: - Punctuation Conservation Algorithm
+    
+    /// Re-injects established punctuation marks from oldText into newText
+    /// so ASR's unpunctuated raw stream never deletes question marks, commas, or periods!
+    public func preserveEstablishedPunctuation(from oldText: String, to newText: String, protectedLength: Int) -> String {
+        let puncts: [Character] = ["，", "。", "！", "？", "；", "、"]
+        let oldChars = Array(oldText)
+        let newChars = Array(newText)
+        
+        var iOld = 0
+        var iNew = 0
+        var merged: [Character] = []
+        
+        while iOld < oldChars.count && iNew < newChars.count {
+            if oldChars[iOld] == newChars[iNew] {
+                merged.append(oldChars[iOld])
+                iOld += 1
+                iNew += 1
+            } else if puncts.contains(oldChars[iOld]) && oldChars[iOld] != newChars[iNew] {
+                // If oldText has a punctuation mark that newText omitted, preserve the punctuation!
+                merged.append(oldChars[iOld])
+                iOld += 1
+            } else if puncts.contains(newChars[iNew]) {
+                merged.append(newChars[iNew])
+                iNew += 1
+            } else {
+                merged.append(newChars[iNew])
+                iOld += 1
+                iNew += 1
+            }
+        }
+        
+        while iOld < oldChars.count && puncts.contains(oldChars[iOld]) {
+            merged.append(oldChars[iOld])
+            iOld += 1
+        }
+        
+        while iNew < newChars.count {
+            merged.append(newChars[iNew])
+            iNew += 1
+        }
+        
+        return String(merged)
     }
     
     // MARK: - Protected Delta Computation
