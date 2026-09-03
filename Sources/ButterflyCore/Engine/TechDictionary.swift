@@ -38,7 +38,7 @@ public struct TechDictionary: Sendable {
         "Apple Silicon", "M1", "M2", "M3", "M4", "M1 Pro", "M2 Max", "M3 Ultra", "M4 Max",
         "macOS", "iOS", "iPadOS", "watchOS", "visionOS", "Swift", "SwiftUI", "UIKit", "AppKit",
         "Objective-C", "Xcode", "SPM", "Swift Package Manager", "CocoaPods", "Combine", "Async/Await",
-        "Actor", "Sendable", "Task", "MainActor", "Butterfly", "OpenCC",
+        "Actor", "Sendable", "Task", "MainActor", "Butterfly", "OpenCC", "Menu", "Menu Bar", "Toolbar", "Status Bar",
         
         // MARK: - Programming Languages & Runtimes
         "Rust", "Go", "Golang", "Python", "PyPI", "Conda", "JavaScript", "TypeScript",

@@ -108,7 +108,7 @@ public enum TestRunner {
         print("\n📦 Suite 5: ModelManager Dual-Track (ASR & SLM Whitelists)")
         let asrModels = ModelManager.defaultASRModels
         assertEqual(asrModels[0].id, "whisper-large-v3-turbo", "TC-E1: ASR whitelist Rank 1 is Whisper Large-v3-Turbo")
-        assertEqual(asrModels[0].formattedSize, "848.3 MB", "TC-E2: Whisper Large-v3-Turbo formatted size")
+        assertEqual(asrModels[0].formattedSize, "1.62 GB", "TC-E2: Whisper Large-v3-Turbo formatted size")
         
         let slmModels = ModelManager.defaultSLMModels
         assertEqual(slmModels[0].id, "qwen2.5-0.5b-instruct", "TC-E3: SLM whitelist Rank 1 is Qwen2.5-0.5B-Instruct")

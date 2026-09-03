@@ -50,53 +50,53 @@ public final class ModelManager: @unchecked Sendable {
     public static let defaultASRModels: [ModelSpec] = [
         ModelSpec(
             id: "whisper-large-v3-turbo",
-            displayName: "Whisper Large-v3-Turbo (809M)",
+            displayName: "Whisper Large-v3-Turbo",
             category: .speechToText,
-            parameterCount: "809M",
-            sizeBytes: 848_300_000,
+            parameterCount: "1.6 GB",
+            sizeBytes: 1_624_555_275,
             downloadURL: URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin"),
             recommendedHardware: .appleNeuralEngine,
-            description: "Rank 1: Flagship accuracy (848 MB), highest precision for complex code-switching speech"
+            description: "Rank 1: Flagship accuracy (1.6 GB), highest precision for complex code-switching speech"
         ),
         ModelSpec(
             id: "whisper-small",
-            displayName: "Whisper Small (244M)",
+            displayName: "Whisper Small",
             category: .speechToText,
-            parameterCount: "244M",
-            sizeBytes: 466 * 1024 * 1024,
+            parameterCount: "488 MB",
+            sizeBytes: 488 * 1024 * 1024,
             downloadURL: URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin"),
             recommendedHardware: .appleNeuralEngine,
-            description: "Rank 2: High accuracy (466 MB), optimized for mixed Chinese-English programming jargon"
+            description: "Rank 2: High accuracy (488 MB), optimized for mixed Chinese-English programming jargon"
         ),
         ModelSpec(
             id: "sensevoice-small",
-            displayName: "SenseVoice Small (234M)",
+            displayName: "SenseVoice Small",
             category: .speechToText,
-            parameterCount: "234M",
-            sizeBytes: 220 * 1024 * 1024,
+            parameterCount: "230 MB",
+            sizeBytes: 230 * 1024 * 1024,
             downloadURL: URL(string: "https://huggingface.co/FunAudioLLM/SenseVoiceSmall/resolve/main/model.onnx"),
             recommendedHardware: .metalGPU,
-            description: "Rank 3: Ultra-low latency (<0.03s, 220 MB) fast Chinese/English speech recognition"
+            description: "Rank 3: Ultra-low latency (<0.03s, 230 MB) fast Chinese/English speech recognition"
         ),
         ModelSpec(
             id: "whisper-base",
-            displayName: "Whisper Base (74M)",
+            displayName: "Whisper Base",
             category: .speechToText,
-            parameterCount: "74M",
-            sizeBytes: 142 * 1024 * 1024,
+            parameterCount: "148 MB",
+            sizeBytes: 148 * 1024 * 1024,
             downloadURL: URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin"),
             recommendedHardware: .metalGPU,
-            description: "Rank 4: Balanced everyday dictation (142 MB)"
+            description: "Rank 4: Balanced everyday dictation (148 MB)"
         ),
         ModelSpec(
             id: "whisper-tiny",
-            displayName: "Whisper Tiny (39M)",
+            displayName: "Whisper Tiny",
             category: .speechToText,
-            parameterCount: "39M",
-            sizeBytes: 75 * 1024 * 1024,
+            parameterCount: "78 MB",
+            sizeBytes: 78 * 1024 * 1024,
             downloadURL: URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin"),
             recommendedHardware: .metalGPU,
-            description: "Rank 5: Ultra lightweight (75 MB), low latency"
+            description: "Rank 5: Ultra lightweight (78 MB), low latency"
         ),
         ModelSpec(
             id: "apple-speech-native",
@@ -116,23 +116,23 @@ public final class ModelManager: @unchecked Sendable {
     public static let defaultSLMModels: [ModelSpec] = [
         ModelSpec(
             id: "qwen2.5-0.5b-instruct",
-            displayName: "Qwen2.5-0.5B-Instruct (~350MB)",
+            displayName: "Qwen2.5-0.5B-Instruct",
             category: .languageModel,
-            parameterCount: "0.49B",
-            sizeBytes: 350 * 1024 * 1024,
+            parameterCount: "367 MB",
+            sizeBytes: 367 * 1024 * 1024,
             downloadURL: URL(string: "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2_5_0_5b_instruct_q8_0.gguf"),
             recommendedHardware: .appleNeuralEngine,
-            description: "Rank 1: State-of-the-art Chinese & English note restructuring, summaries, and action points (~350 MB)"
+            description: "Rank 1: State-of-the-art Chinese & English note restructuring, summaries, and action points (~367 MB)"
         ),
         ModelSpec(
             id: "llama-3.2-1b-instruct",
-            displayName: "Llama-3.2-1B-Instruct (~700MB)",
+            displayName: "Llama-3.2-1B-Instruct",
             category: .languageModel,
-            parameterCount: "1.23B",
-            sizeBytes: 700 * 1024 * 1024,
+            parameterCount: "807 MB",
+            sizeBytes: 807 * 1024 * 1024,
             downloadURL: URL(string: "https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf"),
             recommendedHardware: .appleNeuralEngine,
-            description: "Rank 2: High-speed reasoning and deep structural outline generation (~700 MB)"
+            description: "Rank 2: High-speed reasoning and deep structural outline generation (~807 MB)"
         )
     ]
     

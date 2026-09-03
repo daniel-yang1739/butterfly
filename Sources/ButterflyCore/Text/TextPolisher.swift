@@ -120,6 +120,13 @@ public final class TextPolisher {
             ("(?<=[再來測])\\s*(?:世界|是界|視界|試界)", "試一下"),
             ("(?i)\\b(?:是界|視界|試界|試一界)\\b", "試一下"),
             
+            // UI, Menu & macOS Architecture Terms
+            ("(?i)\\b(?:Manu|妹妞|免扭)\\b", "Menu"),
+            ("(?i)\\b(?:Tool\\s*bar|拖把|脫把|托把)(?=\\s*(?:那邊|上面|裡面|按鈕|功能|位置|選單|列|區域|圖示|顯示|改|不要))", "Toolbar"),
+            ("(?i)(?:在|到|從|看)\\s*(?:拖把|脫把|托把)", "$0"),
+            ("拖把那邊|拖把上面|拖把裡面|拖把改", "Toolbar 那邊"),
+            ("只剩\\s*Manu|Manu\\s*那邊", "Menu 那邊"),
+            
             // Units, Storage & Hardware
             ("messMessa\\s*messge\\s*mess\\s*RadarMadara|RadarMadara\\s*game\\s*getMadara", "Message"),
             ("Mata\\s*bite|Meta\\s*bite", "MB"),
