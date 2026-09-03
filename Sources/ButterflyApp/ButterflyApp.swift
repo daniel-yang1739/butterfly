@@ -34,6 +34,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var recordingStartTime: Date?
     private var animationIndex: Int = 0
     private var mode2PlaceholderText: String = ""
+    private let slidingWindowBuffer = SlidingWindowBuffer()
+    private var pauseTimer: Timer?
     
     static func main() {
         let app = NSApplication.shared
@@ -59,11 +61,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let timeStr = "[\(minutes):\(seconds)]"
                 
                 if self.activeMode == .liveStreaming {
-                    // Mode 1: Direct real-time streaming typing into active focused cursor (Append-Only)
-                    InputInjector.shared.injectStreamingDelta(
-                        newText: formattedText,
-                        previousText: &self.streamingInjectedText
-                    )
+                    // Mode 1 Phase 1: Continuous Acoustic Streaming (Append-Only Fast Path)
+                    let action = self.slidingWindowBuffer.appendStreamingText(formattedText)
+                    InputInjector.shared.applySlidingDelta(action)
+                    
+                    // Mode 1 Phase 2: Reset 350ms Pause-Gated Refinement Timer
+                    self.pauseTimer?.invalidate()
+                    self.pauseTimer = Timer.scheduledTimer(withTimeInterval: 0.35, repeats: false) { [weak self] _ in
+                        Task { @MainActor [weak self] in
+                            guard let self = self, self.isRecording, self.activeMode == .liveStreaming else { return }
+                            let pauseAction = self.slidingWindowBuffer.onPauseTriggered()
+                            InputInjector.shared.applySlidingDelta(pauseAction)
+                        }
+                    }
                     
                     let preview = formattedText.count > 10 ? "..." + String(formattedText.suffix(10)) : formattedText
                     self.statusItem.button?.title = " 🎙️ \(timeStr) \(preview)"
@@ -432,6 +442,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             isRecording = true
             recordingStartTime = Date()
             animationIndex = 0
+            slidingWindowBuffer.reset()
+            pauseTimer?.invalidate()
+            pauseTimer = nil
             
             if mode == .liveStreaming {
                 self.statusItem.button?.title = " 🎙️ [00:00] Streaming ·"
@@ -474,6 +487,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             recordingTimer?.invalidate()
             recordingTimer = nil
+            pauseTimer?.invalidate()
+            pauseTimer = nil
             self.statusItem.button?.title = ""
             self.updateMenu()
         }
@@ -485,6 +500,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         isRecording = false
         recordingTimer?.invalidate()
         recordingTimer = nil
+        pauseTimer?.invalidate()
+        pauseTimer = nil
         
         let mode = activeMode
         self.statusItem.button?.title = (mode == .recordAndPolish) ? " 🧠 Polishing notes..." : " ⏳ Finalizing..."
@@ -510,7 +527,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 await InputInjector.shared.inject(text: polishedText)
             }
         } else {
-            // Mode 1: Live Streaming text was already typed into the focused cursor in real-time.
+            // Mode 1: Final clause refinement flush
+            let finalAction = slidingWindowBuffer.onPauseTriggered()
+            InputInjector.shared.applySlidingDelta(finalAction)
             print("\n[Mode 1: Live Streaming Completed]: \(fullRawTranscript)")
         }
         

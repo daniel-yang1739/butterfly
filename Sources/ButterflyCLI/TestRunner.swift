@@ -129,11 +129,39 @@ public enum TestRunner {
         injector.injectStreamingDelta(newText: "你好世界", previousText: &prev2)
         assertEqual(prev2, "你好世界", "TC-F2: Streaming in-place backspace refinement delta")
         
+        // MARK: - 7. SlidingWindowBuffer Tests (Mode 1 Plan A Engine)
+        print("\n📦 Suite 7: SlidingWindowBuffer (Frozen Prefix + Pause-Gated Refinement)")
+        let buffer = SlidingWindowBuffer()
+        buffer.reset()
+        
+        // TC-G1: Streaming forward append
+        let a1 = buffer.appendStreamingText("你好")
+        assertEqual(a1, .append(text: "你好"), "TC-G1: Sliding window append fast path")
+        let a2 = buffer.appendStreamingText("你好世界")
+        assertEqual(a2, .append(text: "世界"), "TC-G2: Incremental streaming append without backspaces")
+        
+        // TC-G3: Silence pause-gated contextual self-healing ('上下文 contact' -> '上下文 Context')
+        buffer.reset()
+        _ = buffer.appendStreamingText("上下文 contact")
+        let pauseAction = buffer.onPauseTriggered()
+        assertEqual(pauseAction, .replaceTail(backspaces: 7, replacement: "Context"), "TC-G3: Pause-gated phonetic self-healing ('contact' -> 'Context')")
+        assertTrue(buffer.frozenText.contains("Context"), "TC-G4: Clause committed and locked into Frozen Prefix")
+        
+        // TC-G5: Boundary non-regression (Next incoming speech does not alter frozen prefix)
+        let a3 = buffer.appendStreamingText(buffer.frozenText + "第二點是速度")
+        assertEqual(a3, .append(text: "第二點是速度"), "TC-G5: Next clause streams forward without touching frozen prefix")
+        
+        // TC-G6: Numbers & Units pause-gated normalization
+        buffer.reset()
+        _ = buffer.appendStreamingText("八百 MB")
+        let pauseNumAction = buffer.onPauseTriggered()
+        assertEqual(pauseNumAction, .replaceTail(backspaces: 5, replacement: "800 MB"), "TC-G6: Numbers and units pause-gated normalization ('八百 MB' -> '800 MB')")
+        
         // MARK: - Final Summary
         print("\n" + String(repeating: "=", count: 60))
         print("🎯 Test Summary: \(passed) Passed, \(failed) Failed (Total: \(passed + failed) Assertions)")
         if failed == 0 {
-            print("✨ ALL 28 CORE LOGIC TESTS PASSED WITH 100% SUCCESS!\n")
+            print("✨ ALL 34 CORE LOGIC TESTS PASSED WITH 100% SUCCESS!\n")
         } else {
             print("⚠️ Some tests failed. Please review the output above.\n")
             exit(1)

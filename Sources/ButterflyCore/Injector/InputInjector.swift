@@ -70,6 +70,24 @@ public final class InputInjector: @unchecked Sendable {
         }
     }
     
+    /// Apply SlidingDeltaAction directly to the active cursor
+    public func applySlidingDelta(_ action: SlidingDeltaAction) {
+        switch action {
+        case .append(let text):
+            guard !text.isEmpty else { return }
+            typeUnicodeString(text)
+        case .replaceTail(let backspaces, let replacement):
+            if backspaces > 0 {
+                sendBackspaces(count: backspaces)
+            }
+            if !replacement.isEmpty {
+                typeUnicodeString(replacement)
+            }
+        case .noChange:
+            break
+        }
+    }
+    
     /// Utterance-Aware Real-time Live Stream Typing
     public func injectStreamingDelta(newText: String, previousText: inout String) {
         var currentNewText = newText
