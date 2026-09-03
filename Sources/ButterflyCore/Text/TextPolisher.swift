@@ -108,6 +108,7 @@ public final class TextPolisher {
             ("(?i)\\b(?:Varun|Vera|Read\\s*me|Red\\s*me)\\b", "README"),
             ("(?i)\\b(?:A\\s*DM\\s*D\\s*R|Agent\\s*M\\s*D|agents?\\s*m\\s*d)\\b", "AGENTS.md"),
             ("(?i)\\bSource\\s*Coded?\\b|收\\s*call|so\\s*call|so\\s*co", "Source Code"),
+            ("(?i)\\b(?:coming\\s*com\\s*meet|com\\s*meet|c\\s*o\\s*m\\s*m\\s*i\\s*t|c\\s*o\\s*n\\s*m\\s*i\\s*t)\\b|com\\s*一版|come\\s*一版", "Commit"),
             ("哈扣寫|哈扣", "Hardcode"),
             ("拍森|拍省", "Python"),
             ("達克", "Docker"),
@@ -132,8 +133,9 @@ public final class TextPolisher {
         var result = text
         
         let semanticRegexes: [(pattern: String, replacement: String)] = [
-            ("羽翼(?=如果|明顯|表達|理解|上下文|順序|判定)", "語意"),
-            ("(?:好的|做有|這叫做有|這才叫做有|進行|經過|文字|文章|內容)認識", "好的潤飾"),
+            ("羽翼(?=如果|明顯|表達|理解|上下文|順序|判定|變得|非常|很|清|正)", "語意"),
+            ("(?:好的|做有|這叫做有|這才叫做有|進行|經過|文字|文章|內容)\\s*認識", "好的潤飾"),
+            ("經過好的認識", "經過好的潤飾"),
             ("認識(?=文字|文章|一下|的多一點|一下下|的|內容|輸出|結果|效果|功能)", "潤飾"),
             ("潤濕", "潤飾"),
             ("把蚊子", "把文字"),
@@ -399,7 +401,7 @@ public final class TextPolisher {
         guard text.count > 15 else { return text }
         
         // 1. Check for enumerated list indicators
-        let listPattern = "(?<=[。！？\n]|^|，)\\s*(第一種模式|第二種模式|第\\s*[一二三四五六七八九十0-9]+\\s*[點個項件、，事]|首先|一來|其次|二來|再來|最後[一點項事]?|總結來說|總結[：:]?|另外[一點項件事]?|此外[一點項件事]?)"
+        let listPattern = "(?:^|[。！？\n，])\\s*(第一種模式|第二種模式|第\\s*[一二三四五六七八九十0-9]+\\s*[點個項件、，事]|首先|一來|其次|二來|再來|最後[一點項事]?|總結來說|總結[：:]?|另外[一點項件事]?|此外[一點項件事]?)"
         
         if let regex = try? NSRegularExpression(pattern: listPattern, options: []) {
             let nsString = text as NSString
@@ -429,7 +431,7 @@ public final class TextPolisher {
                     
                     var item = nsString.substring(with: NSRange(location: start, length: length))
                         .trimmingCharacters(in: .whitespacesAndNewlines)
-                        .trimmingCharacters(in: CharacterSet(charactersIn: "，、；"))
+                        .trimmingCharacters(in: CharacterSet(charactersIn: "，、；。 "))
                     
                     if !item.isEmpty && !item.hasSuffix("。") && !item.hasSuffix("！") && !item.hasSuffix("？") {
                         item += "。"
