@@ -126,49 +126,58 @@ public final class LiveSpeechEngine: NSObject, @unchecked Sendable, SFSpeechReco
             
             if let result = result {
                 let raw = result.bestTranscription.formattedString.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !raw.isEmpty else { return }
-                
-                let traditional = OpenCCTranslator.shared.convert(raw)
-                let formatted = TextPolisher.shared.polish(traditional, mode: .liveStream)
-                
-                let currentFull = self.stateLock.withLock { state -> String in
-                    if result.isFinal {
-                        state.committed.append(formatted)
-                        state.active = ""
-                    } else {
-                        state.active = formatted
-                    }
+                if !raw.isEmpty {
+                    let traditional = OpenCCTranslator.shared.convert(raw)
+                    let formatted = TextPolisher.shared.polish(traditional, mode: .liveStream)
                     
-                    var all = state.committed
-                    if !state.active.isEmpty {
-                        all.append(state.active)
-                    }
-                    
-                    var combined = ""
-                    for piece in all {
-                        guard !piece.isEmpty else { continue }
-                        if combined.isEmpty {
-                            combined = piece
+                    let currentFull = self.stateLock.withLock { state -> String in
+                        if result.isFinal {
+                            state.committed.append(formatted)
+                            state.active = ""
                         } else {
-                            if let last = combined.last, (last == "。" || last == "，" || last == "！" || last == "？" || last == "；") {
-                                combined += piece
+                            state.active = formatted
+                        }
+                        
+                        var all = state.committed
+                        if !state.active.isEmpty {
+                            all.append(state.active)
+                        }
+                        
+                        var combined = ""
+                        for piece in all {
+                            guard !piece.isEmpty else { continue }
+                            if combined.isEmpty {
+                                combined = piece
                             } else {
-                                combined += "，" + piece
+                                if let last = combined.last, (last == "。" || last == "，" || last == "！" || last == "？" || last == "；") {
+                                    combined += piece
+                                } else {
+                                    combined += "，" + piece
+                                }
                             }
                         }
+                        state.full = combined
+                        return state.full
                     }
-                    state.full = combined
-                    return state.full
+                    
+                    self.latestFullTranscript = currentFull
+                    // Emit continuous full transcript so SlidingWindowBuffer always has the unbroken stream
+                    self.onTranscriptUpdate?(currentFull)
+                    self.onFullTranscriptUpdate?(currentFull)
                 }
                 
-                self.latestFullTranscript = currentFull
-                self.onTranscriptUpdate?(formatted)
-                self.onFullTranscriptUpdate?(currentFull)
+                // If SFSpeechRecognizer reached final state for this utterance while still listening, seamlessly recycle task
+                if result.isFinal && self.isListening {
+                    self.restartRecognitionTaskIfNeeded()
+                }
             }
             
             if let error = error {
                 let nsError = error as NSError
-                if nsError.domain == "kAFAssistantErrorDomain" && (nsError.code == 216 || nsError.code == 209) {
+                if nsError.domain == "kAFAssistantErrorDomain" && (nsError.code == 216 || nsError.code == 209 || nsError.code == 1110) {
+                    if self.isListening {
+                        self.restartRecognitionTaskIfNeeded()
+                    }
                     return
                 }
                 self.onError?(error)
@@ -237,5 +246,79 @@ public final class LiveSpeechEngine: NSObject, @unchecked Sendable, SFSpeechReco
         
         latestFullTranscript = completeMonologue
         return completeMonologue
+    }
+    
+    /// Seamlessly recycle speech recognition task for continuous uninterrupted dictation
+    private func restartRecognitionTaskIfNeeded() {
+        guard isListening else { return }
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        recognitionRequest = nil
+        
+        let newRequest = SFSpeechAudioBufferRecognitionRequest()
+        newRequest.taskHint = .dictation
+        newRequest.contextualStrings = TechDictionary.engineeringVocabulary + [
+            "System Prompt", "Prompt", "Typeless", "Record", "Smart Polish", "Polish",
+            "Live Streaming", "Dictation", "Speech-to-Text", "Context", "Local", "Source Code",
+            "Hardcode", "Whitelist", "Blacklist", "Esc", "Option", "Space", "Command",
+            "Shift", "Bullet", "Markdown", "MB", "GB", "TB", "kg", "Mode 1", "Mode 2"
+        ]
+        if #available(macOS 13.0, *) {
+            newRequest.addsPunctuation = true
+        }
+        newRequest.shouldReportPartialResults = true
+        self.recognitionRequest = newRequest
+        
+        self.recognitionTask = speechRecognizer?.recognitionTask(with: newRequest) { [weak self] result, error in
+            guard let self = self else { return }
+            if let result = result {
+                let raw = result.bestTranscription.formattedString.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !raw.isEmpty {
+                    let traditional = OpenCCTranslator.shared.convert(raw)
+                    let formatted = TextPolisher.shared.polish(traditional, mode: .liveStream)
+                    let currentFull = self.stateLock.withLock { state -> String in
+                        if result.isFinal {
+                            state.committed.append(formatted)
+                            state.active = ""
+                        } else {
+                            state.active = formatted
+                        }
+                        var all = state.committed
+                        if !state.active.isEmpty {
+                            all.append(state.active)
+                        }
+                        var combined = ""
+                        for piece in all {
+                            guard !piece.isEmpty else { continue }
+                            if combined.isEmpty {
+                                combined = piece
+                            } else {
+                                if let last = combined.last, (last == "。" || last == "，" || last == "！" || last == "？" || last == "；") {
+                                    combined += piece
+                                } else {
+                                    combined += "，" + piece
+                                }
+                            }
+                        }
+                        state.full = combined
+                        return state.full
+                    }
+                    self.latestFullTranscript = currentFull
+                    self.onTranscriptUpdate?(currentFull)
+                    self.onFullTranscriptUpdate?(currentFull)
+                }
+                if result.isFinal && self.isListening {
+                    self.restartRecognitionTaskIfNeeded()
+                }
+            }
+            if let error = error {
+                let nsError = error as NSError
+                if nsError.domain == "kAFAssistantErrorDomain" && (nsError.code == 216 || nsError.code == 209 || nsError.code == 1110) {
+                    if self.isListening {
+                        self.restartRecognitionTaskIfNeeded()
+                    }
+                }
+            }
+        }
     }
 }
