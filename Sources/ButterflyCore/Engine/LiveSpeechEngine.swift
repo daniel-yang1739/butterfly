@@ -113,7 +113,7 @@ public final class LiveSpeechEngine: NSObject, @unchecked Sendable, SFSpeechReco
                 guard !raw.isEmpty else { return }
                 
                 let traditional = OpenCCTranslator.shared.convert(raw)
-                let formatted = TextFormatter.shared.format(traditional)
+                let formatted = TextPolisher.shared.polish(traditional, mode: .liveStream)
                 
                 let currentFull = self.stateLock.withLock { state -> String in
                     if result.isFinal {

@@ -56,7 +56,9 @@ public final class TextPolisher {
         var result = text
         
         let tokenPatterns: [(pattern: String, replacement: String)] = [
-            // Fuzzy Mode 2 & Mode 1 phonetic variations (matches 冒著吐兔, 貓的兔, 夢的圖, 莫德圖, 墨得兔, etc.)
+            // Fuzzy Mode 2 & Mode 1 phonetic variations (matches 冒著吐兔, 貓的兔, 夢的圖, 莫德圖, 墨得兔, ml 的 to, etc.)
+            ("(?i)\\b(?:ml|m\\s*l)\\s*(?:的|得|之)?\\s*(?:to|two|2|兔|圖)\\b|ml\\s*的\\s*to", "Mode 2"),
+            ("(?i)\\b(?:ml|m\\s*l)\\s*(?:的|得|之)?\\s*(?:one|1|萬|玩)\\b|ml\\s*的\\s*one", "Mode 1"),
             ("[貓冒墨莫夢帽][的德得著]*[兔圖吐土]+", "Mode 2"),
             ("[貓冒墨莫夢帽][的德得著]*[萬玩完一1]+", "Mode 1"),
             ("這兩個\\s*(?:mall|mode|毛|Mo)", "這兩個 Mode"),
