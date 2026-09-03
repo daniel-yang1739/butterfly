@@ -7,7 +7,7 @@ import os
 public final class LiveSpeechEngine: NSObject, @unchecked Sendable, SFSpeechRecognizerDelegate {
     public static let shared = LiveSpeechEngine()
     
-    private let audioEngine = AVAudioEngine()
+    private var audioEngine: AVAudioEngine?
     private var speechRecognizer: SFSpeechRecognizer?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
@@ -64,14 +64,19 @@ public final class LiveSpeechEngine: NSObject, @unchecked Sendable, SFSpeechReco
     
     /// Start live microphone capture and continuous speech recognition
     public func startLiveListening() throws {
-        // If already listening, stop first to ensure fresh session
-        if isListening {
-            audioEngine.stop()
-            audioEngine.inputNode.removeTap(onBus: 0)
-            recognitionRequest?.endAudio()
-            recognitionTask?.cancel()
-            isListening = false
+        // If already listening or lingering engine exists, perform clean reset
+        if let existingEngine = audioEngine {
+            if existingEngine.isRunning {
+                existingEngine.stop()
+            }
+            existingEngine.inputNode.removeTap(onBus: 0)
+            audioEngine = nil
         }
+        
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        recognitionRequest = nil
+        isListening = false
         
         stateLock.withLock { state in
             state.committed.removeAll()
@@ -80,48 +85,34 @@ public final class LiveSpeechEngine: NSObject, @unchecked Sendable, SFSpeechReco
         }
         latestFullTranscript = ""
         
-        recognitionTask?.cancel()
-        recognitionTask = nil
-        recognitionRequest = nil
-        
-        if audioEngine.isRunning {
-            audioEngine.stop()
-        }
-        
-        let inputNode = audioEngine.inputNode
-        inputNode.removeTap(onBus: 0)
-        audioEngine.reset()
-        
         if speechRecognizer == nil {
             speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "zh-TW"))
             speechRecognizer?.delegate = self
         }
         
+        // Always instantiate a brand new AVAudioEngine to ensure zero stale CoreAudio graph state
+        let newEngine = AVAudioEngine()
+        let inputNode = newEngine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
         guard recordingFormat.sampleRate > 0 else {
             throw ButterflyError.audioCaptureFailed("Audio hardware returned invalid sample rate")
         }
         
-        recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
-        guard let recognitionRequest = recognitionRequest else {
-            throw ButterflyError.audioCaptureFailed("Failed to create speech recognition request")
-        }
-        
-        recognitionRequest.taskHint = .dictation
-        recognitionRequest.contextualStrings = TechDictionary.engineeringVocabulary + [
+        let request = SFSpeechAudioBufferRecognitionRequest()
+        request.taskHint = .dictation
+        request.contextualStrings = TechDictionary.engineeringVocabulary + [
             "System Prompt", "Prompt", "Typeless", "Record", "Smart Polish", "Polish",
             "Live Streaming", "Dictation", "Speech-to-Text", "Context", "Local", "Source Code",
             "Hardcode", "Whitelist", "Blacklist", "Esc", "Option", "Space", "Command",
             "Shift", "Bullet", "Markdown", "MB", "GB", "TB", "kg", "Mode 1", "Mode 2"
         ]
-        
         if #available(macOS 13.0, *) {
-            recognitionRequest.addsPunctuation = true
+            request.addsPunctuation = true
         }
+        request.shouldReportPartialResults = true
+        self.recognitionRequest = request
         
-        recognitionRequest.shouldReportPartialResults = true
-        
-        recognitionTask = speechRecognizer?.recognitionTask(with: recognitionRequest) { [weak self] result, error in
+        self.recognitionTask = speechRecognizer?.recognitionTask(with: request) { [weak self] result, error in
             guard let self = self else { return }
             
             if let result = result {
@@ -161,12 +152,10 @@ public final class LiveSpeechEngine: NSObject, @unchecked Sendable, SFSpeechReco
                     }
                     
                     self.latestFullTranscript = currentFull
-                    // Emit continuous full transcript so SlidingWindowBuffer always has the unbroken stream
                     self.onTranscriptUpdate?(currentFull)
                     self.onFullTranscriptUpdate?(currentFull)
                 }
                 
-                // If SFSpeechRecognizer reached final state for this utterance while still listening, seamlessly recycle task
                 if result.isFinal && self.isListening {
                     self.restartRecognitionTaskIfNeeded()
                 }
@@ -184,8 +173,7 @@ public final class LiveSpeechEngine: NSObject, @unchecked Sendable, SFSpeechReco
             }
         }
         
-        inputNode.removeTap(onBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
             self?.recognitionRequest?.append(buffer)
             
             if let channelData = buffer.floatChannelData?[0] {
@@ -203,12 +191,14 @@ public final class LiveSpeechEngine: NSObject, @unchecked Sendable, SFSpeechReco
         }
         
         do {
-            audioEngine.prepare()
-            try audioEngine.start()
-            isListening = true
+            newEngine.prepare()
+            try newEngine.start()
+            self.audioEngine = newEngine
+            self.isListening = true
         } catch {
             inputNode.removeTap(onBus: 0)
-            isListening = false
+            self.audioEngine = nil
+            self.isListening = false
             throw ButterflyError.audioCaptureFailed("Failed to start audio engine: \(error.localizedDescription)")
         }
     }
@@ -221,11 +211,13 @@ public final class LiveSpeechEngine: NSObject, @unchecked Sendable, SFSpeechReco
         }
         isListening = false
         
-        if audioEngine.isRunning {
-            audioEngine.stop()
+        if let engine = audioEngine {
+            if engine.isRunning {
+                engine.stop()
+            }
+            engine.inputNode.removeTap(onBus: 0)
+            audioEngine = nil
         }
-        audioEngine.inputNode.removeTap(onBus: 0)
-        audioEngine.reset()
         
         recognitionRequest?.endAudio()
         
