@@ -3,7 +3,7 @@ import ButterflyCore
 
 /// Comprehensive Zero-Dependency Unit Test Runner for Butterfly Core Engine
 public enum TestRunner {
-    public static func runAllTests() {
+    public static func runAllTests() async {
         print("\n🧪 Running Butterfly Core Test Suite...\n" + String(repeating: "=", count: 60))
         
         var passed = 0
@@ -134,6 +134,86 @@ public enum TestRunner {
             "這是一個錯誤",
             "TC-G3: Active window revision replaces provisional text"
         )
+
+        // MARK: - 8. Smart Polish Orchestration Tests
+        print("\n📦 Suite 8: Smart Polish Orchestration")
+        let smartPrimary = CLIMockLanguageModelBackend(transform: { "Polished: \($0)" })
+        let smartEngine = SmartPolishEngine(primaryBackend: smartPrimary)
+        let smartResult = await smartEngine.polish("Original transcript")
+        assertEqual(smartResult.text, "Polished: Original transcript", "TC-H1: Available language model polishes transcript")
+        assertTrue(!smartResult.usedFallback, "TC-H2: Available language model avoids fallback")
+
+        let unavailablePrimary = CLIMockLanguageModelBackend(
+            availability: .unavailable(reason: "appleIntelligenceNotEnabled"),
+            transform: { $0 }
+        )
+        let explicitFallback = CLIMockLanguageModelBackend(transform: { "Fallback: \($0)" })
+        let fallbackEngine = SmartPolishEngine(
+            primaryBackend: unavailablePrimary,
+            fallbackBackend: explicitFallback
+        )
+        let fallbackResult = await fallbackEngine.polish("Original transcript")
+        assertEqual(fallbackResult.text, "Fallback: Original transcript", "TC-H3: Unavailable Apple model uses fallback")
+        assertTrue(fallbackResult.usedFallback, "TC-H4: Fallback use is reported")
+
+        let longInput = Array(repeating: "這是一個需要保留順序的完整句子。", count: 30).joined()
+        let chunkingPrimary = CLIMockLanguageModelBackend(transform: { $0 })
+        let chunkingEngine = SmartPolishEngine(primaryBackend: chunkingPrimary, chunkCharacterLimit: 200)
+        _ = await chunkingEngine.polish(longInput)
+        let chunkRequests = await chunkingPrimary.requestCount
+        assertTrue(chunkRequests > 1, "TC-H5: Long transcript is split into ordered chunks")
+
+        assertEqual(
+            GlobalHotkeyResolver.resolve(
+                keyCode: 49,
+                optionPressed: true,
+                shiftPressed: false,
+                commandPressed: false,
+                controlPressed: false
+            ),
+            .liveDictation,
+            "TC-H6: Option-Space resolves to live dictation"
+        )
+        assertEqual(
+            GlobalHotkeyResolver.resolve(
+                keyCode: 49,
+                optionPressed: true,
+                shiftPressed: true,
+                commandPressed: false,
+                controlPressed: false
+            ),
+            .smartPolish,
+            "TC-H7: Option-Shift-Space resolves to Smart Polish"
+        )
+
+        let overflowPrimary = CLIMockLanguageModelBackend(transform: { transcript in
+            if transcript.count > 80 {
+                throw LanguageModelBackendError.contextSizeExceeded
+            }
+            return transcript
+        })
+        let overflowEngine = SmartPolishEngine(
+            primaryBackend: overflowPrimary,
+            chunkCharacterLimit: 500,
+            minimumRetryChunkLength: 50
+        )
+        let overflowResult = await overflowEngine.polish(
+            Array(repeating: "這是一段需要重新切割的內容。", count: 20).joined()
+        )
+        assertTrue(!overflowResult.usedFallback, "TC-H8: Context overflow recursively retries smaller chunks")
+        assertTrue(await overflowPrimary.requestCount > 1, "TC-H9: Context overflow performs multiple bounded requests")
+
+        assertEqual(
+            GlobalHotkeyResolver.resolve(
+                keyCode: 49,
+                optionPressed: true,
+                shiftPressed: true,
+                commandPressed: true,
+                controlPressed: false
+            ),
+            nil,
+            "TC-H10: Command-modified shortcut is rejected"
+        )
         
         // MARK: - Final Summary
         print("\n" + String(repeating: "=", count: 60))
@@ -144,5 +224,28 @@ public enum TestRunner {
             print("⚠️ Some tests failed. Please review the output above.\n")
             exit(1)
         }
+    }
+}
+
+private actor CLIMockLanguageModelBackend: LanguageModelBackend {
+    private let configuredAvailability: LanguageModelAvailability
+    private let transform: @Sendable (String) throws -> String
+    private(set) var requestCount = 0
+
+    init(
+        availability: LanguageModelAvailability = .available,
+        transform: @escaping @Sendable (String) throws -> String
+    ) {
+        self.configuredAvailability = availability
+        self.transform = transform
+    }
+
+    func availability() async -> LanguageModelAvailability {
+        configuredAvailability
+    }
+
+    func polish(transcript: String, instructions: String) async throws -> String {
+        requestCount += 1
+        return try transform(transcript)
     }
 }

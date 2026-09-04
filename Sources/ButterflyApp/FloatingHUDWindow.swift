@@ -89,9 +89,14 @@ public final class FloatingHUDWindow: NSPanel {
         self.alphaValue = 0.0
         self.orderFrontRegardless()
         
-        statusLabel.stringValue = "🎙️ Live Voice Dictation [00:00]"
-        
-        let emptyAttr = NSAttributedString(string: "Listening...", attributes: [
+        statusLabel.stringValue = mode == .liveStreaming
+            ? "🎙️ Live Voice Dictation [00:00]"
+            : "📝 Smart Polish [00:00]"
+
+        let placeholder = mode == .liveStreaming
+            ? "Listening..."
+            : "Recording... Press Enter or Esc to finish."
+        let emptyAttr = NSAttributedString(string: placeholder, attributes: [
             .foregroundColor: NSColor.systemGray,
             .font: NSFont.systemFont(ofSize: 14, weight: .regular)
         ])
@@ -114,6 +119,17 @@ public final class FloatingHUDWindow: NSPanel {
         ]
         textView.textStorage?.setAttributedString(NSAttributedString(string: text, attributes: attr))
         textView.scrollToEndOfDocument(nil)
+    }
+
+    /// Display a non-transcript recording or processing state.
+    public func updateStatus(title: String, detail: String) {
+        guard isVisibleOnScreen else { return }
+        statusLabel.stringValue = title
+        let attributes: [NSAttributedString.Key: Any] = [
+            .foregroundColor: NSColor.systemGray,
+            .font: NSFont.systemFont(ofSize: 14, weight: .regular)
+        ]
+        textView.textStorage?.setAttributedString(NSAttributedString(string: detail, attributes: attributes))
     }
     
     /// Backward-compatible multi-segment update

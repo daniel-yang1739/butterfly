@@ -15,7 +15,7 @@ graph TB
     subgraph UserLayer ["1. 使用者互動層 (User Interaction Layer)"]
         CGTap["macOS 核心事件攔截器<br/>(Low-Level CGEventTap)"]
         MenuBar["狀態選單列<br/>(Status Menu Bar 🦋)"]
-        SystemPromptDoc["外部自訂 System Prompt<br/>(SYSTEM_PROMPT.md)"]
+        SystemPromptDoc["智慧潤稿 Prompt<br/>(SMART_POLISH_PROMPT.md)"]
     end
 
     subgraph AudioPipeline ["2. 音訊採集與會話管理層 (Audio Pipeline)"]
@@ -33,7 +33,7 @@ graph TB
     subgraph TextProcessing ["4. 兩輪認知重構與繁中轉換層 (Two-Pass Cognitive Engine)"]
         OpenCC["OpenCC 繁中轉換引擎<br/>(s2twp 台灣正體與慣用詞彙)"]
         TextFormatter["數字/單位標準化與盤古之白<br/>(Arabic Digits & Pangu Spacing)"]
-        CognitivePolisher["兩輪語意意圖重構引擎<br/>(TextPolisher: Mode 1 忠實 / Mode 2 深度列點)"]
+        CognitivePolisher["智慧潤稿引擎<br/>(Apple Foundation Models / Rules Fallback)"]
     end
 
     subgraph InputInjection ["5. 系統焦點注入與防誤送層 (Input Injection Layer)"]
@@ -57,7 +57,7 @@ graph TB
     TextFormatter --> CognitivePolisher
     SystemPromptDoc -.-> CognitivePolisher
     CognitivePolisher -->|"Mode 1 即時打字"| LiveStreamingDelta
-    CognitivePolisher -->|"Mode 2 深度潤飾"| ClipboardProxy
+    CognitivePolisher -->|"Mode 2 忠實潤稿"| ClipboardProxy
     LiveStreamingDelta --> FocusedApp["前台活動視窗 (Cursor, VS Code, Chrome, Slack, Discord 等)"]
     ClipboardProxy --> FocusedApp
 ```
@@ -86,11 +86,11 @@ stateDiagram-v2
 
 ## 4. 關鍵技術模組 (Key Technical Modules)
 
-1. **`SystemPrompt.swift` & `SYSTEM_PROMPT.md`**：
-   - 將提示詞與詞庫完全解耦為獨立 Markdown 檔案，支援熱載入與免重新編譯調整。
+1. **`SmartPolishPrompt.swift` & `SMART_POLISH_PROMPT.md`**：
+   - Mode 2 使用獨立提示詞，支援使用者覆寫且不影響 Whisper 詞彙偏置。
 2. **`TextPolisher.swift`（兩輪認知意圖重構）**：
    - **Pass 1**：數字（`800`）、單位（`MB`, `GB`, `TB`, `kg`）與無邊界音素科技詞彙校正（`Mode 1`, `Mode 2`, `System Prompt`, `Context`, `Source Code`, `README`, `AGENTS.md`）。
-   - **Pass 2**：Mode 1 嚴格非破壞性忠實輸出；Mode 2 深度贅字消除與 Markdown 列點自動重構。
+   - **Pass 2**：Mode 1 嚴格非破壞性忠實輸出；Apple Intelligence 不可用時為 Mode 2 提供規則式 fallback。
 3. **`LiveSpeechEngine.swift`（單一真源狀態機）**：
    - 廢除重複字串拼接，採用 `state.committed` + `state.active` 就地更新，徹底消除錄音時重複產生 3~4 次相同句子的問題。
 4. **`ButterflyApp.swift`（低階 `CGEventTap` 核心攔截）**：

@@ -19,6 +19,43 @@ public final class InputInjector: @unchecked Sendable {
     private let injectionQueue = DispatchQueue(label: "com.butterfly.input-injector", qos: .userInteractive)
     
     public init() {}
+
+    /// Paste a completed long-form result and restore the previous clipboard if it remains unchanged.
+    @MainActor
+    @discardableResult
+    public func injectByPaste(text: String, restoreClipboard: Bool = true) async -> Bool {
+        let cleanText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanText.isEmpty else { return false }
+
+        let pasteboard = NSPasteboard.general
+        let snapshot = Self.capturePasteboardItems(pasteboard)
+        pasteboard.clearContents()
+        guard pasteboard.setString(cleanText, forType: .string) else {
+            if !snapshot.isEmpty {
+                pasteboard.writeObjects(snapshot)
+            }
+            return false
+        }
+        let injectedChangeCount = pasteboard.changeCount
+
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        guard pasteboard.changeCount == injectedChangeCount else {
+            return false
+        }
+        simulatePasteCommand()
+
+        guard restoreClipboard else { return true }
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        guard pasteboard.changeCount == injectedChangeCount else {
+            return true
+        }
+
+        pasteboard.clearContents()
+        if !snapshot.isEmpty {
+            pasteboard.writeObjects(snapshot)
+        }
+        return true
+    }
     
     /// Inject a block of text into the active focused input using direct Unicode typing and pasteboard sync
     @discardableResult
@@ -190,6 +227,18 @@ public final class InputInjector: @unchecked Sendable {
         let options = [checkOptPrompt: true] as CFDictionary
         return AXIsProcessTrustedWithOptions(options)
     }
+
+    private static func capturePasteboardItems(_ pasteboard: NSPasteboard) -> [NSPasteboardItem] {
+        (pasteboard.pasteboardItems ?? []).map { source in
+            let copy = NSPasteboardItem()
+            for type in source.types {
+                if let data = source.data(forType: type) {
+                    copy.setData(data, forType: type)
+                }
+            }
+            return copy
+        }
+    }
 }
 #else
 public final class InputInjector: @unchecked Sendable {
@@ -200,6 +249,9 @@ public final class InputInjector: @unchecked Sendable {
     }
     public func typeUnicodeString(_ string: String) {}
     public func sendBackspaces(count: Int) {}
+    public func injectByPaste(text: String, restoreClipboard: Bool = true) async -> Bool {
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
     public func injectStreamingDelta(newText: String, previousText: inout String) {
         previousText = newText
     }

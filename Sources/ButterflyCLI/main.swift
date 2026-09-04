@@ -8,8 +8,11 @@ let command = args.count > 1 ? args[1] : "listen"
 
 switch command {
 case "test", "test-all", "test-logic":
-    TestRunner.runAllTests()
-    exit(0)
+    Task {
+        await TestRunner.runAllTests()
+        exit(0)
+    }
+    RunLoop.main.run()
 
 case "models":
     print("\n🎙️ Speech Recognition Models (ASR Whitelist):")
@@ -110,13 +113,26 @@ case "test-convert":
     }
 
 case "test-polish":
-    let inputText = args.dropFirst(2).joined(separator: " ")
+    let useSmartPolish = args.contains("--smart")
+    let inputText = args.dropFirst(2).filter { $0 != "--smart" }.joined(separator: " ")
     let testString = inputText.isEmpty ? "好我們今天開會主要討論了三件事情，一個是關於前端游標注入的邏輯，我們要確保說輸入框不會出現雪崩效應。再來是錯字要修復像是 System Prompt 或者 Model 等詞彙我們要把它修復。第三個是排版的部分希望段落不要太碎適當的幫我列成 Markdown 清單整理好這樣謝謝。" : inputText
-    
-    print("\n[Spoken Input]:\n\(testString)")
-    let liveResult = TextPolisher.shared.polish(testString, mode: .liveStream)
-    print("\n[Live Dictation Polished]:\n\(liveResult)")
-    print("--------------------------------------------------")
+
+    if useSmartPolish {
+        Task {
+            print("\n[Spoken Input]:\n\(testString)")
+            let result = await SmartPolishEngine.shared.polish(testString)
+            let engineName = result.usedFallback ? "Rule-Based Fallback" : "Apple Foundation Models"
+            print("\n[Smart Polish Output - \(engineName)]:\n\(result.text)")
+            print("--------------------------------------------------")
+            exit(0)
+        }
+        RunLoop.main.run()
+    } else {
+        print("\n[Spoken Input]:\n\(testString)")
+        let liveResult = TextPolisher.shared.polish(testString, mode: .liveStream)
+        print("\n[Live Dictation Polished]:\n\(liveResult)")
+        print("--------------------------------------------------")
+    }
 
 case "listen":
     print("\nStarting Butterfly Real-Time Voice Dictation...")
@@ -173,6 +189,7 @@ default:
       butterfly-cli listen            - Start real-time live voice dictation
       butterfly-cli test              - Run complete 36-assertion automated test suite
       butterfly-cli test-polish       - Test real-time acoustic typo restoration
+      butterfly-cli test-polish --smart - Test deferred Apple Intelligence polishing
       butterfly-cli test-convert      - Test Simplified-to-Traditional conversion
       butterfly-cli models            - List supported local speech recognition models
       butterfly-cli download <id>     - Download a model to local cache (e.g. whisper-large-v3-turbo)

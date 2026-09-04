@@ -13,4 +13,11 @@ final class SystemPromptTests: XCTestCase {
         let content = SystemPrompt.shared.content
         XCTAssertFalse(content.isEmpty)
     }
+
+    func testSmartPolishPromptProtectsTranscriptFidelity() {
+        let prompt = SmartPolishPrompt.shared.content
+        XCTAssertTrue(prompt.contains("Preserve every fact"))
+        XCTAssertTrue(prompt.contains("Do not summarize"))
+        XCTAssertTrue(prompt.contains("Taiwan Traditional Chinese"))
+    }
 }

@@ -3,22 +3,34 @@ import SwiftUI
 import ButterflyCore
 
 /// Operating mode for Butterfly
-public enum ButterflyMode: String, CaseIterable {
-    case liveStreaming = "live"       // Real-time zero-latency speech-to-text dictation
+public enum ButterflyMode: String, CaseIterable, Sendable {
+    case liveStreaming = "live"
+    case smartPolish = "smart-polish"
     
     public var title: String {
-        return "Live Voice Dictation"
+        switch self {
+        case .liveStreaming:
+            return "Live Voice Dictation"
+        case .smartPolish:
+            return "Record & Smart Polish"
+        }
     }
+}
+
+private enum AppActivity: Equatable {
+    case idle
+    case recording(ButterflyMode)
+    case processing(ButterflyMode)
 }
 
 @main
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
-    private var isRecording: Bool = false
+    private var activity: AppActivity = .idle
     private var isDownloadingModel: Bool = false
     private var activeMode: ButterflyMode = .liveStreaming
-    private var activeModelSpec: ModelSpec = ModelManager.shared.getBestAvailableModel()
+    private var smartPolishAvailabilityText = "Checking..."
     
     private var streamingInjectedText: String = ""
     private var latestTranscript: String = ""
@@ -29,6 +41,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var recordingTimer: Timer?
     private var recordingStartTime: Date?
     private var animationIndex: Int = 0
+
+    private var isRecording: Bool {
+        if case .recording = activity { return true }
+        return false
+    }
+
+    private var isBusy: Bool {
+        activity != .idle
+    }
     
     static func main() {
         let app = NSApplication.shared
@@ -41,6 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupStatusBarItem()
         setupGlobalHotkey()
+        refreshSmartPolishAvailability()
         
         // Listen for live speech recognition updates
         liveEngine.onTranscriptUpdate = { [weak self] formattedText in
@@ -76,6 +98,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         
         Global Hotkeys:
           • [Option + Space]         -> Toggle Live Voice Dictation (types live as you speak)
+          • [Option + Shift + Space] -> Record, polish, then insert once
           • [Enter] / [Esc]          -> Stop Dictation (swallows first Enter key safely)
         
         Active Speech Model: \(ModelManager.shared.activeASRModel.displayName)
@@ -131,15 +154,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         
         menu.addItem(NSMenuItem.separator())
         
-        if isRecording {
+        switch activity {
+        case .recording(let mode):
             let stopItem = NSMenuItem(
-                title: "Stop Dictation (Enter / Esc)",
+                title: "Stop \(mode.title) (Enter / Esc)",
                 action: #selector(stopCurrentRecording),
                 keyEquivalent: "\r"
             )
             stopItem.target = self
             menu.addItem(stopItem)
-        } else {
+        case .processing(let mode):
+            let processingItem = NSMenuItem(title: "Processing \(mode.title)...", action: nil, keyEquivalent: "")
+            processingItem.isEnabled = false
+            menu.addItem(processingItem)
+        case .idle:
             let liveItem = NSMenuItem(
                 title: "Start Voice Dictation (Option+Space)",
                 action: #selector(startLiveStreamingMode),
@@ -147,7 +175,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             liveItem.target = self
             menu.addItem(liveItem)
+
+            let smartItem = NSMenuItem(
+                title: "Start Smart Polish (Option+Shift+Space)",
+                action: #selector(startSmartPolishMode),
+                keyEquivalent: ""
+            )
+            smartItem.target = self
+            menu.addItem(smartItem)
         }
+
+        let intelligenceItem = NSMenuItem(
+            title: "Smart Polish: \(smartPolishAvailabilityText)",
+            action: nil,
+            keyEquivalent: ""
+        )
+        intelligenceItem.isEnabled = false
+        menu.addItem(intelligenceItem)
         
         menu.addItem(NSMenuItem.separator())
         
@@ -169,7 +213,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             modelItem.target = self
             modelItem.representedObject = model
-            modelItem.isEnabled = !isRecording && ModelManager.isRuntimeSupported(model)
+            modelItem.isEnabled = !isBusy && ModelManager.isRuntimeSupported(model)
             asrMenu.addItem(modelItem)
         }
         let asrParentItem = NSMenuItem(title: "🎙️ Speech Model: \(ModelManager.shared.activeASRModel.displayName)", action: nil, keyEquivalent: "")
@@ -314,6 +358,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             await startListening(mode: .liveStreaming)
         }
     }
+
+    @objc private func startSmartPolishMode() {
+        Task { @MainActor in
+            await startListening(mode: .smartPolish)
+        }
+    }
     
     @objc private func stopCurrentRecording() {
         Task { @MainActor in
@@ -321,9 +371,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     
-    /// Start listening with live streaming dictation
+    /// Start either live dictation or deferred smart polishing.
     private func startListening(mode: ButterflyMode = .liveStreaming) async {
-        guard !isRecording else { return }
+        guard activity == .idle else { return }
 
         let activeModel = ModelManager.shared.activeASRModel
         isUsingLocalWhisper = activeModel.id.hasPrefix("whisper-")
@@ -341,12 +391,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         do {
             latestTranscript = ""
             streamingInjectedText = ""
-            activeMode = .liveStreaming
-            isRecording = true
+            activeMode = mode
+            activity = .recording(mode)
             recordingStartTime = Date()
             animationIndex = 0
             
-            self.statusItem.button?.title = " 🎙️ [00:00] Streaming ·"
+            let initialStatus = mode == .liveStreaming ? "Streaming" : "Recording"
+            self.statusItem.button?.title = " 🎙️ [00:00] \(initialStatus) ·"
             self.updateMenu()
             
             recordingTimer?.invalidate()
@@ -358,7 +409,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     let elapsed = Int(Date().timeIntervalSince(self.recordingStartTime ?? Date()))
                     let timeStr = String(format: "[%02d:%02d]", elapsed / 60, elapsed % 60)
                     
-                    if self.latestTranscript.isEmpty {
+                    if self.activeMode == .smartPolish {
+                        self.statusItem.button?.title = " 📝 \(timeStr) Recording \(dots)"
+                        FloatingHUDWindow.shared.updateStatus(
+                            title: "📝 Smart Polish \(timeStr)",
+                            detail: "Recording... Press Enter or Esc to finish."
+                        )
+                    } else if self.latestTranscript.isEmpty {
                         self.statusItem.button?.title = " 🎙️ \(timeStr) Streaming \(dots)"
                     }
                 }
@@ -370,11 +427,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 try liveEngine.startLiveListening()
             }
-            FloatingHUDWindow.shared.show(mode: .liveStreaming)
-            print("Butterfly: Started Live Voice Dictation [ASR: \(activeModel.displayName)]...")
+            FloatingHUDWindow.shared.show(mode: mode)
+            print("Butterfly: Started \(mode.title) [ASR: \(activeModel.displayName)]...")
         } catch {
             print("Failed to start recording: \(error.localizedDescription)")
-            isRecording = false
+            activity = .idle
             FloatingHUDWindow.shared.hide()
             recordingTimer?.invalidate()
             recordingTimer = nil
@@ -385,9 +442,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     
     /// Stop listening and finalize text
     private func stopAndInject() async {
-        guard isRecording else { return }
-        isRecording = false
-        FloatingHUDWindow.shared.hide()
+        guard case .recording(let mode) = activity else { return }
+        activity = .processing(mode)
+        if mode == .liveStreaming {
+            FloatingHUDWindow.shared.hide()
+        } else {
+            FloatingHUDWindow.shared.updateStatus(
+                title: "⏳ Smart Polish",
+                detail: "Finalizing transcript..."
+            )
+        }
         recordingTimer?.invalidate()
         recordingTimer = nil
         
@@ -399,16 +463,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ? await localWhisperEngine.stopListening()
             : await liveEngine.stopLiveListening()
         
-        print("\n[Butterfly: Live Dictation Completed]: \(fullRawTranscript)")
-        
+        print("\n[Butterfly: \(mode.title) Transcription Completed]: \(fullRawTranscript)")
+
+        guard mode == .smartPolish else {
+            finishProcessing()
+            return
+        }
+
+        guard !fullRawTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            print("Butterfly: Smart Polish skipped because no speech was detected")
+            finishProcessing()
+            return
+        }
+
+        self.statusItem.button?.title = " ✨ Polishing..."
+        FloatingHUDWindow.shared.updateStatus(title: "✨ Smart Polish", detail: "Polishing transcript on device...")
+        let result = await SmartPolishEngine.shared.polish(fullRawTranscript)
+        if result.usedFallback {
+            print("Butterfly: Used rule-based Smart Polish fallback: \(result.fallbackReason ?? "unknown reason")")
+        }
+
+        guard !result.text.isEmpty else {
+            finishProcessing()
+            return
+        }
+
+        self.statusItem.button?.title = " 📋 Inserting..."
+        FloatingHUDWindow.shared.updateStatus(title: "📋 Smart Polish", detail: "Inserting polished text...")
+        let inserted = await InputInjector.shared.injectByPaste(text: result.text, restoreClipboard: true)
+        if !inserted {
+            print("Butterfly: Smart Polish output was not inserted because the clipboard changed")
+        }
+        print("\n[Butterfly: Smart Polish Output]: \(result.text)")
+        finishProcessing()
+    }
+
+    private func finishProcessing() {
+        activity = .idle
         streamingInjectedText = ""
-        self.statusItem.button?.title = ""
-        self.updateMenu()
+        latestTranscript = ""
+        recordingStartTime = nil
+        FloatingHUDWindow.shared.hide()
+        statusItem.button?.title = ""
+        updateMenu()
     }
 
     private func handleTranscriptUpdate(_ formattedText: String) {
         guard isRecording else { return }
         latestTranscript = formattedText
+
+        if activeMode == .smartPolish {
+            return
+        }
 
         let elapsed = Int(Date().timeIntervalSince(recordingStartTime ?? Date()))
         let minutes = String(format: "%02d", elapsed / 60)
@@ -447,7 +553,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let keyCode = Int(event.getIntegerValueField(.keyboardEventKeycode))
         let flags = event.flags
         
-        // 1. Enter (36 / 76) or Esc (53) during active recording -> Stop recording & SWALLOW keypress
+        // 1. Enter or Esc stops recording. Keep swallowing while deferred processing is active.
         if (keyCode == 36 || keyCode == 76 || keyCode == 53) && isRecording {
             print("\n[CGEventTap: Enter/Esc Intercepted] -> Stopping recording & SWALLOWING Enter key (chat safe)!")
             Task { @MainActor in
@@ -456,16 +562,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // RETURNING NIL SWALLOWS THE KEY EVENT SO TARGET APP NEVER SEES ENTER!
             return nil
         }
-        
-        // 2. Option + Space (49) -> Toggle Live Streaming Dictation
-        if keyCode == 49 && flags.contains(.maskAlternate) {
+        if (keyCode == 36 || keyCode == 76 || keyCode == 53), case .processing = activity {
+            return nil
+        }
+
+        let hotkeyIntent = GlobalHotkeyResolver.resolve(
+            keyCode: keyCode,
+            optionPressed: flags.contains(.maskAlternate),
+            shiftPressed: flags.contains(.maskShift),
+            commandPressed: flags.contains(.maskCommand),
+            controlPressed: flags.contains(.maskControl)
+        )
+        if let hotkeyIntent {
             Task { @MainActor in
                 if self.isRecording {
                     print("\n[CGEventTap: Toggle Stop]")
                     await self.stopAndInject()
+                } else if case .processing = self.activity {
+                    return
                 } else {
-                    print("\n[CGEventTap: Option + Space] -> Starting Live Voice Dictation...")
-                    await self.startListening(mode: .liveStreaming)
+                    let mode: ButterflyMode = hotkeyIntent == .smartPolish ? .smartPolish : .liveStreaming
+                    print("\n[CGEventTap] -> Starting \(mode.title)...")
+                    await self.startListening(mode: mode)
                 }
             }
             return nil // Swallow Space key so it doesn't type a space
@@ -486,7 +604,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             options: .defaultTap,
             eventsOfInterest: CGEventMask(eventMask),
             callback: { (proxy, type, event, refcon) -> Unmanaged<CGEvent>? in
-                guard let refcon = refcon else { return Unmanaged.passRetained(event) }
+                guard let refcon = refcon else { return Unmanaged.passUnretained(event) }
                 let appDelegate = Unmanaged<AppDelegate>.fromOpaque(refcon).takeUnretainedValue()
                 return appDelegate.handleCGEvent(proxy: proxy, type: type, event: event)
             },
@@ -509,9 +627,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 return nil
             }
+            if (event.keyCode == 36 || event.keyCode == 76 || event.keyCode == 53), case .processing = self.activity {
+                return nil
+            }
+            let intent = GlobalHotkeyResolver.resolve(
+                keyCode: Int(event.keyCode),
+                optionPressed: event.modifierFlags.contains(.option),
+                shiftPressed: event.modifierFlags.contains(.shift),
+                commandPressed: event.modifierFlags.contains(.command),
+                controlPressed: event.modifierFlags.contains(.control)
+            )
+            if let intent {
+                Task { @MainActor in
+                    if self.isRecording {
+                        await self.stopAndInject()
+                    } else if self.activity == .idle {
+                        let mode: ButterflyMode = intent == .smartPolish ? .smartPolish : .liveStreaming
+                        await self.startListening(mode: mode)
+                    }
+                }
+                return nil
+            }
             return event
         }
         globalEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: fallbackHandler)
+    }
+
+    private func refreshSmartPolishAvailability() {
+        Task { @MainActor in
+            let availability = await SmartPolishEngine.shared.availability()
+            switch availability {
+            case .available:
+                smartPolishAvailabilityText = "Apple Intelligence Ready"
+            case .unavailable(let reason):
+                smartPolishAvailabilityText = reason.contains("appleIntelligenceNotEnabled")
+                    ? "Apple Intelligence Disabled (Rules Fallback)"
+                    : "Rules Fallback"
+            }
+            updateMenu()
+        }
     }
     
     @objc private func quitApp() {
