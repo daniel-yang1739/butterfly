@@ -9,8 +9,9 @@ public final class TextPolisher {
     /// Polishing modes
     public enum PolishMode: String, CaseIterable, Sendable {
         case liveStream = "live"             // Real-time dictation: light filler cleaning, fast output
+        case concisePolish = "concise-polish" // Deferred cleanup without semantic restructuring
         case structuredNote = "structured"   // Record & Polish: deep filler cleaning, auto-paragraphing, bullet point extraction
-        case conciseSummary = "concise"     // Summary mode: concise wording, colloquial removal
+        case conciseSummary = "concise"      // Conservative fallback when semantic summarization is unavailable
     }
     
     /// Main multi-pass cognitive polishing and contextual intent reconstruction pipeline
@@ -46,11 +47,19 @@ public final class TextPolisher {
         pass3 = removeFillerWords(pass3, aggressive: true)
         pass3 = cleanPunctuation(pass3)
         
-        // Pass 4 (Mode 2 Only): Typeless-Grade Structural Note Formatting
-        let structured = structureIntoTypelessNotes(pass3)
+        // Pass 4 (Mode 2 Only): Apply structural formatting only when requested.
+        let output: String
+        switch mode {
+        case .structuredNote:
+            output = structureIntoTypelessNotes(pass3)
+        case .concisePolish, .conciseSummary:
+            output = pass3
+        case .liveStream:
+            output = pass3
+        }
         
         // Step Final: Insert spacing between CJK and alphanumeric characters (Pangu Spacing)
-        let formatted = TextFormatter.shared.insertSpacingBetweenCJKAndAlphanumeric(structured)
+        let formatted = TextFormatter.shared.insertSpacingBetweenCJKAndAlphanumeric(output)
         return formatted.trimmingCharacters(in: .whitespacesAndNewlines)
     }
     
@@ -244,64 +253,144 @@ public final class TextPolisher {
     
     // MARK: - Pass 4: Typeless-Grade Note Structuring
     
-    /// Structure spoken monologue into formatted notes with bullet points and paragraphs
+    /// Format notes as paragraph-first blocks, using bullets only for a real sequence of items.
     public func structureIntoTypelessNotes(_ text: String) -> String {
         guard text.count > 15 else { return text }
-        
-        // 1. Check for enumerated list indicators (e.g. 第一點... 第二點...)
-        let listPattern = "(?:(?<=[。！？\n，、\\s])|^|(?<=[^第0-9一二三四五六七八九十]))(第一種模式|第二種模式|第\\s*[一二三四五六七八九十0-9]+\\s*[點個項件、，事]|一個是|第一個[是]?|第二個[是]?|第三個[是]?|第四個[是]?|首先|一來|其次|二來|再來[是]?|最後[一點項事]?|總結來說|總結[：:]?|另外[一點項件事]?|此外[一點項件事]?)"
-        
-        if let regex = try? NSRegularExpression(pattern: listPattern, options: []) {
-            let nsString = text as NSString
-            let matches = regex.matches(in: text, options: [], range: NSRange(location: 0, length: text.utf16.count))
-            
-            // If 2 or more distinct bullet markers exist, construct a structured Markdown document
-            if matches.count >= 2 {
-                var sections: [String] = []
-                
-                // A. Introductory cohesive paragraph (everything before the first list item)
-                let firstMatchLoc = matches[0].range.location
-                if firstMatchLoc > 0 {
-                    let intro = nsString.substring(with: NSRange(location: 0, length: firstMatchLoc))
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
-                        .trimmingCharacters(in: CharacterSet(charactersIn: "，、。；！？ "))
-                    if !intro.isEmpty {
-                        sections.append(intro.hasSuffix("。") || intro.hasSuffix("！") || intro.hasSuffix("？") ? intro : intro + "。")
-                    }
-                }
-                
-                // B. Bullet points
-                var bulletPoints: [String] = []
-                for i in 0..<matches.count {
-                    let start = matches[i].range.location
-                    let end = (i + 1 < matches.count) ? matches[i + 1].range.location : text.utf16.count
-                    let length = max(0, end - start)
-                    
-                    var item = nsString.substring(with: NSRange(location: start, length: length))
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
-                        .trimmingCharacters(in: CharacterSet(charactersIn: "，、；。 "))
-                    
-                    if !item.isEmpty && !item.hasSuffix("。") && !item.hasSuffix("！") && !item.hasSuffix("？") {
-                        item += "。"
-                    }
-                    
-                    if !item.isEmpty {
-                        bulletPoints.append("- " + item)
-                    }
-                }
-                
-                if !bulletPoints.isEmpty {
-                    sections.append(bulletPoints.joined(separator: "\n"))
-                }
-                
-                return sections.joined(separator: "\n\n")
+
+        let markerPattern = "(?:(?<=[。！？\\n，、\\s])|^)(第一種模式|第二種模式|第三種模式|第\\s*[一二三四五六七八九十0-9]+\\s*[點個項件事]是?|一個是|另一個是|首先|其次|再來是?|最後一點|最後一項)"
+        guard let regex = try? NSRegularExpression(pattern: markerPattern),
+              let list = paragraphFirstList(in: text, matching: regex) else {
+            return text.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return list
+    }
+
+    private func paragraphFirstList(
+        in text: String,
+        matching regex: NSRegularExpression
+    ) -> String? {
+        let nsText = text as NSString
+        let matches = regex.matches(
+            in: text,
+            range: NSRange(location: 0, length: text.utf16.count)
+        )
+        guard matches.count >= 2 else { return nil }
+
+        var groupStarts = [0]
+        for index in matches.indices.dropFirst() {
+            let marker = nsText.substring(with: matches[index].range)
+                .replacingOccurrences(of: " ", with: "")
+            if isFirstListMarker(marker) {
+                groupStarts.append(index)
             }
         }
-        
-        // 2. Default: Maintain large, cohesive thematic paragraphs without arbitrary sentence fragmentation
-        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let groupRanges = groupStarts.enumerated().map { offset, start in
+            start..<(offset + 1 < groupStarts.count ? groupStarts[offset + 1] : matches.count)
+        }
+        guard groupRanges.allSatisfy({ $0.count >= 2 }) else { return nil }
+
+        var sections: [String] = []
+        var pendingIntroduction = nsText.substring(to: matches[0].range.location)
+        var finalConclusion = ""
+
+        for (groupOffset, groupRange) in groupRanges.enumerated() {
+            let introduction = normalizedParagraph(pendingIntroduction, introduceList: true)
+            if !introduction.isEmpty {
+                sections.append(introduction)
+            }
+            pendingIntroduction = ""
+
+            var bullets: [String] = []
+            for index in groupRange {
+                let start = NSMaxRange(matches[index].range)
+                let end = index + 1 < matches.count
+                    ? matches[index + 1].range.location
+                    : text.utf16.count
+                var item = nsText.substring(with: NSRange(location: start, length: max(0, end - start)))
+
+                if index == groupRange.last {
+                    if groupOffset + 1 < groupRanges.count {
+                        let split = splitItemAndFollowingBlock(from: item)
+                        item = split.item
+                        pendingIntroduction = split.followingBlock
+                    } else {
+                        let split = splitConclusion(from: item)
+                        item = split.item
+                        finalConclusion = split.conclusion
+                    }
+                }
+
+                let normalizedItem = normalizedListItem(item)
+                guard normalizedItem.count >= 4 else { return nil }
+                bullets.append("- " + normalizedItem)
+            }
+            sections.append(bullets.joined(separator: "\n"))
+        }
+
+        let normalizedConclusion = normalizedParagraph(finalConclusion)
+        if !normalizedConclusion.isEmpty {
+            sections.append(normalizedConclusion)
+        }
+        return sections.joined(separator: "\n\n")
     }
-    
+
+    private func isFirstListMarker(_ marker: String) -> Bool {
+        marker.hasPrefix("第1")
+            || marker.hasPrefix("第一")
+            || marker == "一個是"
+            || marker == "首先"
+    }
+
+    private func splitItemAndFollowingBlock(from text: String) -> (item: String, followingBlock: String) {
+        let characters = Array(text)
+        guard let boundary = characters.firstIndex(where: { "。！？".contains($0) }),
+              boundary + 1 < characters.count else {
+            return (text, "")
+        }
+        return (
+            String(characters[...boundary]),
+            String(characters[(boundary + 1)...])
+        )
+    }
+
+    private func normalizedListItem(_ text: String) -> String {
+        var item = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "，、；：:。 "))
+        guard !item.isEmpty else { return "" }
+        if !item.hasSuffix("。") && !item.hasSuffix("！") && !item.hasSuffix("？") {
+            item += "。"
+        }
+        return item
+    }
+
+    private func normalizedParagraph(_ text: String, introduceList: Bool = false) -> String {
+        var paragraph = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "，、；：:。 "))
+        guard !paragraph.isEmpty else { return "" }
+        if introduceList {
+            paragraph += "："
+        } else if !paragraph.hasSuffix("。") && !paragraph.hasSuffix("！") && !paragraph.hasSuffix("？") {
+            paragraph += "。"
+        }
+        return paragraph
+    }
+
+    private func splitConclusion(from text: String) -> (item: String, conclusion: String) {
+        let pattern = "(?<=[。！？])\\s*(?=(?:整體而言|總而言之|總之|因此|這樣|以上))"
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(
+                in: text,
+                range: NSRange(location: 0, length: text.utf16.count)
+              ) else {
+            return (text, "")
+        }
+        let nsText = text as NSString
+        return (
+            nsText.substring(to: match.range.location),
+            nsText.substring(from: NSMaxRange(match.range))
+        )
+    }
+
     // MARK: - Pass 2D: Natural Spoken Pause Punctuation
     
     /// Restore natural sentence punctuation for spoken pauses and modal particles in Mode 1

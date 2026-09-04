@@ -30,7 +30,11 @@ public enum LanguageModelBackendError: LocalizedError, Sendable {
 
 public protocol LanguageModelBackend: Sendable {
     func availability() async -> LanguageModelAvailability
-    func polish(transcript: String, instructions: String) async throws -> String
+    func polish(
+        transcript: String,
+        instructions: String,
+        style: SmartPolishStyle
+    ) async throws -> String
 }
 
 public struct AppleFoundationModelBackend: LanguageModelBackend {
@@ -45,7 +49,11 @@ public struct AppleFoundationModelBackend: LanguageModelBackend {
         return .unavailable(reason: "Apple Foundation Models requires macOS 26 or later")
     }
 
-    public func polish(transcript: String, instructions: String) async throws -> String {
+    public func polish(
+        transcript: String,
+        instructions: String,
+        style: SmartPolishStyle
+    ) async throws -> String {
         #if canImport(FoundationModels)
         if #available(macOS 26.0, *) {
             return try await Self.generate(transcript: transcript, instructions: instructions)
@@ -103,7 +111,22 @@ public struct RuleBasedLanguageModelBackend: LanguageModelBackend {
         .available
     }
 
-    public func polish(transcript: String, instructions: String) async throws -> String {
-        TextPolisher.shared.polish(transcript, mode: .structuredNote)
+    public func polish(
+        transcript: String,
+        instructions: String,
+        style: SmartPolishStyle
+    ) async throws -> String {
+        let mode: TextPolisher.PolishMode
+        switch style {
+        case .faithful:
+            mode = .liveStream
+        case .concise:
+            mode = .concisePolish
+        case .structured:
+            mode = .structuredNote
+        case .summary:
+            mode = .conciseSummary
+        }
+        return TextPolisher.shared.polish(transcript, mode: mode)
     }
 }

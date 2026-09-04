@@ -63,6 +63,30 @@ final class SmartPolishEngineTests: XCTestCase {
         XCTAssertGreaterThan(requests.count, 1)
     }
 
+    func testEveryStyleAddsDistinctInstructions() {
+        let prompts = SmartPolishStyle.allCases.map {
+            SmartPolishPrompt.shared.content(for: $0)
+        }
+
+        XCTAssertEqual(Set(prompts).count, SmartPolishStyle.allCases.count)
+        XCTAssertTrue(prompts[0].contains("faithful proofread"))
+        XCTAssertTrue(prompts[1].contains("concise polish"))
+        XCTAssertTrue(prompts[2].contains("structured notes"))
+        XCTAssertTrue(prompts[3].contains("summary"))
+    }
+
+    func testLongStructuredTextUsesPreparationAndFinalPass() async {
+        let primary = MockLanguageModelBackend(transform: { $0 })
+        let engine = SmartPolishEngine(primaryBackend: primary, chunkCharacterLimit: 200)
+        let transcript = Array(repeating: "這是一個需要重新組織的完整句子。", count: 30).joined()
+
+        _ = await engine.polish(transcript, style: .structured)
+
+        let requests = await primary.requests
+        XCTAssertGreaterThan(requests.count, 2)
+        XCTAssertEqual(requests.last?.replacingOccurrences(of: "\n\n", with: ""), transcript)
+    }
+
     func testHotkeyResolverDistinguishesBothModes() {
         XCTAssertEqual(
             GlobalHotkeyResolver.resolve(
@@ -113,7 +137,11 @@ private actor MockLanguageModelBackend: LanguageModelBackend {
         configuredAvailability
     }
 
-    func polish(transcript: String, instructions: String) async throws -> String {
+    func polish(
+        transcript: String,
+        instructions: String,
+        style: SmartPolishStyle
+    ) async throws -> String {
         requests.append(transcript)
         return try transform(transcript)
     }

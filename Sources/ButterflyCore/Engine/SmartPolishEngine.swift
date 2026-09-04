@@ -36,26 +36,24 @@ public actor SmartPolishEngine {
         await primaryBackend.availability()
     }
 
-    public func polish(_ transcript: String) async -> SmartPolishResult {
+    public func polish(
+        _ transcript: String,
+        style: SmartPolishStyle = .concise
+    ) async -> SmartPolishResult {
         let input = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !input.isEmpty else {
             return SmartPolishResult(text: "", usedFallback: false)
         }
 
-        let instructions = SmartPolishPrompt.shared.content
         switch await primaryBackend.availability() {
         case .available:
             do {
-                let initialChunks = Self.splitAtSentenceBoundaries(
-                    input,
-                    maximumCharacters: chunkCharacterLimit
-                )
-                var polishedChunks: [String] = []
-                for chunk in initialChunks {
-                    polishedChunks.append(contentsOf: try await polishChunk(
-                        chunk,
-                        instructions: instructions
-                    ))
+                let polishedChunks: [String]
+                switch style {
+                case .faithful, .concise:
+                    polishedChunks = try await polishInIndependentChunks(input, style: style)
+                case .structured, .summary:
+                    polishedChunks = try await polishHolistically(input, style: style)
                 }
                 let output = polishedChunks
                     .map { OpenCCTranslator.shared.convert($0).trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -66,32 +64,95 @@ public actor SmartPolishEngine {
                 }
                 return SmartPolishResult(text: output, usedFallback: false)
             } catch {
-                return await fallbackResult(for: input, reason: error.localizedDescription)
+                return await fallbackResult(for: input, style: style, reason: error.localizedDescription)
             }
         case .unavailable(let reason):
-            return await fallbackResult(for: input, reason: reason)
+            return await fallbackResult(for: input, style: style, reason: reason)
         }
     }
 
-    private func polishChunk(_ chunk: String, instructions: String) async throws -> [String] {
+    private func polishInIndependentChunks(
+        _ input: String,
+        style: SmartPolishStyle
+    ) async throws -> [String] {
+        let chunks = Self.splitAtSentenceBoundaries(input, maximumCharacters: chunkCharacterLimit)
+        var results: [String] = []
+        for chunk in chunks {
+            results.append(contentsOf: try await polishChunk(
+                chunk,
+                instructions: SmartPolishPrompt.shared.content(for: style),
+                style: style
+            ))
+        }
+        return results
+    }
+
+    /// Long structured documents need a preparation pass before the final global rewrite.
+    private func polishHolistically(
+        _ input: String,
+        style: SmartPolishStyle
+    ) async throws -> [String] {
+        let chunks = Self.splitAtSentenceBoundaries(input, maximumCharacters: chunkCharacterLimit)
+        guard chunks.count > 1 else {
+            return try await polishChunk(
+                input,
+                instructions: SmartPolishPrompt.shared.content(for: style),
+                style: style
+            )
+        }
+
+        var prepared: [String] = []
+        for chunk in chunks {
+            prepared.append(contentsOf: try await polishChunk(
+                chunk,
+                instructions: SmartPolishPrompt.shared.preprocessingContent(for: style),
+                style: .faithful
+            ))
+        }
+
+        return try await polishChunk(
+            prepared.joined(separator: "\n\n"),
+            instructions: SmartPolishPrompt.shared.content(for: style),
+            style: style
+        )
+    }
+
+    private func polishChunk(
+        _ chunk: String,
+        instructions: String,
+        style: SmartPolishStyle
+    ) async throws -> [String] {
         do {
-            return [try await primaryBackend.polish(transcript: chunk, instructions: instructions)]
+            return [try await primaryBackend.polish(
+                transcript: chunk,
+                instructions: instructions,
+                style: style
+            )]
         } catch LanguageModelBackendError.contextSizeExceeded {
             guard chunk.count > minimumRetryChunkLength else { throw LanguageModelBackendError.contextSizeExceeded }
             let halves = Self.splitNearMiddle(chunk)
             guard halves.count > 1 else { throw LanguageModelBackendError.contextSizeExceeded }
             var results: [String] = []
             for half in halves {
-                results.append(contentsOf: try await polishChunk(half, instructions: instructions))
+                results.append(contentsOf: try await polishChunk(
+                    half,
+                    instructions: instructions,
+                    style: style
+                ))
             }
             return results
         }
     }
 
-    private func fallbackResult(for transcript: String, reason: String) async -> SmartPolishResult {
+    private func fallbackResult(
+        for transcript: String,
+        style: SmartPolishStyle,
+        reason: String
+    ) async -> SmartPolishResult {
         let output = (try? await fallbackBackend.polish(
             transcript: transcript,
-            instructions: SmartPolishPrompt.shared.content
+            instructions: SmartPolishPrompt.shared.content(for: style),
+            style: style
         )) ?? transcript
         return SmartPolishResult(text: output, usedFallback: true, fallbackReason: reason)
     }
@@ -99,9 +160,21 @@ public actor SmartPolishEngine {
     static func splitAtSentenceBoundaries(_ text: String, maximumCharacters: Int) -> [String] {
         guard text.count > maximumCharacters else { return [text] }
 
-        let sentences = text
-            .split(omittingEmptySubsequences: true, whereSeparator: { "。！？!?\n".contains($0) })
-            .map(String.init)
+        let boundaryCharacters: Set<Character> = ["。", "！", "？", "!", "?", "\n"]
+        var sentences: [String] = []
+        var sentence = ""
+        for character in text {
+            sentence.append(character)
+            if boundaryCharacters.contains(character) {
+                if !sentence.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    sentences.append(sentence)
+                }
+                sentence = ""
+            }
+        }
+        if !sentence.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            sentences.append(sentence)
+        }
         guard sentences.count > 1 else {
             return stride(from: 0, to: text.count, by: maximumCharacters).map { offset in
                 let start = text.index(text.startIndex, offsetBy: offset)
@@ -113,7 +186,7 @@ public actor SmartPolishEngine {
         var chunks: [String] = []
         var current = ""
         for sentence in sentences {
-            let candidate = current.isEmpty ? sentence : current + "。" + sentence
+            let candidate = current + sentence
             if candidate.count > maximumCharacters, !current.isEmpty {
                 chunks.append(current)
                 current = sentence

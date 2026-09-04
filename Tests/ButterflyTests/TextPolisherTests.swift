@@ -47,4 +47,40 @@ final class TextPolisherTests: XCTestCase {
         let output = polisher.polish(input, mode: .liveStream)
         XCTAssertEqual(output, "這是即時語音聽寫的測試")
     }
+
+    func testStructuredNotesUseParagraphFirstBlocks() {
+        let input = "我們已經調整選單順序，選單分成兩個區塊。第一個是啟動操作。第二個是設定與狀態。這樣可以清楚區分操作和設定。"
+        let output = polisher.polish(input, mode: .structuredNote)
+
+        let blocks = output.components(separatedBy: "\n\n")
+        XCTAssertEqual(blocks.count, 3)
+        XCTAssertTrue(blocks[0].contains("選單分成 2 個區塊"))
+        XCTAssertEqual(blocks[1], "- 啟動操作。\n- 設定與狀態。")
+        XCTAssertEqual(blocks[2], "這樣可以清楚區分操作和設定。")
+    }
+
+    func testConcisePolishDoesNotForceBullets() {
+        let input = "這個功能有兩個模式。第一個是即時聽寫。第二個是錄音後整理。"
+        let output = polisher.polish(input, mode: .concisePolish)
+
+        XCTAssertFalse(output.contains("- "))
+        XCTAssertTrue(output.contains("第 1 個是即時聽寫"))
+        XCTAssertTrue(output.contains("第 2 個是錄音後整理"))
+    }
+
+    func testSingleTransitionDoesNotBecomeAList() {
+        let input = "我們先說明目前的設計。再來是設定畫面的調整，完成後會重新測試。"
+        let output = polisher.polish(input, mode: .structuredNote)
+
+        XCTAssertFalse(output.contains("- "))
+    }
+
+    func testStructuredNotesSeparateConsecutiveListsIntoBlocks() {
+        let input = "選單分成兩區。啟動操作有兩項，第一個是 Start Voice Dictation。第二個是 Start Smart Polish。設定有兩項，第一個是 Speech Model。第二個是 Model Storage。這樣可以區分操作與設定。"
+        let output = polisher.polish(input, mode: .structuredNote)
+
+        XCTAssertTrue(output.contains("- Start Voice Dictation。\n- Start Smart Polish。"))
+        XCTAssertTrue(output.contains("設定有兩項：\n\n- Speech Model。\n- Model Storage。"))
+        XCTAssertEqual(output.components(separatedBy: "\n\n").count, 5)
+    }
 }

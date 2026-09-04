@@ -8,6 +8,8 @@
 
 A lightweight, privacy-focused, zero-cloud-dependency local speech-to-text system built for macOS (Apple Silicon). Press <kbd>Option</kbd> + <kbd>Space</kbd> for live dictation, or <kbd>Option</kbd> + <kbd>Shift</kbd> + <kbd>Space</kbd> to record first and let Apple's on-device Foundation Model produce a faithfully polished result.
 
+Smart Polish supports four persistent output styles: Faithful Proofread, Concise Polish, Structured Notes, and Summary. Choose the style from the menu bar before recording.
+
 ---
 
 ## ✨ Key Features
@@ -172,5 +174,6 @@ Once launched, the 🦋 icon will appear in your macOS menu bar:
 - Press <kbd>Option</kbd> + <kbd>Shift</kbd> + <kbd>Space</kbd> to start **Record & Smart Polish**.
 - Press <kbd>Enter</kbd> (or <kbd>Esc</kbd>) to **Stop Dictation** (First Enter safely stops recording; Second Enter submits).
 - Click the menu bar icon to download or switch between Whisper models, manage cached model storage, or open the models directory in Finder.
+- Choose a Smart Polish style from the plain-text `Smart Polish Style` submenu. The selection is remembered between launches.
 
 Smart Polish uses Apple Intelligence when it is enabled and available on macOS 26 or later. You can override its editing instructions at `~/.config/butterfly/SMART_POLISH_PROMPT.md`; otherwise Butterfly uses its bundled faithful-editing prompt.

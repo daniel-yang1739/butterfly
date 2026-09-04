@@ -6,7 +6,7 @@ import ButterflyCore
 public enum ButterflyMode: String, CaseIterable, Sendable {
     case liveStreaming = "live"
     case smartPolish = "smart-polish"
-    
+
     public var title: String {
         switch self {
         case .liveStreaming:
@@ -26,12 +26,17 @@ private enum AppActivity: Equatable {
 @main
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private static let smartPolishStyleDefaultsKey = "smartPolishStyle"
+
     private var statusItem: NSStatusItem!
     private var activity: AppActivity = .idle
     private var isDownloadingModel: Bool = false
     private var activeMode: ButterflyMode = .liveStreaming
+    private var smartPolishStyle = SmartPolishStyle(
+        rawValue: UserDefaults.standard.string(forKey: AppDelegate.smartPolishStyleDefaultsKey) ?? ""
+    ) ?? .concise
     private var smartPolishAvailabilityText = "Checking..."
-    
+
     private var streamingInjectedText: String = ""
     private var latestTranscript: String = ""
     private let liveEngine = LiveSpeechEngine.shared
@@ -50,7 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var isBusy: Bool {
         activity != .idle
     }
-    
+
     static func main() {
         let app = NSApplication.shared
         let delegate = AppDelegate()
@@ -58,12 +63,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         app.setActivationPolicy(.accessory)
         app.run()
     }
-    
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupStatusBarItem()
         setupGlobalHotkey()
         refreshSmartPolishAvailability()
-        
+
         // Listen for live speech recognition updates
         liveEngine.onTranscriptUpdate = { [weak self] formattedText in
             Task { @MainActor in
@@ -75,7 +80,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.handleTranscriptUpdate(formattedText)
             }
         }
-        
+
         liveEngine.onError = { error in
             Task { @MainActor in
                 print("Recognition Engine Info: \(error.localizedDescription)")
@@ -89,29 +94,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
-        
+
         print("""
-        
+
         Butterfly macOS native desktop app successfully started!
         --------------------------------------------------
         Look for the Butterfly icon in your top menu bar.
-        
+
         Global Hotkeys:
           • [Option + Space]         -> Toggle Live Voice Dictation (types live as you speak)
           • [Option + Shift + Space] -> Record, polish, then insert once
           • [Enter] / [Esc]          -> Stop Dictation (swallows first Enter key safely)
-        
+
         Active Speech Model: \(ModelManager.shared.activeASRModel.displayName)
         Model Cache Path: \(ModelManager.shared.cacheDirectory.path)
         Click the Butterfly menu bar icon to switch or manage models.
         --------------------------------------------------
-        
+
         """)
     }
-    
+
     private func setupStatusBarItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        
+
         if let button = statusItem.button {
             // Load native high-contrast white outline template image for macOS menu bar
             let fileManager = FileManager.default
@@ -122,7 +127,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 URL(fileURLWithPath: fileManager.currentDirectoryPath).appendingPathComponent("docs/assets/menu_bar_icon@2x.png").path,
                 fileManager.homeDirectoryForCurrentUser.appendingPathComponent(".cache/butterfly/assets/menu_bar_icon.png").path
             ]
-            
+
             var loadedImage: NSImage? = nil
             for path in candidatePaths {
                 if fileManager.fileExists(atPath: path), let img = NSImage(contentsOfFile: path) {
@@ -132,7 +137,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     break
                 }
             }
-            
+
             if let img = loadedImage {
                 button.image = img
                 button.imagePosition = .imageLeft
@@ -141,19 +146,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 button.title = "🦋"
             }
         }
-        
+
         updateMenu()
     }
-    
+
     private func updateMenu() {
         let menu = NSMenu()
-        
+
         let titleItem = NSMenuItem(title: "Butterfly Voice Dictation", action: nil, keyEquivalent: "")
         titleItem.isEnabled = false
         menu.addItem(titleItem)
-        
+
         menu.addItem(NSMenuItem.separator())
-        
+
         switch activity {
         case .recording(let mode):
             let stopItem = NSMenuItem(
@@ -185,27 +190,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(smartItem)
         }
 
-        let intelligenceItem = NSMenuItem(
-            title: "Smart Polish: \(smartPolishAvailabilityText)",
-            action: nil,
-            keyEquivalent: ""
-        )
-        intelligenceItem.isEnabled = false
-        menu.addItem(intelligenceItem)
-        
         menu.addItem(NSMenuItem.separator())
-        
+
         // Track A: Speech Recognition (ASR) Submenu
         let asrMenu = NSMenu()
         for model in ModelManager.defaultASRModels {
             let isSelected = model.id == ModelManager.shared.activeASRModel.id
             let isDownloaded = ModelManager.shared.isModelDownloaded(model)
-            
-            let selectionMark = isSelected ? "✓ " : "   "
+
             let downloadStatus = isDownloaded ? " [Ready]" : " [Click to Download]"
             let sizeDesc = model.sizeBytes > 0 ? " (\(model.formattedSize))" : " (Built-in)"
-            
-            let itemTitle = "\(selectionMark)\(model.displayName)\(sizeDesc)\(downloadStatus)"
+
+            let itemTitle = "\(model.displayName)\(sizeDesc)\(downloadStatus)"
             let modelItem = NSMenuItem(
                 title: itemTitle,
                 action: #selector(selectASRModelSpec(_:)),
@@ -213,17 +209,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             modelItem.target = self
             modelItem.representedObject = model
+            modelItem.state = isSelected ? .on : .off
             modelItem.isEnabled = !isBusy && ModelManager.isRuntimeSupported(model)
             asrMenu.addItem(modelItem)
         }
-        let asrParentItem = NSMenuItem(title: "🎙️ Speech Model: \(ModelManager.shared.activeASRModel.displayName)", action: nil, keyEquivalent: "")
+        let asrParentItem = NSMenuItem(title: "Speech Model: \(ModelManager.shared.activeASRModel.displayName)", action: nil, keyEquivalent: "")
         asrParentItem.submenu = asrMenu
         menu.addItem(asrParentItem)
-        
+
+        // Track B: SLM
+        let intelligenceItem = NSMenuItem(
+            title: "Smart Polish: \(smartPolishAvailabilityText)",
+            action: nil,
+            keyEquivalent: ""
+        )
+        intelligenceItem.isEnabled = false
+        menu.addItem(intelligenceItem)
+
+        // Track B: Style
+        let styleMenu = NSMenu()
+        for style in SmartPolishStyle.allCases {
+            let item = NSMenuItem(
+                title: "\(style.title) — \(style.menuDescription)",
+                action: #selector(selectSmartPolishStyle(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = style.rawValue
+            item.state = style == smartPolishStyle ? .on : .off
+            item.isEnabled = !isBusy
+            styleMenu.addItem(item)
+        }
+        let styleParentItem = NSMenuItem(
+            title: "Smart Polish Style: \(smartPolishStyle.title)",
+            action: nil,
+            keyEquivalent: ""
+        )
+        styleParentItem.submenu = styleMenu
+        menu.addItem(styleParentItem)
+
         // Manage Model Storage & Uninstall Submenu
         let cacheMenu = NSMenu()
         let downloadedModels = ModelManager.defaultASRModels.filter { $0.id != "apple-speech-native" && ModelManager.shared.isModelDownloaded($0) }
-        
+
         if downloadedModels.isEmpty {
             let emptyItem = NSMenuItem(title: "No downloaded models in cache", action: nil, keyEquivalent: "")
             emptyItem.isEnabled = false
@@ -231,7 +259,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             for downloaded in downloadedModels {
                 let deleteItem = NSMenuItem(
-                    title: "🗑️ Delete \(downloaded.displayName) (\(downloaded.formattedSize))",
+                    title: "Delete \(downloaded.displayName) (\(downloaded.formattedSize))",
                     action: #selector(uninstallModel(_:)),
                     keyEquivalent: ""
                 )
@@ -240,33 +268,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 cacheMenu.addItem(deleteItem)
             }
             cacheMenu.addItem(NSMenuItem.separator())
-            
+
             let totalBytes = ModelManager.shared.getTotalCacheSizeBytes()
             let formattedTotal = ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
             let clearAllItem = NSMenuItem(
-                title: "🧹 Delete All Cached Models (\(formattedTotal))",
+                title: "Delete All Cached Models (\(formattedTotal))",
                 action: #selector(clearAllModelCache),
                 keyEquivalent: ""
             )
             clearAllItem.target = self
             cacheMenu.addItem(clearAllItem)
         }
-        
+
         cacheMenu.addItem(NSMenuItem.separator())
         let openFolderItem = NSMenuItem(
-            title: "📂 Open Models Folder in Finder",
+            title: "Open Models Folder in Finder",
             action: #selector(openModelsFolderInFinder),
             keyEquivalent: ""
         )
         openFolderItem.target = self
         cacheMenu.addItem(openFolderItem)
-        
-        let cacheParentItem = NSMenuItem(title: "💾 Model Storage", action: nil, keyEquivalent: "")
+
+        let cacheParentItem = NSMenuItem(title: "Model Storage", action: nil, keyEquivalent: "")
         cacheParentItem.submenu = cacheMenu
         menu.addItem(cacheParentItem)
-        
+
         menu.addItem(NSMenuItem.separator())
-        
+
         let quitItem = NSMenuItem(
             title: "Quit Butterfly",
             action: #selector(quitApp),
@@ -274,31 +302,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         quitItem.target = self
         menu.addItem(quitItem)
-        
+
         statusItem.menu = menu
     }
-    
+
     @objc private func selectASRModelSpec(_ sender: NSMenuItem) {
         guard let spec = sender.representedObject as? ModelSpec else { return }
         guard ModelManager.isRuntimeSupported(spec) else { return }
-        
+
         if ModelManager.shared.isModelDownloaded(spec) {
             ModelManager.shared.activeASRModel = spec
             updateMenu()
             print("Butterfly: Switched active speech model to \(spec.displayName)")
             return
         }
-        
+
         downloadModelSpec(spec)
     }
-    
+
+    @objc private func selectSmartPolishStyle(_ sender: NSMenuItem) {
+        guard !isBusy,
+              let rawValue = sender.representedObject as? String,
+              let style = SmartPolishStyle(rawValue: rawValue) else {
+            return
+        }
+        smartPolishStyle = style
+        UserDefaults.standard.set(style.rawValue, forKey: Self.smartPolishStyleDefaultsKey)
+        updateMenu()
+        print("Butterfly: Smart Polish style changed to \(style.title)")
+    }
+
     private func downloadModelSpec(_ spec: ModelSpec) {
         guard !isDownloadingModel else { return }
         isDownloadingModel = true
-        
+
         Task { @MainActor in
             self.statusItem.button?.title = " ⏳ Downloading..."
-            
+
             do {
                 _ = try await ModelManager.shared.downloadModel(spec) { progress in
                     Task { @MainActor in
@@ -306,14 +346,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         self.statusItem.button?.title = " ⏳ \(percentage)%"
                     }
                 }
-                
+
                 ModelManager.shared.activeASRModel = spec
-                
+
                 self.isDownloadingModel = false
                 self.statusItem.button?.title = " ✅ Ready!"
                 self.updateMenu()
                 print("Butterfly: Model \(spec.displayName) downloaded successfully!")
-                
+
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
                 self.statusItem.button?.title = ""
             } catch {
@@ -326,7 +366,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
     }
-    
+
     @objc private func uninstallModel(_ sender: NSMenuItem) {
         guard let spec = sender.representedObject as? ModelSpec else { return }
         do {
@@ -337,7 +377,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             print("Failed to delete model: \(error.localizedDescription)")
         }
     }
-    
+
     @objc private func clearAllModelCache() {
         do {
             try ModelManager.shared.clearAllCache()
@@ -347,12 +387,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             print("Failed to clear model cache: \(error.localizedDescription)")
         }
     }
-    
+
     @objc private func openModelsFolderInFinder() {
         let url = ModelManager.shared.cacheDirectory
         NSWorkspace.shared.open(url)
     }
-    
+
     @objc private func startLiveStreamingMode() {
         Task { @MainActor in
             await startListening(mode: .liveStreaming)
@@ -364,13 +404,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             await startListening(mode: .smartPolish)
         }
     }
-    
+
     @objc private func stopCurrentRecording() {
         Task { @MainActor in
             await stopAndInject()
         }
     }
-    
+
     /// Start either live dictation or deferred smart polishing.
     private func startListening(mode: ButterflyMode = .liveStreaming) async {
         guard activity == .idle else { return }
@@ -387,7 +427,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             print("Warning: Required microphone or speech recognition permission not granted")
             return
         }
-        
+
         do {
             latestTranscript = ""
             streamingInjectedText = ""
@@ -395,11 +435,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             activity = .recording(mode)
             recordingStartTime = Date()
             animationIndex = 0
-            
+
             let initialStatus = mode == .liveStreaming ? "Streaming" : "Recording"
             self.statusItem.button?.title = " 🎙️ [00:00] \(initialStatus) ·"
             self.updateMenu()
-            
+
             recordingTimer?.invalidate()
             recordingTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
                 Task { @MainActor [weak self] in
@@ -408,7 +448,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     let dots = String(repeating: "·", count: self.animationIndex + 1)
                     let elapsed = Int(Date().timeIntervalSince(self.recordingStartTime ?? Date()))
                     let timeStr = String(format: "[%02d:%02d]", elapsed / 60, elapsed % 60)
-                    
+
                     if self.activeMode == .smartPolish {
                         self.statusItem.button?.title = " 📝 \(timeStr) Recording \(dots)"
                         FloatingHUDWindow.shared.updateStatus(
@@ -420,7 +460,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                 }
             }
-            
+
             if isUsingLocalWhisper {
                 let modelPath = ModelManager.shared.localPath(for: activeModel).path
                 try await localWhisperEngine.startListening(modelPath: modelPath)
@@ -439,7 +479,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.updateMenu()
         }
     }
-    
+
     /// Stop listening and finalize text
     private func stopAndInject() async {
         guard case .recording(let mode) = activity else { return }
@@ -454,15 +494,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         recordingTimer?.invalidate()
         recordingTimer = nil
-        
+
         self.statusItem.button?.title = " ⏳ Finalizing..."
         self.updateMenu()
-        
+
         // Asynchronously flush audio buffers and retrieve full finalized transcript
         let fullRawTranscript = isUsingLocalWhisper
             ? await localWhisperEngine.stopListening()
             : await liveEngine.stopLiveListening()
-        
+
         print("\n[Butterfly: \(mode.title) Transcription Completed]: \(fullRawTranscript)")
 
         guard mode == .smartPolish else {
@@ -478,7 +518,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         self.statusItem.button?.title = " ✨ Polishing..."
         FloatingHUDWindow.shared.updateStatus(title: "✨ Smart Polish", detail: "Polishing transcript on device...")
-        let result = await SmartPolishEngine.shared.polish(fullRawTranscript)
+        let style = smartPolishStyle
+        let result = await SmartPolishEngine.shared.polish(fullRawTranscript, style: style)
         if result.usedFallback {
             print("Butterfly: Used rule-based Smart Polish fallback: \(result.fallbackReason ?? "unknown reason")")
         }
@@ -494,7 +535,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !inserted {
             print("Butterfly: Smart Polish output was not inserted because the clipboard changed")
         }
-        print("\n[Butterfly: Smart Polish Output]: \(result.text)")
+        print("\n[Butterfly: Smart Polish Output - \(style.title)]: \(result.text)")
         finishProcessing()
     }
 
@@ -533,10 +574,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.button?.title = " 🎙️ \(timeStr) \(preview)"
         InputInjector.shared.enqueueSlidingDelta(injectionAction)
     }
-    
+
     private var eventTapPort: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
-    
+
     /// Handle low-level CGEvent from Event Tap to allow swallowing Enter/Esc and hotkeys
     fileprivate func handleCGEvent(proxy: CGEventTapProxy, type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
@@ -545,14 +586,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return Unmanaged.passUnretained(event)
         }
-        
+
         guard type == .keyDown else {
             return Unmanaged.passUnretained(event)
         }
-        
+
         let keyCode = Int(event.getIntegerValueField(.keyboardEventKeycode))
         let flags = event.flags
-        
+
         // 1. Enter or Esc stops recording. Keep swallowing while deferred processing is active.
         if (keyCode == 36 || keyCode == 76 || keyCode == 53) && isRecording {
             print("\n[CGEventTap: Enter/Esc Intercepted] -> Stopping recording & SWALLOWING Enter key (chat safe)!")
@@ -588,16 +629,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return nil // Swallow Space key so it doesn't type a space
         }
-        
+
         return Unmanaged.passUnretained(event)
     }
-    
+
     /// Register global and local system-wide hotkeys
     private func setupGlobalHotkey() {
         // 1. Setup high-level Event Tap for global swallowing
         let eventMask = (1 << CGEventType.keyDown.rawValue)
         let observer = Unmanaged.passUnretained(self).toOpaque()
-        
+
         if let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
             place: .headInsertEventTap,
@@ -617,7 +658,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             CGEvent.tapEnable(tap: tap, enable: true)
             print("Butterfly: Low-level EventTap registered successfully (Enter swallowing active).")
         }
-        
+
         // 2. Local monitor for fallback
         let fallbackHandler: (NSEvent) -> NSEvent? = { [weak self] event in
             guard let self = self else { return event }
@@ -667,7 +708,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             updateMenu()
         }
     }
-    
+
     @objc private func quitApp() {
         NSApplication.shared.terminate(nil)
     }

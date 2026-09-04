@@ -74,6 +74,27 @@ public enum TestRunner {
         let stutterInput = "這個這個功能真的很好用"
         let stutterOutput = polisher.polish(stutterInput, mode: .structuredNote)
         assertTrue(stutterOutput.contains("這個功能"), "TC-C5: Stutter deduplication")
+
+        let paragraphFirstInput = "我們已經調整選單順序，選單分成兩個區塊。第一個是啟動操作。第二個是設定與狀態。這樣可以清楚區分操作和設定。"
+        let paragraphFirstOutput = polisher.polish(paragraphFirstInput, mode: .structuredNote)
+        assertTrue(
+            paragraphFirstOutput.components(separatedBy: "\n\n").count == 3,
+            "TC-C6: Structured notes preserve paragraph-list-paragraph blocks"
+        )
+        assertTrue(
+            paragraphFirstOutput.contains("- 啟動操作。\n- 設定與狀態。"),
+            "TC-C7: Structured notes emit only complete parallel list items"
+        )
+
+        let conciseOutput = polisher.polish(paragraphFirstInput, mode: .concisePolish)
+        assertTrue(!conciseOutput.contains("- "), "TC-C8: Concise polish does not force list formatting")
+
+        let multipleListsInput = "選單分成兩區。啟動操作有兩項，第一個是 Start Voice Dictation。第二個是 Start Smart Polish。設定有兩項，第一個是 Speech Model。第二個是 Model Storage。這樣可以區分操作與設定。"
+        let multipleListsOutput = polisher.polish(multipleListsInput, mode: .structuredNote)
+        assertTrue(
+            multipleListsOutput.contains("設定有兩項：\n\n- Speech Model。"),
+            "TC-C9: Restarted numbering creates a new paragraph and list block"
+        )
         
         // MARK: - 4. SystemPrompt Tests
         print("\n📦 Suite 4: SystemPrompt (Dynamic Loading & Fallbacks)")
@@ -214,6 +235,26 @@ public enum TestRunner {
             nil,
             "TC-H10: Command-modified shortcut is rejected"
         )
+
+        let stylePrompts = Set(SmartPolishStyle.allCases.map {
+            SmartPolishPrompt.shared.content(for: $0)
+        })
+        assertEqual(
+            stylePrompts.count,
+            SmartPolishStyle.allCases.count,
+            "TC-H11: Every Smart Polish style has distinct instructions"
+        )
+
+        let structuredPrimary = CLIMockLanguageModelBackend(transform: { $0 })
+        let structuredEngine = SmartPolishEngine(
+            primaryBackend: structuredPrimary,
+            chunkCharacterLimit: 200
+        )
+        _ = await structuredEngine.polish(longInput, style: .structured)
+        assertTrue(
+            await structuredPrimary.requestCount > 2,
+            "TC-H12: Long structured text receives preparation and final passes"
+        )
         
         // MARK: - Final Summary
         print("\n" + String(repeating: "=", count: 60))
@@ -244,7 +285,11 @@ private actor CLIMockLanguageModelBackend: LanguageModelBackend {
         configuredAvailability
     }
 
-    func polish(transcript: String, instructions: String) async throws -> String {
+    func polish(
+        transcript: String,
+        instructions: String,
+        style: SmartPolishStyle
+    ) async throws -> String {
         requestCount += 1
         return try transform(transcript)
     }

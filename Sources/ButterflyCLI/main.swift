@@ -113,16 +113,31 @@ case "test-convert":
     }
 
 case "test-polish":
-    let useSmartPolish = args.contains("--smart")
-    let inputText = args.dropFirst(2).filter { $0 != "--smart" }.joined(separator: " ")
+    var polishArguments = Array(args.dropFirst(2))
+    let useSmartPolish = polishArguments.contains("--smart")
+    polishArguments.removeAll { $0 == "--smart" }
+
+    var smartPolishStyle = SmartPolishStyle.concise
+    if let styleFlagIndex = polishArguments.firstIndex(of: "--style") {
+        if polishArguments.indices.contains(styleFlagIndex + 1),
+           let parsedStyle = SmartPolishStyle(rawValue: polishArguments[styleFlagIndex + 1]) {
+            smartPolishStyle = parsedStyle
+            polishArguments.removeSubrange(styleFlagIndex...(styleFlagIndex + 1))
+        } else {
+            let choices = SmartPolishStyle.allCases.map(\.rawValue).joined(separator: ", ")
+            print("Invalid Smart Polish style. Available styles: \(choices)")
+            exit(1)
+        }
+    }
+    let inputText = polishArguments.joined(separator: " ")
     let testString = inputText.isEmpty ? "好我們今天開會主要討論了三件事情，一個是關於前端游標注入的邏輯，我們要確保說輸入框不會出現雪崩效應。再來是錯字要修復像是 System Prompt 或者 Model 等詞彙我們要把它修復。第三個是排版的部分希望段落不要太碎適當的幫我列成 Markdown 清單整理好這樣謝謝。" : inputText
 
     if useSmartPolish {
         Task {
             print("\n[Spoken Input]:\n\(testString)")
-            let result = await SmartPolishEngine.shared.polish(testString)
+            let result = await SmartPolishEngine.shared.polish(testString, style: smartPolishStyle)
             let engineName = result.usedFallback ? "Rule-Based Fallback" : "Apple Foundation Models"
-            print("\n[Smart Polish Output - \(engineName)]:\n\(result.text)")
+            print("\n[Smart Polish Output - \(smartPolishStyle.title), \(engineName)]:\n\(result.text)")
             print("--------------------------------------------------")
             exit(0)
         }
