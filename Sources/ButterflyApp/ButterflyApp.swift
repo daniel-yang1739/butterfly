@@ -36,6 +36,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         rawValue: UserDefaults.standard.string(forKey: AppDelegate.smartPolishStyleDefaultsKey) ?? ""
     ) ?? .concise
     private var smartPolishAvailabilityText = "Checking..."
+    private var polishModelOverride: String?
+    private var recordingPolishEngine = SmartPolishEngine()
+    private var recordingPolishModel = "apple/foundation"
 
     private var streamingInjectedText: String = ""
     private var latestTranscript: String = ""
@@ -229,6 +232,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         intelligenceItem.isEnabled = false
         menu.addItem(intelligenceItem)
 
+        let polishModelsMenu = NSMenu()
+        if let configuration = try? PolishConfiguration.load() {
+            let selected = polishModelOverride ?? configuration.polish.model
+            let configuredItem = NSMenuItem(title: "Use Configuration File", action: #selector(selectPolishModel(_:)), keyEquivalent: "")
+            configuredItem.target = self
+            configuredItem.state = polishModelOverride == nil ? .on : .off
+            configuredItem.isEnabled = !isBusy
+            polishModelsMenu.addItem(configuredItem)
+            for model in configuration.models {
+                let item = NSMenuItem(title: model.name, action: #selector(selectPolishModel(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = model.id
+                item.state = selected == model.id ? .on : .off
+                item.isEnabled = !isBusy
+                polishModelsMenu.addItem(item)
+            }
+        }
+        let polishModelsItem = NSMenuItem(title: "Smart Polish Model", action: nil, keyEquivalent: "")
+        polishModelsItem.submenu = polishModelsMenu
+        menu.addItem(polishModelsItem)
+        let reloadPolishItem = NSMenuItem(title: "Reload Polish Configuration", action: #selector(reloadPolishConfiguration), keyEquivalent: "")
+        reloadPolishItem.target = self
+        reloadPolishItem.isEnabled = !isBusy
+        menu.addItem(reloadPolishItem)
+
         // Track B: Style
         let styleMenu = NSMenu()
         for style in SmartPolishStyle.allCases {
@@ -321,6 +349,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         downloadModelSpec(spec)
+    }
+
+    @objc private func selectPolishModel(_ sender: NSMenuItem) {
+        guard activity == .idle else { return }
+        polishModelOverride = sender.representedObject as? String
+        refreshSmartPolishAvailability()
+    }
+
+    @objc private func reloadPolishConfiguration() {
+        guard activity == .idle else { return }
+        refreshSmartPolishAvailability()
     }
 
     @objc private func selectSmartPolishStyle(_ sender: NSMenuItem) {
@@ -432,6 +471,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         do {
+            if mode == .smartPolish {
+                let configuration = try PolishConfiguration.load()
+                recordingPolishModel = polishModelOverride ?? configuration.polish.model
+                recordingPolishEngine = try configuration.makeEngine(model: recordingPolishModel)
+            }
             latestTranscript = ""
             streamingInjectedText = ""
             activeMode = mode
@@ -520,14 +564,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         self.statusItem.button?.title = " ✨ Polishing..."
-        FloatingHUDWindow.shared.updateStatus(title: "✨ Smart Polish", detail: "Polishing transcript on device...")
+        FloatingHUDWindow.shared.updateStatus(title: "✨ Smart Polish", detail: "Polishing with \(recordingPolishModel)...")
         let style = smartPolishStyle
-        let result = await SmartPolishEngine.shared.polish(fullRawTranscript, style: style)
+        let result = await recordingPolishEngine.polish(fullRawTranscript, style: style)
         if result.usedFallback {
             print("Butterfly: Used rule-based Smart Polish fallback: \(result.fallbackReason ?? "unknown reason")")
         }
 
-        guard !result.text.isEmpty else {
+        guard !Task.isCancelled, !result.text.isEmpty else {
             finishProcessing()
             return
         }
@@ -699,14 +743,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func refreshSmartPolishAvailability() {
         Task { @MainActor in
-            let availability = await SmartPolishEngine.shared.availability()
-            switch availability {
-            case .available:
-                smartPolishAvailabilityText = "Apple Intelligence Ready"
-            case .unavailable(let reason):
-                smartPolishAvailabilityText = reason.contains("appleIntelligenceNotEnabled")
-                    ? "Apple Intelligence Disabled (Rules Fallback)"
-                    : "Rules Fallback"
+            do {
+                let configuration = try PolishConfiguration.load()
+                let selected = polishModelOverride ?? configuration.polish.model
+                let engine = try configuration.makeEngine(model: selected)
+                switch await engine.availability() {
+                case .available:
+                    smartPolishAvailabilityText = "\(selected) (Configured)"
+                case .unavailable:
+                    smartPolishAvailabilityText = "\(selected) (Rules Fallback)"
+                }
+            } catch {
+                smartPolishAvailabilityText = "Configuration Error"
+                print("Butterfly: \(error.localizedDescription)")
             }
             updateMenu()
         }

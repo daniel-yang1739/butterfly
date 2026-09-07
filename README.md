@@ -6,9 +6,11 @@
 
 > **Butterfly**: Liberate your hands from the keyboard and let your thoughts fly freely with zero-latency, hands-free local voice dictation on Apple Silicon.
 
-A lightweight, privacy-focused, zero-cloud-dependency local speech-to-text system built for macOS (Apple Silicon). Press <kbd>Option</kbd> + <kbd>Space</kbd> for live dictation, or <kbd>Option</kbd> + <kbd>Shift</kbd> + <kbd>Space</kbd> to record first and let Apple's on-device Foundation Model produce a faithfully polished result.
+A lightweight, privacy-focused speech-to-text system built for macOS (Apple Silicon). Press <kbd>Option</kbd> + <kbd>Space</kbd> for live dictation, or <kbd>Option</kbd> + <kbd>Shift</kbd> + <kbd>Space</kbd> to record first and polish with Apple's on-device Foundation Model or an explicitly configured AI endpoint.
 
 Smart Polish supports four persistent output styles: Faithful Proofread, Concise Polish, Structured Notes, and Summary. Choose the style from the menu bar before recording.
+
+Configure custom providers and models in `~/.config/butterfly/butterfly.json`, then choose **Smart Polish Model** in the menu bar. The App and CLI share this configuration. See [endpoint configuration](docs/POLISH_ENDPOINTS.md) for the format, authentication, and behavior.
 
 ---
 
@@ -47,8 +49,8 @@ Smart Polish supports four persistent output styles: Faithful Proofread, Concise
    - Hardware accelerated via Apple Neural Engine (ANE) and Metal GPU unified memory.
 8. **🖥️ Sleek Floating Capsule HUD**:
    - Displays real-time streaming speech transcription in a modern frosted-glass floating capsule HUD (`FloatingHUDWindow`).
-9. **🔒 100% On-Device Privacy**:
-   - All audio processing, speech recognition, and formatting execute 100% locally on your Mac. Zero audio or text ever leaves your machine.
+9. **🔒 Local Polish by Default**:
+   - Smart Polish runs locally unless you explicitly select a configured endpoint. Endpoint polishing sends the transcript and editing instructions to that server; the polish backend never uploads audio.
 
 ---
 

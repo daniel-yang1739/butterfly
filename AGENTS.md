@@ -122,8 +122,9 @@ swift run ButterflyApp
 
 1. **Strict Concurrency & Sendable Compliance**:
    - All shared singletons and manager classes must adhere to Swift concurrency guidelines (`@unchecked Sendable` or actor isolation with thread locks).
-2. **Zero Cloud Dependency & Local Privacy**:
-   - All audio processing, speech recognition, and text polishing run 100% locally on the user's Apple Silicon hardware.
+2. **Local Defaults & Optional Polish Endpoints**:
+   - Text polishing defaults to on-device processing. Users may explicitly configure a Smart Polish endpoint; only transcripts and editing instructions are sent to that endpoint, never audio through the polish backend.
+   - Preserve local rules fallback and clearly identify the selected polish model in the interface. Never log endpoint credentials or raw error response bodies.
 3. **Traditional Chinese Guarantee**:
    - Transcribed Chinese text passes through official `OpenCC` (`s2twp` standard via `SwiftyOpenCC`) to guarantee 0% Simplified Chinese in final outputs.
 4. **Lean Contextual Biasing**:

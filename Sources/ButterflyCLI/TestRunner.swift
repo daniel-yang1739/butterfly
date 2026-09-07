@@ -256,6 +256,86 @@ public enum TestRunner {
             "TC-H12: Long structured text receives preparation and final passes"
         )
         
+        // MARK: - Endpoint Integration (runs without XCTest)
+        do {
+            let configuration = try JSONDecoder().decode(PolishConfiguration.self, from: Data("""
+            {"polish":{"model":"test/team/model"},"provider":{"test":{
+              "type":"openai-compatible","options":{"baseURL":"https://example.invalid/v1","apiKey":"{env:TEST_TOKEN}"},
+              "models":{"team/model":{"name":"Test"}}
+            }}}
+            """.utf8))
+            assertTrue(configuration.models.contains { $0.id == "test/team/model" }, "TC-I1: Model IDs preserve slashes")
+            let options = configuration.provider["test"]!.options
+            do {
+                _ = try EndpointLanguageModelBackend(options: options, modelID: "test", environment: [:])
+                assertTrue(false, "TC-I2: Missing environment key is rejected")
+            } catch {
+                assertTrue(true, "TC-I2: Missing environment key is rejected")
+            }
+            let sessionConfiguration = URLSessionConfiguration.ephemeral
+            sessionConfiguration.protocolClasses = [CLIEndpointStub.self]
+            let session = URLSession(configuration: sessionConfiguration)
+            defer { session.invalidateAndCancel() }
+            let reasoningModel = try JSONDecoder().decode(PolishConfiguration.Provider.Model.self, from: Data("""
+            {"api":"responses","reasoning":true,"interleaved":true,"defaultVariant":"xhigh",
+             "variants":{"xhigh":{"reasoningEffort":"xhigh","textVerbosity":"low","reasoningSummary":"auto"}},
+             "limit":{"context":512000,"output":65536}}
+            """.utf8))
+            assertTrue(reasoningModel.reasoning == true && reasoningModel.interleaved == true, "TC-J1: Capability metadata is decoded")
+            assertEqual(try reasoningModel.outputBudget(), 65536, "TC-J2: Output limit supplies the request budget")
+            for modelID in ["responses", "incomplete-responses"] {
+                let backend = try EndpointLanguageModelBackend(
+                    options: options, modelID: modelID, maxTokens: reasoningModel.outputBudget(),
+                    api: reasoningModel.api!, variant: reasoningModel.selectedVariant(),
+                    reasoning: reasoningModel.reasoning, contextLimit: reasoningModel.limit?.context,
+                    session: session, environment: ["TEST_TOKEN": "test-only"]
+                )
+                let result = await SmartPolishEngine(primaryBackend: backend).polish("Original text", style: .faithful)
+                if modelID == "responses" {
+                    assertEqual(result.text, "Edited response", "TC-J3: Responses parameters map correctly and summary is excluded")
+                    assertTrue(!result.usedFallback, "TC-J4: Completed Responses output is accepted")
+                } else {
+                    assertTrue(result.usedFallback, "TC-J5: Incomplete Responses output falls back")
+                }
+            }
+            do {
+                _ = try EndpointLanguageModelBackend(
+                    options: options, modelID: "invalid", variant: reasoningModel.selectedVariant(),
+                    environment: ["TEST_TOKEN": "test-only"]
+                )
+                assertTrue(false, "TC-J6: Chat Completions rejects reasoningSummary")
+            } catch { assertTrue(true, "TC-J6: Chat Completions rejects reasoningSummary") }
+            for json in [
+                "{\"defaultVariant\":\"missing\"}",
+                "{\"limit\":{\"context\":100,\"output\":100}}",
+                "{\"maxTokens\":101,\"limit\":{\"output\":100}}"
+            ] {
+                do {
+                    let invalid = try JSONDecoder().decode(PolishConfiguration.Provider.Model.self, from: Data(json.utf8))
+                    _ = try invalid.selectedVariant()
+                    _ = try invalid.outputBudget()
+                    assertTrue(false, "TC-J7: Invalid variant or budget is rejected")
+                } catch { assertTrue(true, "TC-J7: Invalid variant or budget is rejected") }
+            }
+            for model in ["success", "unauthorized", "empty", "truncated", "cancelled"] {
+                let backend = try EndpointLanguageModelBackend(
+                    options: options, modelID: model, session: session, environment: ["TEST_TOKEN": "test-only"]
+                )
+                let result = await SmartPolishEngine(primaryBackend: backend).polish("Original text", style: .faithful)
+                if model == "success" {
+                    assertEqual(result.text, "Edited text", "TC-I3: Endpoint request and response contract")
+                    assertTrue(!result.usedFallback, "TC-I4: Successful endpoint skips fallback")
+                } else if model == "cancelled" {
+                    assertTrue(result.text.isEmpty && !result.usedFallback, "TC-I5: Cancellation does not insert fallback")
+                } else {
+                    assertTrue(result.usedFallback && !result.text.isEmpty, "TC-I6: \(model) uses local fallback")
+                    assertTrue(!(result.fallbackReason ?? "").contains("secret"), "TC-I7: Server error details are not exposed")
+                }
+            }
+        } catch {
+            assertTrue(false, "Endpoint integration failed: \(error.localizedDescription)")
+        }
+
         // MARK: - Final Summary
         print("\n" + String(repeating: "=", count: 60))
         print("🎯 Test Summary: \(passed) Passed, \(failed) Failed (Total: \(passed + failed) Assertions)")
@@ -266,6 +346,74 @@ public enum TestRunner {
             exit(1)
         }
     }
+}
+
+/// In-memory HTTP fixture; these tests never connect to a real provider.
+private final class CLIEndpointStub: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        var data = request.httpBody ?? Data()
+        if data.isEmpty, let stream = request.httpBodyStream {
+            stream.open()
+            defer { stream.close() }
+            var buffer = [UInt8](repeating: 0, count: 1024)
+            while stream.hasBytesAvailable {
+                let count = stream.read(&buffer, maxLength: buffer.count)
+                guard count > 0 else { break }
+                data.append(contentsOf: buffer.prefix(count))
+            }
+        }
+        let body = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        let model = body?["model"] as? String
+        if request.url?.path == "/v1/responses" {
+            let reasoning = body?["reasoning"] as? [String: String]
+            let text = body?["text"] as? [String: String]
+            guard request.httpMethod == "POST",
+                  request.value(forHTTPHeaderField: "Authorization") == "Bearer test-only",
+                  body?["input"] as? String == "Original text",
+                  body?["instructions"] as? String != nil,
+                  body?["store"] as? Bool == false,
+                  body?["max_output_tokens"] as? Int == 65536,
+                  body?["messages"] == nil,
+                  reasoning == ["effort": "xhigh", "summary": "auto"], text == ["verbosity": "low"] else {
+                client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+                return
+            }
+            let status = model == "incomplete-responses" ? "incomplete" : "completed"
+            let response = """
+            {"status":"\(status)","output":[
+              {"type":"reasoning","summary":[{"type":"summary_text","text":"Do not insert this"}]},
+              {"type":"message","role":"assistant","content":[{"type":"output_text","text":"Edited response"}]}]}
+            """
+            client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: Data(response.utf8))
+            client?.urlProtocolDidFinishLoading(self)
+            return
+        }
+        let messages = body?["messages"] as? [[String: String]]
+        guard request.url?.path == "/v1/chat/completions", request.httpMethod == "POST",
+              request.value(forHTTPHeaderField: "Authorization") == "Bearer test-only",
+              body?["stream"] as? Bool == false,
+              messages?.first?["role"] == "system", messages?.last?["content"] == "Original text" else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+            return
+        }
+        if model == "cancelled" {
+            client?.urlProtocol(self, didFailWithError: URLError(.cancelled))
+            return
+        }
+        let status = model == "unauthorized" ? 401 : 200
+        let content = model == "empty" ? "" : "Edited text"
+        let finish = model == "truncated" ? "length" : "stop"
+        let response = status == 401 ? "secret" : """
+        {"choices":[{"message":{"content":"\(content)"},"finish_reason":"\(finish)"}]}
+        """
+        client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(response.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
 }
 
 private actor CLIMockLanguageModelBackend: LanguageModelBackend {

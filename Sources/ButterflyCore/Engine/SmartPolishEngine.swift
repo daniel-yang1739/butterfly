@@ -44,6 +44,9 @@ public actor SmartPolishEngine {
         guard !input.isEmpty else {
             return SmartPolishResult(text: "", usedFallback: false)
         }
+        guard !Task.isCancelled else {
+            return SmartPolishResult(text: "", usedFallback: false)
+        }
 
         switch await primaryBackend.availability() {
         case .available:
@@ -63,6 +66,8 @@ public actor SmartPolishEngine {
                     throw LanguageModelBackendError.emptyResponse
                 }
                 return SmartPolishResult(text: output, usedFallback: false)
+            } catch is CancellationError {
+                return SmartPolishResult(text: "", usedFallback: false)
             } catch {
                 return await fallbackResult(for: input, style: style, reason: error.localizedDescription)
             }
@@ -122,6 +127,7 @@ public actor SmartPolishEngine {
         instructions: String,
         style: SmartPolishStyle
     ) async throws -> [String] {
+        try Task.checkCancellation()
         do {
             return [try await primaryBackend.polish(
                 transcript: chunk,
@@ -149,12 +155,18 @@ public actor SmartPolishEngine {
         style: SmartPolishStyle,
         reason: String
     ) async -> SmartPolishResult {
+        guard !Task.isCancelled else {
+            return SmartPolishResult(text: "", usedFallback: false)
+        }
         let output = (try? await fallbackBackend.polish(
             transcript: transcript,
             instructions: SmartPolishPrompt.shared.content(for: style),
             style: style
         )) ?? transcript
-        return SmartPolishResult(text: output, usedFallback: true, fallbackReason: reason)
+        guard !Task.isCancelled else {
+            return SmartPolishResult(text: "", usedFallback: false)
+        }
+        return SmartPolishResult(text: OpenCCTranslator.shared.convert(output), usedFallback: true, fallbackReason: reason)
     }
 
     static func splitAtSentenceBoundaries(_ text: String, maximumCharacters: Int) -> [String] {

@@ -135,8 +135,18 @@ case "test-polish":
     if useSmartPolish {
         Task {
             print("\n[Spoken Input]:\n\(testString)")
-            let result = await SmartPolishEngine.shared.polish(testString, style: smartPolishStyle)
-            let engineName = result.usedFallback ? "Rule-Based Fallback" : "Apple Foundation Models"
+            let configuration: PolishConfiguration
+            let engine: SmartPolishEngine
+            do {
+                configuration = try PolishConfiguration.load()
+                engine = try configuration.makeEngine()
+            } catch {
+                print("Smart Polish configuration error: \(error.localizedDescription)")
+                exit(1)
+            }
+            let result = await engine.polish(testString, style: smartPolishStyle)
+            let engineName = result.usedFallback ? "Rule-Based Fallback" : configuration.polish.model
+            if let reason = result.fallbackReason { print("Fallback reason: \(reason)") }
             print("\n[Smart Polish Output - \(smartPolishStyle.title), \(engineName)]:\n\(result.text)")
             print("--------------------------------------------------")
             exit(0)
@@ -204,7 +214,7 @@ default:
       butterfly-cli listen            - Start real-time live voice dictation
       butterfly-cli test              - Run complete 36-assertion automated test suite
       butterfly-cli test-polish       - Test real-time acoustic typo restoration
-      butterfly-cli test-polish --smart - Test deferred Apple Intelligence polishing
+      butterfly-cli test-polish --smart - Test the configured Smart Polish model
       butterfly-cli test-convert      - Test Simplified-to-Traditional conversion
       butterfly-cli models            - List supported local speech recognition models
       butterfly-cli download <id>     - Download a model to local cache (e.g. whisper-large-v3-turbo)
