@@ -38,7 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var smartPolishAvailabilityText = "Checking..."
     private var polishModelOverride: String?
     private var recordingPolishEngine = SmartPolishEngine()
-    private var recordingPolishModel = "apple/foundation"
+    private var recordingPolishModel = "local/foundation"
 
     private var streamingInjectedText: String = ""
     private var latestTranscript: String = ""
@@ -223,23 +223,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         asrParentItem.submenu = asrMenu
         menu.addItem(asrParentItem)
 
-        // Track B: SLM
-        let intelligenceItem = NSMenuItem(
-            title: "Smart Polish: \(smartPolishAvailabilityText)",
-            action: nil,
-            keyEquivalent: ""
-        )
-        intelligenceItem.isEnabled = false
-        menu.addItem(intelligenceItem)
-
+        // Track B: Model selection and availability
         let polishModelsMenu = NSMenu()
         if let configuration = try? PolishConfiguration.load() {
             let selected = polishModelOverride ?? configuration.polish.model
-            let configuredItem = NSMenuItem(title: "Use Configuration File", action: #selector(selectPolishModel(_:)), keyEquivalent: "")
-            configuredItem.target = self
-            configuredItem.state = polishModelOverride == nil ? .on : .off
-            configuredItem.isEnabled = !isBusy
-            polishModelsMenu.addItem(configuredItem)
             for model in configuration.models {
                 let item = NSMenuItem(title: model.name, action: #selector(selectPolishModel(_:)), keyEquivalent: "")
                 item.target = self
@@ -249,7 +236,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 polishModelsMenu.addItem(item)
             }
         }
-        let polishModelsItem = NSMenuItem(title: "Smart Polish Model", action: nil, keyEquivalent: "")
+        let polishModelsItem = NSMenuItem(title: "Smart Polish Model: \(smartPolishAvailabilityText)", action: nil, keyEquivalent: "")
         polishModelsItem.submenu = polishModelsMenu
         menu.addItem(polishModelsItem)
         let reloadPolishItem = NSMenuItem(title: "Reload Polish Configuration", action: #selector(reloadPolishConfiguration), keyEquivalent: "")
@@ -359,6 +346,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func reloadPolishConfiguration() {
         guard activity == .idle else { return }
+        polishModelOverride = nil
         refreshSmartPolishAvailability()
     }
 
@@ -746,12 +734,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             do {
                 let configuration = try PolishConfiguration.load()
                 let selected = polishModelOverride ?? configuration.polish.model
+                let modelName = configuration.models.first { $0.id == selected }?.name ?? selected
                 let engine = try configuration.makeEngine(model: selected)
                 switch await engine.availability() {
                 case .available:
-                    smartPolishAvailabilityText = "\(selected) (Configured)"
+                    smartPolishAvailabilityText = "\(modelName) (Configured)"
                 case .unavailable:
-                    smartPolishAvailabilityText = "\(selected) (Rules Fallback)"
+                    smartPolishAvailabilityText = "\(modelName) (Rules Fallback)"
                 }
             } catch {
                 smartPolishAvailabilityText = "Configuration Error"

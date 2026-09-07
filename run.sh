@@ -13,13 +13,13 @@ print_usage() {
     cat <<'EOF'
 Usage: ./run.sh [options]
 
-Build and launch the Butterfly menu bar app.
+Stop any running Butterfly app, then build and launch it.
 
 Options:
   --debug      Build with debug settings.
   --release    Build with release settings (default).
   --clean      Recreate Swift build artifacts before building.
-  --no-open    Build the app without launching it.
+  --no-open    Build without stopping or launching the app.
   -h, --help   Show this help message.
 EOF
 }
@@ -27,6 +27,40 @@ EOF
 fail() {
     printf 'Butterfly setup error: %s\n' "$1" >&2
     exit 1
+}
+
+running_app_pids() {
+    # Match exact executable names for bundled and swift-run app launches.
+    pgrep -u "$(id -u)" -x 'Butterfly|ButterflyApp' || [[ "$?" -eq 1 ]]
+}
+
+stop_running_app() {
+    local process_ids process_id attempt
+    process_ids="$(running_app_pids)" || fail "Cannot check for running Butterfly processes."
+    [[ -n "$process_ids" ]] || return 0
+
+    printf 'Stopping running Butterfly app...\n'
+    while IFS= read -r process_id; do
+        kill -TERM "$process_id" 2>/dev/null || true
+    done <<< "$process_ids"
+
+    for ((attempt = 0; attempt < 50; attempt++)); do
+        process_ids="$(running_app_pids)" || fail "Cannot check whether Butterfly stopped."
+        [[ -n "$process_ids" ]] || return 0
+        sleep 0.1
+    done
+
+    printf 'Butterfly did not stop within 5 seconds; forcing it to quit...\n'
+    while IFS= read -r process_id; do
+        kill -KILL "$process_id" 2>/dev/null || true
+    done <<< "$process_ids"
+
+    for ((attempt = 0; attempt < 20; attempt++)); do
+        process_ids="$(running_app_pids)" || fail "Cannot verify Butterfly shutdown."
+        [[ -n "$process_ids" ]] || return 0
+        sleep 0.1
+    done
+    fail "Butterfly is still running; close it before launching another instance."
 }
 
 for argument in "$@"; do
@@ -99,6 +133,10 @@ fi
 build_arguments=("--${configuration}")
 if [[ "$clean_build" == true ]]; then
     build_arguments+=("--clean")
+fi
+
+if [[ "$open_app" == true ]]; then
+    stop_running_app
 fi
 
 "${SCRIPT_DIR}/Scripts/build-app.sh" "${build_arguments[@]}"

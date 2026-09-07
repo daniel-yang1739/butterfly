@@ -2,14 +2,16 @@ import Foundation
 
 public struct PolishConfiguration: Decodable, Sendable {
     public struct Selection: Decodable, Sendable {
-        public var model: String = "apple/foundation"
+        public var model: String = "local/foundation"
         public var fallback: String = "rules"
 
         public init() {}
         private enum CodingKeys: String, CodingKey { case model, fallback }
         public init(from decoder: Decoder) throws {
             let values = try decoder.container(keyedBy: CodingKeys.self)
-            model = try values.decodeIfPresent(String.self, forKey: .model) ?? "apple/foundation"
+            model = PolishConfiguration.canonicalModelID(
+                try values.decodeIfPresent(String.self, forKey: .model) ?? "local/foundation"
+            )
             fallback = try values.decodeIfPresent(String.self, forKey: .fallback) ?? "rules"
         }
     }
@@ -103,7 +105,7 @@ public struct PolishConfiguration: Decodable, Sendable {
     }
 
     public var models: [(id: String, name: String)] {
-        [("apple/foundation", "Apple Foundation Models"), ("builtin/rules", "Local Rules")]
+        [("local/foundation", "Local / Apple Foundation Models"), ("local/rules", "Local / Rules")]
         + provider.sorted { $0.key < $1.key }.flatMap { id, entry in
             entry.models.sorted { $0.key < $1.key }.map { modelID, model in
                 ("\(id)/\(modelID)", "\(entry.name ?? id) / \(model.name ?? modelID)")
@@ -111,14 +113,23 @@ public struct PolishConfiguration: Decodable, Sendable {
         }
     }
 
+    /// Preserve existing configuration files while grouping built-in backends under Local.
+    private static func canonicalModelID(_ id: String) -> String {
+        switch id {
+        case "apple/foundation": return "local/foundation"
+        case "builtin/rules": return "local/rules"
+        default: return id
+        }
+    }
+
     public func makeEngine(model override: String? = nil) throws -> SmartPolishEngine {
         guard polish.fallback == "rules" else {
             throw LanguageModelBackendError.unavailable("Only the rules fallback is supported")
         }
-        let selected = override ?? polish.model
+        let selected = Self.canonicalModelID(override ?? polish.model)
         switch selected {
-        case "apple/foundation": return SmartPolishEngine()
-        case "builtin/rules": return SmartPolishEngine(primaryBackend: RuleBasedLanguageModelBackend())
+        case "local/foundation": return SmartPolishEngine()
+        case "local/rules": return SmartPolishEngine(primaryBackend: RuleBasedLanguageModelBackend())
         default:
             let parts = selected.split(separator: "/", maxSplits: 1).map(String.init)
             guard parts.count == 2, let entry = provider[parts[0]],

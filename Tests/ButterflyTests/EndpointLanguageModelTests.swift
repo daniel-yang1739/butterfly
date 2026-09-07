@@ -13,7 +13,7 @@ final class EndpointLanguageModelTests: XCTestCase {
 
     func testDefaultsAndModelIDsContainingSlashes() throws {
         let defaults = try JSONDecoder().decode(PolishConfiguration.self, from: Data("{}".utf8))
-        XCTAssertEqual(defaults.polish.model, "apple/foundation")
+        XCTAssertEqual(defaults.polish.model, "local/foundation")
         let config = try configuration()
         XCTAssertTrue(config.models.contains { $0.id == "gateway/team/model" })
         XCTAssertNoThrow(try config.makeEngine())

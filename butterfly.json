@@ -1,6 +1,6 @@
 {
   "polish": {
-    "model": "apple/foundation",
+    "model": "local/foundation",
     "fallback": "rules"
   },
   "provider": {

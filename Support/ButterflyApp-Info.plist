@@ -10,6 +10,8 @@
     <string>Butterfly</string>
     <key>CFBundleIdentifier</key>
     <string>com.butterfly.voice-dictation</string>
+    <key>CFBundleIconFile</key>
+    <string>icon.png</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>

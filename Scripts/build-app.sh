@@ -81,6 +81,12 @@ for icon_name in menu_bar_icon.png menu_bar_icon@2x.png; do
     fi
 done
 
+# The repository artwork is currently stored as a JPEG with a .png filename.
+# Convert it while packaging so Finder receives a valid PNG app icon.
+app_icon_source="${REPOSITORY_ROOT}/docs/assets/icon.png"
+[[ -f "$app_icon_source" ]] || fail "The app icon was not found at ${app_icon_source}."
+sips -s format png "$app_icon_source" --out "${APP_BUNDLE}/Contents/Resources/icon.png" >/dev/null
+
 codesign --force --sign - "$APP_BUNDLE"
 codesign --verify --deep --strict "$APP_BUNDLE"
 
