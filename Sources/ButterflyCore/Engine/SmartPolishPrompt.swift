@@ -112,7 +112,8 @@ public final class SmartPolishPrompt: @unchecked Sendable {
            !custom.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return custom
         }
-        if let bundledURL = Bundle.module.url(forResource: "smart_polish_prompt", withExtension: "txt"),
+        if let bundledURL = Bundle.main.url(forResource: "smart_polish_prompt", withExtension: "txt")
+            ?? Bundle.module.url(forResource: "smart_polish_prompt", withExtension: "txt"),
            let bundled = try? String(contentsOf: bundledURL, encoding: .utf8) {
             return bundled
         }

@@ -41,7 +41,7 @@ public struct TechDictionary: Sendable {
         if !fileManager.fileExists(atPath: path) {
             let dir = userDictionaryURL.deletingLastPathComponent()
             try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
-            if let bundledURL = Bundle.module.url(forResource: "dictionary", withExtension: "txt"),
+            if let bundledURL = bundledResourceURL(forResource: "dictionary", withExtension: "txt"),
                let bundledContent = try? String(contentsOf: bundledURL, encoding: .utf8) {
                 try? bundledContent.write(to: userDictionaryURL, atomically: true, encoding: .utf8)
             }
@@ -50,7 +50,7 @@ public struct TechDictionary: Sendable {
     
     /// Dynamically loads standard software engineering vocabulary from bundled repository resource (Sources/ButterflyCore/Resources/dictionary.txt)
     public static func loadBundledVocabulary() -> [String] {
-        guard let url = Bundle.module.url(forResource: "dictionary", withExtension: "txt"),
+        guard let url = bundledResourceURL(forResource: "dictionary", withExtension: "txt"),
               let content = try? String(contentsOf: url, encoding: .utf8) else {
             return []
         }
@@ -76,5 +76,10 @@ public struct TechDictionary: Sendable {
     public static var whisperInitialPrompt: String {
         let vocab = allVocabulary
         return vocab.prefix(30).joined(separator: ", ")
+    }
+
+    private static func bundledResourceURL(forResource name: String, withExtension extensionName: String) -> URL? {
+        Bundle.main.url(forResource: name, withExtension: extensionName)
+            ?? Bundle.module.url(forResource: name, withExtension: extensionName)
     }
 }

@@ -66,6 +66,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupStatusBarItem()
+        _ = InputInjector.checkAccessibilityPermission()
         setupGlobalHotkey()
         refreshSmartPolishAvailability()
 
@@ -120,7 +121,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let button = statusItem.button {
             // Load native high-contrast white outline template image for macOS menu bar
             let fileManager = FileManager.default
-            let candidatePaths = [
+            let candidatePaths: [String?] = [
+                Bundle.main.url(forResource: "menu_bar_icon", withExtension: "png")?.path,
+                Bundle.main.url(forResource: "menu_bar_icon@2x", withExtension: "png")?.path,
                 "docs/assets/menu_bar_icon.png",
                 "docs/assets/menu_bar_icon@2x.png",
                 URL(fileURLWithPath: fileManager.currentDirectoryPath).appendingPathComponent("docs/assets/menu_bar_icon.png").path,
@@ -129,7 +132,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ]
 
             var loadedImage: NSImage? = nil
-            for path in candidatePaths {
+            for case let path? in candidatePaths {
                 if fileManager.fileExists(atPath: path), let img = NSImage(contentsOfFile: path) {
                     img.size = NSSize(width: 22, height: 22)
                     img.isTemplate = true
