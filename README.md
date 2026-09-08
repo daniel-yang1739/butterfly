@@ -111,6 +111,8 @@ butterfly/
 
 ## 🚀 Quick Start
 
+For the local signing incident, certificate fundamentals, permission requirements, and recovery steps, see the [macOS signing and Accessibility guide](docs/MACOS_SIGNING_AND_ACCESSIBILITY.md) (Traditional Chinese).
+
 ### One-command setup and launch
 
 On an Apple Silicon Mac running macOS 13 or later:
