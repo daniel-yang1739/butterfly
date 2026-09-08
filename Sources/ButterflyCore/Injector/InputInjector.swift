@@ -156,6 +156,13 @@ public final class InputInjector: @unchecked Sendable {
         }
     }
 
+    /// Wait until queued cursor updates have been posted before accepting another session.
+    public func waitForPendingInjections() async {
+        await withCheckedContinuation { continuation in
+            injectionQueue.async { continuation.resume() }
+        }
+    }
+
     /// Calculate and record the next cursor change without posting keyboard events.
     public func prepareStreamingDelta(newText: String, previousText: inout String) -> SlidingDeltaAction {
         var currentNewText = newText
@@ -181,9 +188,9 @@ public final class InputInjector: @unchecked Sendable {
         }
 
         let backspaceCount = oldCharacters.count - commonPrefixCount
-        previousText = currentNewText
 
         if backspaceCount > 0 && backspaceCount <= 25 {
+            previousText = currentNewText
             return .replaceTail(
                 backspaces: backspaceCount,
                 replacement: String(newCharacters[commonPrefixCount...])
@@ -191,9 +198,12 @@ public final class InputInjector: @unchecked Sendable {
         }
         if backspaceCount > 25 {
             guard newCharacters.count > oldCharacters.count else { return .noChange }
-            return .append(text: String(newCharacters.suffix(newCharacters.count - oldCharacters.count)))
+            let suffix = String(newCharacters.suffix(newCharacters.count - oldCharacters.count))
+            previousText += suffix
+            return .append(text: suffix)
         }
 
+        previousText = currentNewText
         let delta = String(newCharacters[commonPrefixCount...])
         return delta.isEmpty ? .noChange : .append(text: delta)
     }
@@ -221,8 +231,9 @@ public final class InputInjector: @unchecked Sendable {
         eventUp?.post(tap: .cghidEventTap)
     }
     
-    /// Check if Accessibility Permissions are granted
-    public static func checkAccessibilityPermission() -> Bool {
+    /// Check current process trust without prompting unless explicitly requested by the user.
+    public static func checkAccessibilityPermission(prompt: Bool = false) -> Bool {
+        if !prompt { return AXIsProcessTrusted() }
         let checkOptPrompt = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as NSString
         let options = [checkOptPrompt: true] as CFDictionary
         return AXIsProcessTrustedWithOptions(options)

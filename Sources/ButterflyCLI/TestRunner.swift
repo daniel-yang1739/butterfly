@@ -135,6 +135,20 @@ public enum TestRunner {
         _ = injector.prepareStreamingDelta(newText: "第一步第二步", previousText: &prev3)
         assertEqual(prev3, "第一步第二步", "TC-F5: Idempotent duplicate update (no spurious keystrokes)")
 
+        var cursorState = String(repeating: "a", count: 30)
+        let originalCursorState = cursorState
+        assertEqual(injector.prepareStreamingDelta(newText: "short", previousText: &cursorState), .noChange,
+                    "TC-F6: Large rejected revisions do not post deletion events")
+        assertEqual(cursorState, originalCursorState, "TC-F7: Rejected revisions preserve actual cursor state")
+        assertEqual(injector.prepareStreamingDelta(newText: originalCursorState + "!", previousText: &cursorState), .append(text: "!"),
+                    "TC-F8: Updates after rejected revisions append only new text")
+        var finalCursorState = "Hello"
+        assertEqual(injector.prepareStreamingDelta(newText: "Hello world.", previousText: &finalCursorState), .append(text: " world."),
+                    "TC-F9: Final transcript includes an unpublished tail")
+        assertEqual(injector.prepareStreamingDelta(newText: "Hello world.", previousText: &finalCursorState), .noChange,
+                    "TC-F10: Repeated final transcript does not duplicate text")
+        await injector.waitForPendingInjections()
+
         // MARK: - 7. Sliding Transcript Reconciliation Tests
         print("\n📦 Suite 7: Sliding Transcript Reconciliation")
         let accumulator = TranscriptAccumulator()

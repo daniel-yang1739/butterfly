@@ -87,7 +87,13 @@ app_icon_source="${REPOSITORY_ROOT}/docs/assets/icon.png"
 [[ -f "$app_icon_source" ]] || fail "The app icon was not found at ${app_icon_source}."
 sips -s format png "$app_icon_source" --out "${APP_BUNDLE}/Contents/Resources/icon.png" >/dev/null
 
-codesign --force --sign - "$APP_BUNDLE"
+# Use the same certificate across builds to preserve the app's signing identity.
+# Ad-hoc signatures identify one build only and may invalidate existing TCC grants.
+signing_identity="${BUTTERFLY_CODESIGN_IDENTITY:--}"
+if [[ "$signing_identity" == "-" ]]; then
+    printf 'Using ad-hoc signing; changed builds may require Accessibility permission again.\n'
+fi
+codesign --force --sign "$signing_identity" "$APP_BUNDLE"
 codesign --verify --deep --strict "$APP_BUNDLE"
 
 printf 'Built %s\n' "$APP_BUNDLE"

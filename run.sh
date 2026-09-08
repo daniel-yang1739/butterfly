@@ -8,6 +8,7 @@ readonly MINIMUM_MACOS_MAJOR=13
 configuration="release"
 open_app=true
 clean_build=false
+skip_build=false
 
 print_usage() {
     cat <<'EOF'
@@ -20,6 +21,7 @@ Options:
   --release    Build with release settings (default).
   --clean      Recreate Swift build artifacts before building.
   --no-open    Build without stopping or launching the app.
+  --no-build   Launch the existing app without rebuilding or signing it.
   -h, --help   Show this help message.
 EOF
 }
@@ -74,6 +76,9 @@ for argument in "$@"; do
         --clean)
             clean_build=true
             ;;
+        --no-build)
+            skip_build=true
+            ;;
         --no-open)
             open_app=false
             ;;
@@ -93,6 +98,14 @@ done
 macos_version="$(sw_vers -productVersion)"
 macos_major="${macos_version%%.*}"
 (( macos_major >= MINIMUM_MACOS_MAJOR )) || fail "macOS ${MINIMUM_MACOS_MAJOR} or later is required; found ${macos_version}."
+
+if [[ "$skip_build" == true ]]; then
+    [[ "$clean_build" == false && "$open_app" == true ]] || fail "--no-build cannot be combined with --clean or --no-open."
+    existing_app="${SCRIPT_DIR}/.build/app/Butterfly.app"
+    [[ -x "${existing_app}/Contents/MacOS/Butterfly" ]] || fail "No built app exists. Run ./run.sh once to build it."
+    open "$existing_app"
+    exit 0
+fi
 
 if ! xcode-select -p >/dev/null 2>&1; then
     printf 'Xcode Command Line Tools are required. Opening the Apple installer...\n'

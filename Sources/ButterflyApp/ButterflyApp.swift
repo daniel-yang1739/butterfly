@@ -19,6 +19,7 @@ public enum ButterflyMode: String, CaseIterable, Sendable {
 
 private enum AppActivity: Equatable {
     case idle
+    case starting(ButterflyMode)
     case recording(ButterflyMode)
     case processing(ButterflyMode)
 }
@@ -45,7 +46,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let liveEngine = LiveSpeechEngine.shared
     private let localWhisperEngine = LocalWhisperStreamEngine.shared
     private var isUsingLocalWhisper = false
-    private var globalEventMonitor: Any?
+    private var localEventMonitor: Any?
+    private var hotkeyRetryTimer: Timer?
+    private var hotkeyStatus = "Checking global hotkeys..."
     private var recordingTimer: Timer?
     private var recordingStartTime: Date?
     private var animationIndex: Int = 0
@@ -69,8 +72,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupStatusBarItem()
-        _ = InputInjector.checkAccessibilityPermission()
         setupGlobalHotkey()
+        hotkeyRetryTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.registerEventTapIfNeeded()
+            }
+        }
         refreshSmartPolishAvailability()
 
         // Listen for live speech recognition updates
@@ -82,6 +89,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         localWhisperEngine.onTranscriptUpdate = { [weak self] formattedText in
             Task { @MainActor in
                 self?.handleTranscriptUpdate(formattedText)
+            }
+        }
+
+        liveEngine.onAudioLevelUpdate = { [weak self] level in
+            Task { @MainActor in
+                guard let self, self.isRecording, !self.isUsingLocalWhisper else { return }
+                FloatingHUDWindow.shared.updateAudioLevel(level)
+            }
+        }
+        localWhisperEngine.onAudioLevelUpdate = { [weak self] level in
+            Task { @MainActor in
+                guard let self, self.isRecording, self.isUsingLocalWhisper else { return }
+                FloatingHUDWindow.shared.updateAudioLevel(level)
             }
         }
 
@@ -158,6 +178,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updateMenu() {
         let menu = NSMenu()
+        menu.autoenablesItems = false
 
         let titleItem = NSMenuItem(title: "Butterfly Voice Dictation", action: nil, keyEquivalent: "")
         titleItem.isEnabled = false
@@ -165,7 +186,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(NSMenuItem.separator())
 
+        let hotkeyItem = NSMenuItem(title: hotkeyStatus, action: nil, keyEquivalent: "")
+        hotkeyItem.isEnabled = false
+        menu.addItem(hotkeyItem)
+        let permissionItem = NSMenuItem(title: "Open Accessibility Settings...", action: #selector(openAccessibilitySettings), keyEquivalent: "")
+        permissionItem.target = self
+        menu.addItem(permissionItem)
+
         switch activity {
+        case .starting(let mode):
+            let item = NSMenuItem(title: "Starting \(mode.title)...", action: nil, keyEquivalent: "")
+            item.isEnabled = false
+            menu.addItem(item)
         case .recording(let mode):
             let stopItem = NSMenuItem(
                 title: "Stop \(mode.title) (Enter / Esc)",
@@ -216,7 +248,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             modelItem.target = self
             modelItem.representedObject = model
             modelItem.state = isSelected ? .on : .off
-            modelItem.isEnabled = !isBusy && ModelManager.isRuntimeSupported(model)
+            modelItem.isEnabled = !isBusy && !isDownloadingModel && ModelManager.isRuntimeSupported(model)
             asrMenu.addItem(modelItem)
         }
         let asrParentItem = NSMenuItem(title: "Speech Model: \(ModelManager.shared.activeASRModel.displayName)", action: nil, keyEquivalent: "")
@@ -283,7 +315,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
                 deleteItem.target = self
                 deleteItem.representedObject = downloaded
-                cacheMenu.addItem(deleteItem)
+                deleteItem.isEnabled = !isBusy && !isDownloadingModel
+            cacheMenu.addItem(deleteItem)
             }
             cacheMenu.addItem(NSMenuItem.separator())
 
@@ -295,6 +328,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 keyEquivalent: ""
             )
             clearAllItem.target = self
+            clearAllItem.isEnabled = !isBusy && !isDownloadingModel
             cacheMenu.addItem(clearAllItem)
         }
 
@@ -326,7 +360,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func selectASRModelSpec(_ sender: NSMenuItem) {
         guard let spec = sender.representedObject as? ModelSpec else { return }
-        guard ModelManager.isRuntimeSupported(spec) else { return }
+        guard !isBusy, !isDownloadingModel, ModelManager.isRuntimeSupported(spec) else { return }
 
         if ModelManager.shared.isModelDownloaded(spec) {
             ModelManager.shared.activeASRModel = spec
@@ -398,6 +432,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func uninstallModel(_ sender: NSMenuItem) {
+        guard !isBusy, !isDownloadingModel else { return }
         guard let spec = sender.representedObject as? ModelSpec else { return }
         do {
             try ModelManager.shared.deleteModel(spec)
@@ -409,6 +444,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func clearAllModelCache() {
+        guard !isBusy, !isDownloadingModel else { return }
         do {
             try ModelManager.shared.clearAllCache()
             updateMenu()
@@ -444,6 +480,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Start either live dictation or deferred smart polishing.
     private func startListening(mode: ButterflyMode = .liveStreaming) async {
         guard activity == .idle else { return }
+        activity = .starting(mode)
+        statusItem.button?.title = " Starting..."
+        updateMenu()
 
         let activeModel = ModelManager.shared.activeASRModel
         isUsingLocalWhisper = activeModel.id.hasPrefix("whisper-")
@@ -454,7 +493,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             granted = await liveEngine.requestPermissions()
         }
         guard granted else {
-            print("Warning: Required microphone or speech recognition permission not granted")
+            finishProcessing()
+            showRecordingError("Enable Microphone permission for Butterfly in System Settings > Privacy & Security. The Apple Speech model also requires Speech Recognition permission.")
             return
         }
 
@@ -467,12 +507,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             latestTranscript = ""
             streamingInjectedText = ""
             activeMode = mode
-            activity = .recording(mode)
-            recordingStartTime = Date()
+            recordingStartTime = nil
             animationIndex = 0
 
-            let initialStatus = mode == .liveStreaming ? "Streaming" : "Recording"
-            self.statusItem.button?.title = " 🎙️ [00:00] \(initialStatus) ·"
+            self.statusItem.button?.title = " Starting \(mode.title)..."
             self.updateMenu()
 
             recordingTimer?.invalidate()
@@ -486,13 +524,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
                     if self.activeMode == .smartPolish {
                         self.statusItem.button?.title = " 📝 \(timeStr) Recording \(dots)"
-                        FloatingHUDWindow.shared.updateStatus(
-                            title: "📝 Smart Polish \(timeStr)",
-                            detail: "Recording... Press Enter or Esc to finish."
-                        )
                     } else if self.latestTranscript.isEmpty {
                         self.statusItem.button?.title = " 🎙️ \(timeStr) Streaming \(dots)"
                     }
+                    FloatingHUDWindow.shared.updateRecordingTime(timeStr, mode: self.activeMode)
                 }
             }
 
@@ -502,6 +537,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 try liveEngine.startLiveListening()
             }
+            activity = .recording(mode)
+            recordingStartTime = Date()
+            updateMenu()
             FloatingHUDWindow.shared.show(mode: mode)
             print("Butterfly: Started \(mode.title) [ASR: \(activeModel.displayName)]...")
         } catch {
@@ -512,6 +550,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             recordingTimer = nil
             self.statusItem.button?.title = ""
             self.updateMenu()
+            showRecordingError(error.localizedDescription)
         }
     }
 
@@ -541,6 +580,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         print("\n[Butterfly: \(mode.title) Transcription Completed]: \(fullRawTranscript)")
 
         guard mode == .smartPolish else {
+            let finalAction = InputInjector.shared.prepareStreamingDelta(
+                newText: fullRawTranscript,
+                previousText: &streamingInjectedText
+            )
+            InputInjector.shared.enqueueSlidingDelta(finalAction)
+            await InputInjector.shared.waitForPendingInjections()
             finishProcessing()
             return
         }
@@ -593,15 +638,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let elapsed = Int(Date().timeIntervalSince(recordingStartTime ?? Date()))
-        let minutes = String(format: "%02d", elapsed / 60)
-        let seconds = String(format: "%02d", elapsed % 60)
-        let timeStr = "[\(minutes):\(seconds)]"
+        let timeStr = String(format: "[%02d:%02d]", elapsed / 60, elapsed % 60)
 
         let injectionAction = InputInjector.shared.prepareStreamingDelta(
             newText: formattedText,
             previousText: &streamingInjectedText
         )
-        FloatingHUDWindow.shared.update(text: formattedText, timeStr: timeStr)
 
         let preview = formattedText.count > 10
             ? "..." + String(formattedText.suffix(10))
@@ -650,6 +692,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             controlPressed: flags.contains(.maskControl)
         )
         if let hotkeyIntent {
+            guard event.getIntegerValueField(.keyboardEventAutorepeat) == 0 else { return nil }
             Task { @MainActor in
                 if self.isRecording {
                     print("\n[CGEventTap: Toggle Stop]")
@@ -669,7 +712,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Register global and local system-wide hotkeys
-    private func setupGlobalHotkey() {
+    private func registerEventTapIfNeeded() {
+        guard eventTapPort == nil else { return }
+        let previousStatus = hotkeyStatus
+        guard InputInjector.checkAccessibilityPermission() else {
+            hotkeyStatus = "Global Hotkeys: Accessibility Permission Required"
+            if activity == .idle { statusItem.button?.title = " ⚠️ Hotkeys unavailable" }
+            if previousStatus != hotkeyStatus { updateMenu() }
+            return
+        }
         // 1. Setup high-level Event Tap for global swallowing
         let eventMask = (1 << CGEventType.keyDown.rawValue)
         let observer = Unmanaged.passUnretained(self).toOpaque()
@@ -691,8 +742,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.runLoopSource = source
             CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
             CGEvent.tapEnable(tap: tap, enable: true)
+            hotkeyStatus = "Global Hotkeys: Ready"
             print("Butterfly: Low-level EventTap registered successfully (Enter swallowing active).")
+        } else {
+            hotkeyStatus = "Global Hotkeys: Unavailable — Check Accessibility"
+            if activity == .idle { statusItem.button?.title = " ⚠️ Hotkeys unavailable" }
         }
+        if eventTapPort != nil, activity == .idle {
+            statusItem.button?.title = ""
+        }
+        if previousStatus != hotkeyStatus { updateMenu() }
+    }
+
+    private func setupGlobalHotkey() {
+        registerEventTapIfNeeded()
 
         // 2. Local monitor for fallback
         let fallbackHandler: (NSEvent) -> NSEvent? = { [weak self] event in
@@ -714,6 +777,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 controlPressed: event.modifierFlags.contains(.control)
             )
             if let intent {
+                guard !event.isARepeat else { return nil }
                 Task { @MainActor in
                     if self.isRecording {
                         await self.stopAndInject()
@@ -726,7 +790,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return event
         }
-        globalEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: fallbackHandler)
+        localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: fallbackHandler)
+    }
+
+    @objc private func openAccessibilitySettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    private func showRecordingError(_ message: String) {
+        let alert = NSAlert()
+        alert.messageText = "Unable to Start Recording"
+        alert.informativeText = message
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "OK")
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        hotkeyRetryTimer?.invalidate()
+        recordingTimer?.invalidate()
+        if let localEventMonitor { NSEvent.removeMonitor(localEventMonitor) }
+        if let runLoopSource { CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes) }
+        if let eventTapPort { CFMachPortInvalidate(eventTapPort) }
     }
 
     private func refreshSmartPolishAvailability() {

@@ -33,6 +33,7 @@ public final class LocalWhisperStreamEngine: @unchecked Sendable {
     }
 
     public var onTranscriptUpdate: (@Sendable (String) -> Void)?
+    public var onAudioLevelUpdate: (@Sendable (Float) -> Void)?
     public var onError: (@Sendable (Error) -> Void)?
 
     private let stateLock = OSAllocatedUnfairLock(initialState: StreamState())
@@ -75,7 +76,7 @@ public final class LocalWhisperStreamEngine: @unchecked Sendable {
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
-        guard recordingFormat.sampleRate > 0 else {
+        guard recordingFormat.sampleRate > 0, recordingFormat.channelCount > 0 else {
             backend.release()
             throw ButterflyError.audioCaptureFailed("Audio hardware returned an invalid sample rate")
         }
@@ -106,6 +107,7 @@ public final class LocalWhisperStreamEngine: @unchecked Sendable {
                 toSampleRate: AudioCaptureManager.targetSampleRate
             )
             let rms = Self.calculateRMS(samples16k)
+            self.onAudioLevelUpdate?(min(max(rms * 5, 0), 1))
             self.stateLock.withLock { state in
                 guard state.isListening else { return }
                 state.samples.append(contentsOf: samples16k)

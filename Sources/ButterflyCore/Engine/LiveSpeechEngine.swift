@@ -90,11 +90,15 @@ public final class LiveSpeechEngine: NSObject, @unchecked Sendable, SFSpeechReco
             speechRecognizer?.delegate = self
         }
         
+        guard let speechRecognizer, speechRecognizer.isAvailable else {
+            throw ButterflyError.audioCaptureFailed("Apple Speech recognition is unavailable. Select a downloaded Whisper model or try again later.")
+        }
+
         // Always instantiate a brand new AVAudioEngine to ensure zero stale CoreAudio graph state
         let newEngine = AVAudioEngine()
         let inputNode = newEngine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
-        guard recordingFormat.sampleRate > 0 else {
+        guard recordingFormat.sampleRate > 0, recordingFormat.channelCount > 0 else {
             throw ButterflyError.audioCaptureFailed("Audio hardware returned invalid sample rate")
         }
         
@@ -107,7 +111,7 @@ public final class LiveSpeechEngine: NSObject, @unchecked Sendable, SFSpeechReco
         request.shouldReportPartialResults = true
         self.recognitionRequest = request
         
-        self.recognitionTask = speechRecognizer?.recognitionTask(with: request) { [weak self] result, error in
+        self.recognitionTask = speechRecognizer.recognitionTask(with: request) { [weak self] result, error in
             guard let self = self else { return }
             
             if let result = result {
@@ -223,15 +227,8 @@ public final class LiveSpeechEngine: NSObject, @unchecked Sendable, SFSpeechReco
         recognitionTask?.cancel()
         recognitionTask = nil
         
-        let completeMonologue = stateLock.withLock { state -> String in
-            var all = state.committed
-            if !state.active.isEmpty {
-                all.append(state.active)
-            }
-            state.full = all.joined(separator: "，")
-            return state.full
-        }
-        
+        let completeMonologue = stateLock.withLock { $0.full }
+
         latestFullTranscript = completeMonologue
         return completeMonologue
     }

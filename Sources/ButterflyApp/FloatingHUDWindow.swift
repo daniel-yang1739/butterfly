@@ -1,17 +1,19 @@
-import Foundation
-#if os(macOS)
 import AppKit
 
-/// Sleek macOS Floating Capsule HUD (Dynamic Island style) displaying two-tone real-time transcription
+/// A nonactivating recording waveform that switches to text during polishing.
 @MainActor
 public final class FloatingHUDWindow: NSPanel {
     public static let shared = FloatingHUDWindow()
-    
+
     private let visualEffectView = NSVisualEffectView()
     private let statusLabel = NSTextField(labelWithString: "")
     private let textView = NSTextView()
-    private var isVisibleOnScreen: Bool = false
-    
+    private let scrollView = NSScrollView()
+    private let waveformView = RecordingWaveformView()
+    private var isVisibleOnScreen = false
+    private var isShowingWaveform = false
+    private var presentationGeneration = 0
+
     public init() {
         super.init(
             contentRect: NSRect(x: 0, y: 0, width: 560, height: 90),
@@ -19,22 +21,18 @@ public final class FloatingHUDWindow: NSPanel {
             backing: .buffered,
             defer: false
         )
-        
-        self.isFloatingPanel = true
-        self.level = .floating
-        self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        self.backgroundColor = .clear
-        self.isOpaque = false
-        self.hasShadow = true
-        self.isMovableByWindowBackground = true
-        
+        isFloatingPanel = true
+        level = .floating
+        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        backgroundColor = .clear
+        isOpaque = false
+        hasShadow = true
+        isMovableByWindowBackground = true
         setupViews()
     }
-    
+
     private func setupViews() {
-        guard let contentView = self.contentView else { return }
-        
-        // 1. Frosted glass background
+        guard let contentView else { return }
         visualEffectView.frame = contentView.bounds
         visualEffectView.autoresizingMask = [.width, .height]
         visualEffectView.material = .hudWindow
@@ -43,152 +41,150 @@ public final class FloatingHUDWindow: NSPanel {
         visualEffectView.wantsLayer = true
         visualEffectView.layer?.cornerRadius = 18
         visualEffectView.layer?.masksToBounds = true
-        visualEffectView.layer?.borderWidth = 1.0
+        visualEffectView.layer?.borderWidth = 1
         visualEffectView.layer?.borderColor = NSColor.white.withAlphaComponent(0.15).cgColor
         contentView.addSubview(visualEffectView)
-        
-        // 2. Status Header (Icon + Timer + Mode)
+
         statusLabel.frame = NSRect(x: 20, y: 56, width: 520, height: 22)
         statusLabel.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .semibold)
-        statusLabel.textColor = NSColor(red: 0.4, green: 0.8, blue: 1.0, alpha: 1.0) // Neon cyan
-        statusLabel.stringValue = "🎙️ Live Dictation [00:00]"
+        statusLabel.textColor = .systemCyan
         visualEffectView.addSubview(statusLabel)
-        
-        // 3. Two-Tone Transcription Text View
-        let scroll = NSScrollView(frame: NSRect(x: 18, y: 12, width: 524, height: 42))
-        scroll.drawsBackground = false
-        scroll.hasVerticalScroller = false
-        scroll.hasHorizontalScroller = false
-        
-        textView.frame = scroll.bounds
+
+        let bodyFrame = NSRect(x: 20, y: 12, width: 520, height: 38)
+        waveformView.frame = bodyFrame
+        visualEffectView.addSubview(waveformView)
+
+        scrollView.frame = bodyFrame
+        scrollView.drawsBackground = false
+        scrollView.hasVerticalScroller = false
+        scrollView.hasHorizontalScroller = false
+        textView.frame = scrollView.bounds
         textView.isEditable = false
         textView.isSelectable = false
         textView.drawsBackground = false
-        textView.backgroundColor = .clear
         textView.textContainer?.lineFragmentPadding = 0
         textView.textContainer?.widthTracksTextView = true
-        
-        scroll.documentView = textView
-        visualEffectView.addSubview(scroll)
+        scrollView.documentView = textView
+        visualEffectView.addSubview(scrollView)
     }
-    
-    /// Position HUD centered near top of primary screen (Dynamic Island position)
-    private func reposition() {
-        guard let screen = NSScreen.main else { return }
-        let screenRect = screen.visibleFrame
-        let hudWidth: CGFloat = 560
-        let hudHeight: CGFloat = 90
-        let x = screenRect.midX - (hudWidth / 2.0)
-        let y = screenRect.maxY - hudHeight - 20
-        self.setFrame(NSRect(x: x, y: y, width: hudWidth, height: hudHeight), display: true)
-    }
-    
-    /// Show Floating HUD with smooth fade-in
+
     public func show(mode: ButterflyMode = .liveStreaming) {
-        reposition()
-        self.alphaValue = 0.0
-        self.orderFrontRegardless()
-        
-        statusLabel.stringValue = mode == .liveStreaming
-            ? "🎙️ Live Voice Dictation [00:00]"
-            : "📝 Smart Polish [00:00]"
-
-        let placeholder = mode == .liveStreaming
-            ? "Listening..."
-            : "Recording... Press Enter or Esc to finish."
-        let emptyAttr = NSAttributedString(string: placeholder, attributes: [
-            .foregroundColor: NSColor.systemGray,
-            .font: NSFont.systemFont(ofSize: 14, weight: .regular)
-        ])
-        textView.textStorage?.setAttributedString(emptyAttr)
-        
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.2
-            self.animator().alphaValue = 1.0
-        }
+        guard let screen = NSScreen.main else { return }
+        let frame = screen.visibleFrame
+        setFrame(NSRect(x: frame.midX - 280, y: frame.maxY - 110, width: 560, height: 90), display: true)
+        presentationGeneration += 1
         isVisibleOnScreen = true
-    }
-    
-    /// Update HUD with real-time streaming transcript text directly
-    public func update(text: String, timeStr: String) {
-        guard isVisibleOnScreen else { return }
-        statusLabel.stringValue = "🎙️ Live Voice Dictation \(timeStr)"
-        let attr: [NSAttributedString.Key: Any] = [
-            .foregroundColor: NSColor.white,
-            .font: NSFont.systemFont(ofSize: 14, weight: .medium)
-        ]
-        textView.textStorage?.setAttributedString(NSAttributedString(string: text, attributes: attr))
-        textView.scrollToEndOfDocument(nil)
+        isShowingWaveform = true
+        scrollView.isHidden = true
+        waveformView.isHidden = false
+        waveformView.start()
+        updateRecordingTime("[00:00]", mode: mode)
+        alphaValue = 1
+        orderFrontRegardless()
     }
 
-    /// Display a non-transcript recording or processing state.
+    public func updateAudioLevel(_ level: Float) {
+        guard isVisibleOnScreen, isShowingWaveform else { return }
+        waveformView.updateLevel(level)
+    }
+
+    public func updateRecordingTime(_ time: String, mode: ButterflyMode) {
+        guard isVisibleOnScreen, isShowingWaveform else { return }
+        let title = mode == .liveStreaming ? "Live Dictation" : "Smart Polish Recording"
+        statusLabel.stringValue = "\(title) \(time)  ·  Enter / Esc to finish"
+    }
+
+    /// Stop waveform rendering as soon as the app starts processing the transcript.
     public func updateStatus(title: String, detail: String) {
         guard isVisibleOnScreen else { return }
+        isShowingWaveform = false
+        waveformView.stop()
+        waveformView.isHidden = true
+        scrollView.isHidden = false
         statusLabel.stringValue = title
-        let attributes: [NSAttributedString.Key: Any] = [
-            .foregroundColor: NSColor.systemGray,
+        textView.textStorage?.setAttributedString(NSAttributedString(string: detail, attributes: [
+            .foregroundColor: NSColor.labelColor,
             .font: NSFont.systemFont(ofSize: 14, weight: .regular)
-        ]
-        textView.textStorage?.setAttributedString(NSAttributedString(string: detail, attributes: attributes))
+        ]))
     }
-    
-    /// Backward-compatible multi-segment update
-    public func update(frozenText: String, polishedText: String, activeTail: String, timeStr: String, mode: ButterflyMode = .liveStreaming) {
-        guard isVisibleOnScreen else { return }
-        
-        statusLabel.stringValue = "🎙️ Live Voice Dictation \(timeStr)"
-        
-        let attributedString = NSMutableAttributedString()
-        
-        // 1. Frozen prefix in Bright White (⚪ Tier 1: 100% Locked)
-        if !frozenText.isEmpty {
-            let whiteAttr: [NSAttributedString.Key: Any] = [
-                .foregroundColor: NSColor.white,
-                .font: NSFont.systemFont(ofSize: 14, weight: .medium)
-            ]
-            attributedString.append(NSAttributedString(string: frozenText, attributes: whiteAttr))
-        }
-        
-        // 2. AI Polished segment in Amber Gold (🟡 Tier 2: AI Refined in active wave)
-        if !polishedText.isEmpty {
-            let goldColor = NSColor(calibratedRed: 1.0, green: 0.82, blue: 0.35, alpha: 1.0) // Amber gold / warm yellow
-            let goldAttr: [NSAttributedString.Key: Any] = [
-                .foregroundColor: goldColor,
-                .font: NSFont.systemFont(ofSize: 14, weight: .regular)
-            ]
-            attributedString.append(NSAttributedString(string: polishedText, attributes: goldAttr))
-        }
-        
-        // 3. Raw active tail in Subtle Gray (🔘 Tier 3: Raw incoming speech)
-        if !activeTail.isEmpty {
-            let grayAttr: [NSAttributedString.Key: Any] = [
-                .foregroundColor: NSColor(white: 0.68, alpha: 0.9), // Subtle silver gray
-                .font: NSFont.systemFont(ofSize: 14, weight: .regular)
-            ]
-            attributedString.append(NSAttributedString(string: activeTail, attributes: grayAttr))
-        } else if frozenText.isEmpty && polishedText.isEmpty {
-            let placeholderAttr: [NSAttributedString.Key: Any] = [
-                .foregroundColor: NSColor.systemGray,
-                .font: NSFont.systemFont(ofSize: 14, weight: .regular)
-            ]
-            attributedString.append(NSAttributedString(string: "Listening...", attributes: placeholderAttr))
-        }
-        
-        textView.textStorage?.setAttributedString(attributedString)
-        textView.scrollToEndOfDocument(nil)
-    }
-    
-    /// Hide Floating HUD with smooth fade-out
+
     public func hide() {
         guard isVisibleOnScreen else { return }
         isVisibleOnScreen = false
-        
+        isShowingWaveform = false
+        waveformView.stop()
+        presentationGeneration += 1
+        let generation = presentationGeneration
         NSAnimationContext.runAnimationGroup({ context in
-            context.duration = 0.2
-            self.animator().alphaValue = 0.0
-        }, completionHandler: {
-            self.orderOut(nil)
+            context.duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.2
+            animator().alphaValue = 0
+        }, completionHandler: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self, self.presentationGeneration == generation else { return }
+                self.orderOut(nil)
+            }
         })
     }
 }
-#endif
+
+/// A short rolling history of measured microphone levels, without synthetic motion.
+@MainActor
+private final class RecordingWaveformView: NSView {
+    private static let barCount = 52
+    private var history = [CGFloat](repeating: 0, count: barCount)
+    private var targetLevel: CGFloat = 0
+    private var displayedLevel: CGFloat = 0
+    private var lastSampleTime = Date.distantPast
+    private var timer: Timer?
+
+    func start() {
+        stop()
+        history = [CGFloat](repeating: 0, count: Self.barCount)
+        targetLevel = 0
+        displayedLevel = 0
+        lastSampleTime = .distantPast
+        setAccessibilityElement(true)
+        setAccessibilityLabel("Microphone input level")
+        needsDisplay = true
+        let timer = Timer(timeInterval: 1.0 / 20, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.advance() }
+        }
+        self.timer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    func stop() {
+        timer?.invalidate()
+        timer = nil
+    }
+
+    func updateLevel(_ level: Float) {
+        guard level.isFinite else { return }
+        targetLevel = CGFloat(min(max(level, 0), 1))
+        lastSampleTime = Date()
+    }
+
+    private func advance() {
+        guard timer != nil else { return }
+        let target = Date().timeIntervalSince(lastSampleTime) > 0.3 ? 0 : targetLevel
+        displayedLevel += (target - displayedLevel) * (target > displayedLevel ? 0.8 : 0.3)
+        history.removeFirst()
+        history.append(displayedLevel)
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        let reducedMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let spacing = bounds.width / CGFloat(Self.barCount)
+        let barWidth: CGFloat = 4
+        for index in history.indices {
+            let level = reducedMotion ? displayedLevel : history[index]
+            let height = max(2, sqrt(level) * (bounds.height - 2))
+            let rect = NSRect(x: CGFloat(index) * spacing + (spacing - barWidth) / 2,
+                              y: bounds.midY - height / 2, width: barWidth, height: height)
+            NSColor.systemCyan.withAlphaComponent(level > 0.01 ? 0.9 : 0.3).setFill()
+            NSBezierPath(roundedRect: rect, xRadius: 2, yRadius: 2).fill()
+        }
+    }
+}
