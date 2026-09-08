@@ -107,6 +107,76 @@ final class InferenceEngineTests: XCTestCase {
         )
     }
     
+    func testSlidingOverlapRegression1() {
+        let accumulator = TranscriptAccumulator()
+        _ = accumulator.appendSlidingWindow(rawText: "We need Test Container, which supports Kafka.", windowStartSample: 0, windowEndSample: 80_000)
+        XCTAssertEqual(
+            accumulator.appendSlidingWindow(rawText: "testcontainer which supports Kafka and Redis.", windowStartSample: 40000, windowEndSample: 120_000),
+            "We need testcontainer which supports Kafka and Redis.",
+            "Technical term spacing and case"
+        )
+    }
+
+    func testSlidingOverlapRegression2() {
+        let accumulator = TranscriptAccumulator()
+        _ = accumulator.appendSlidingWindow(rawText: "We should check the service, then retry.", windowStartSample: 0, windowEndSample: 80_000)
+        XCTAssertEqual(
+            accumulator.appendSlidingWindow(rawText: "check the service then retry tomorrow.", windowStartSample: 40000, windowEndSample: 120_000),
+            "We should check the service then retry tomorrow.",
+            "Sentence punctuation"
+        )
+    }
+
+    func testSlidingOverlapRegression3() {
+        let accumulator = TranscriptAccumulator()
+        _ = accumulator.appendSlidingWindow(rawText: "We use Kafka for events.", windowStartSample: 0, windowEndSample: 80_000)
+        XCTAssertEqual(
+            accumulator.appendSlidingWindow(rawText: "Today Kafka needs monitoring.", windowStartSample: 40000, windowEndSample: 120_000),
+            "We use Kafka for events.Today Kafka needs monitoring.",
+            "Interior words are not an overlap"
+        )
+    }
+
+    func testSlidingOverlapRegression4() {
+        let accumulator = TranscriptAccumulator()
+        _ = accumulator.appendSlidingWindow(rawText: "Run the test.", windowStartSample: 0, windowEndSample: 80_000)
+        XCTAssertEqual(
+            accumulator.appendSlidingWindow(rawText: "Run the test.", windowStartSample: 80000, windowEndSample: 120_000),
+            "Run the test.Run the test.",
+            "Nonoverlapping audio preserves repetition"
+        )
+    }
+
+    func testSlidingOverlapRegression5() {
+        let accumulator = TranscriptAccumulator()
+        _ = accumulator.appendSlidingWindow(rawText: "Please test test the service.", windowStartSample: 0, windowEndSample: 80_000)
+        XCTAssertEqual(
+            accumulator.appendSlidingWindow(rawText: "Please test test the service.", windowStartSample: 0, windowEndSample: 120_000),
+            "Please test test the service.",
+            "Natural repetition within one window"
+        )
+    }
+
+    func testSlidingOverlapRegression6() {
+        let accumulator = TranscriptAccumulator()
+        _ = accumulator.appendSlidingWindow(rawText: "We use Go", windowStartSample: 0, windowEndSample: 80_000)
+        XCTAssertEqual(
+            accumulator.appendSlidingWindow(rawText: "Go now", windowStartSample: 40000, windowEndSample: 120_000),
+            "We use Go now",
+            "Short overlap remains supported"
+        )
+    }
+
+    func testSlidingOverlapRegression7() {
+        let accumulator = TranscriptAccumulator()
+        _ = accumulator.appendSlidingWindow(rawText: "The input is ready.", windowStartSample: 0, windowEndSample: 80_000)
+        XCTAssertEqual(
+            accumulator.appendSlidingWindow(rawText: "Another task begins.", windowStartSample: 40000, windowEndSample: 120_000),
+            "The input is ready.Another task begins.",
+            "Unrelated sentences are preserved"
+        )
+    }
+
     // TC-C3: Voice Activity Detection (VAD) state events test
     func testVADSilenceDetection() {
         let vad = VADDetector(energyThreshold: 0.05, silenceDurationThreshold: 0.5)

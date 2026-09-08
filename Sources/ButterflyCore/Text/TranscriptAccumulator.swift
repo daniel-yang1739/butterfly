@@ -10,6 +10,7 @@ public final class TranscriptAccumulator: @unchecked Sendable {
     private var committedSlidingText: String = ""
     private var activeSlidingWindow: String = ""
     private var slidingWindowStart: Int?
+    private var slidingWindowEnd: Int?
     
     public init() {}
     
@@ -22,15 +23,19 @@ public final class TranscriptAccumulator: @unchecked Sendable {
         committedSlidingText = ""
         activeSlidingWindow = ""
         slidingWindowStart = nil
+        slidingWindowEnd = nil
     }
 
     /// Merge a timestamped ASR window while keeping earlier text immutable.
-    public func appendSlidingWindow(rawText: String, windowStartSample: Int) -> String {
+    public func appendSlidingWindow(rawText: String, windowStartSample: Int, windowEndSample: Int? = nil) -> String {
         let trimmed = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return getFullText() }
 
         lock.lock()
         defer { lock.unlock() }
+
+        let previousWindowEnd = slidingWindowEnd
+        defer { slidingWindowEnd = windowEndSample }
 
         guard let previousWindowStart = slidingWindowStart else {
             slidingWindowStart = windowStartSample
@@ -47,7 +52,8 @@ public final class TranscriptAccumulator: @unchecked Sendable {
 
         let oldCharacters = Array(activeSlidingWindow)
         let newCharacters = Array(trimmed)
-        if let alignment = Self.bestAlignment(old: oldCharacters, new: newCharacters) {
+        let windowsOverlap = previousWindowEnd.map { windowStartSample < $0 } ?? true
+        if windowsOverlap, let alignment = Self.bestAlignment(old: oldCharacters, new: newCharacters) {
             committedSlidingText += String(oldCharacters[..<alignment.oldStart])
         } else {
             committedSlidingText += activeSlidingWindow
@@ -168,37 +174,55 @@ public final class TranscriptAccumulator: @unchecked Sendable {
 
     private struct Alignment {
         let oldStart: Int
-        let newStart: Int
-        let length: Int
     }
 
+    /// Match only the old suffix to the new prefix. Interior matches can replay
+    /// the new prefix or erase unrelated speech that follows a shared word.
     private static func bestAlignment(old: [Character], new: [Character]) -> Alignment? {
+        let oldNormalized = normalizedCharacters(old)
+        let newNormalized = normalizedCharacters(new)
+        let normalizedOverlap = min(oldNormalized.count, newNormalized.count)
+        // Require stronger evidence when ignoring formatting differences.
+        if normalizedOverlap >= 4 {
+            for length in stride(from: normalizedOverlap, through: 4, by: -1) {
+                let oldSuffix = oldNormalized.suffix(length)
+                let newPrefix = newNormalized.prefix(length)
+                if oldSuffix.map(\.value).elementsEqual(newPrefix.map(\.value)) {
+                    return Alignment(oldStart: oldSuffix.first!.originalIndex)
+                }
+            }
+        }
+
         let maximumOverlap = min(old.count, new.count)
         if maximumOverlap >= 2 {
             for length in stride(from: maximumOverlap, through: 2, by: -1) {
-                if old.suffix(length).elementsEqual(new.prefix(length)) {
-                    return Alignment(oldStart: old.count - length, newStart: 0, length: length)
+                let suffix = old.suffix(length)
+                if suffix.elementsEqual(new.prefix(length)),
+                   suffix.contains(where: { character in
+                       character.unicodeScalars.contains { CharacterSet.alphanumerics.contains($0) }
+                   }) {
+                    return Alignment(oldStart: old.count - length)
                 }
             }
         }
+        return nil
+    }
 
-        var best: Alignment?
-        for oldStart in old.indices {
-            for newStart in new.indices {
-                var length = 0
-                while oldStart + length < old.count,
-                      newStart + length < new.count,
-                      old[oldStart + length] == new[newStart + length] {
-                    length += 1
-                }
-                guard length >= 2 else { continue }
-                let candidate = Alignment(oldStart: oldStart, newStart: newStart, length: length)
-                if best == nil || length > best!.length {
-                    best = candidate
-                }
+    private struct NormalizedCharacter {
+        let value: Character
+        let originalIndex: Int
+    }
+
+    private static func normalizedCharacters(_ characters: [Character]) -> [NormalizedCharacter] {
+        // Keep technical punctuation such as C++, C#, paths, and version dots.
+        let ignored = CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: ",!?;:，。！？；：、"))
+        return characters.enumerated().flatMap { index, character -> [NormalizedCharacter] in
+            if character == ".", index + 1 == characters.count || characters[index + 1].isWhitespace {
+                return []
             }
+            guard !character.unicodeScalars.allSatisfy({ ignored.contains($0) }) else { return [] }
+            return character.lowercased().map { NormalizedCharacter(value: $0, originalIndex: index) }
         }
-        return best
     }
 
     private static func needsSeparator(between prefix: String, and suffix: String) -> Bool {

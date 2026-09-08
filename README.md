@@ -121,9 +121,9 @@ On an Apple Silicon Mac running macOS 13 or later:
 ./run.sh
 ```
 
-The launcher checks Xcode Command Line Tools, offers to install Homebrew when it is missing, installs `whisper-cpp`, builds a local `Butterfly.app`, and launches it. macOS will ask you to grant Accessibility, Microphone, and, when Apple Speech is selected, Speech Recognition permissions. Downloaded speech models remain in `~/.cache/butterfly/models` between builds.
+When a build is needed, the launcher checks Xcode Command Line Tools, offers to install Homebrew when it is missing, installs `whisper-cpp`, builds a local `Butterfly.app`, and launches it. Enable Accessibility in System Settings when the app reports it is required. macOS requests Microphone and, when Apple Speech is selected, Speech Recognition permission when recording starts. Downloaded speech models remain in `~/.cache/butterfly/models` between builds.
 
-Use `./run.sh --debug` for a debug build or `./run.sh --no-open` to build without launching. The generated app is located at `.build/app/Butterfly.app`.
+`./run.sh` opens the existing app without rebuilding or signing it; the first launch builds a release app if none exists. Use `./run.sh --build` to apply source changes, `./run.sh --debug` for a debug build, or `./run.sh --no-open` to build without launching. The generated app is located at `.build/app/Butterfly.app`.
 
 ### Manual build
 

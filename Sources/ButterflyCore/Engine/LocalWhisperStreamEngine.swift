@@ -212,7 +212,8 @@ public final class LocalWhisperStreamEngine: @unchecked Sendable {
                 ? accumulator.getFullText()
                 : accumulator.appendSlidingWindow(
                     rawText: polishedWindow,
-                    windowStartSample: snapshot.windowStartSample
+                    windowStartSample: snapshot.windowStartSample,
+                    windowEndSample: snapshot.capturedSampleCount
                 )
             let transcriptChanged = stateLock.withLock { state -> Bool in
                 state.lastTranscribedSampleCount = snapshot.capturedSampleCount

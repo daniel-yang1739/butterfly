@@ -9,16 +9,18 @@ configuration="release"
 open_app=true
 clean_build=false
 skip_build=false
+build_requested=false
 
 print_usage() {
     cat <<'EOF'
 Usage: ./run.sh [options]
 
-Stop any running Butterfly app, then build and launch it.
+Launch the existing Butterfly app. Build a release app only if none exists.
 
 Options:
-  --debug      Build with debug settings.
-  --release    Build with release settings (default).
+  --build      Rebuild and launch with release settings.
+  --debug      Rebuild and launch with debug settings.
+  --release    Rebuild and launch with release settings.
   --clean      Recreate Swift build artifacts before building.
   --no-open    Build without stopping or launching the app.
   --no-build   Launch the existing app without rebuilding or signing it.
@@ -67,19 +69,26 @@ stop_running_app() {
 
 for argument in "$@"; do
     case "$argument" in
+        --build)
+            build_requested=true
+            ;;
         --debug)
+            build_requested=true
             configuration="debug"
             ;;
         --release)
+            build_requested=true
             configuration="release"
             ;;
         --clean)
+            build_requested=true
             clean_build=true
             ;;
         --no-build)
             skip_build=true
             ;;
         --no-open)
+            build_requested=true
             open_app=false
             ;;
         -h|--help)
@@ -99,12 +108,18 @@ macos_version="$(sw_vers -productVersion)"
 macos_major="${macos_version%%.*}"
 (( macos_major >= MINIMUM_MACOS_MAJOR )) || fail "macOS ${MINIMUM_MACOS_MAJOR} or later is required; found ${macos_version}."
 
-if [[ "$skip_build" == true ]]; then
-    [[ "$clean_build" == false && "$open_app" == true ]] || fail "--no-build cannot be combined with --clean or --no-open."
-    existing_app="${SCRIPT_DIR}/.build/app/Butterfly.app"
-    [[ -x "${existing_app}/Contents/MacOS/Butterfly" ]] || fail "No built app exists. Run ./run.sh once to build it."
+if [[ "$skip_build" == true && "$build_requested" == true ]]; then
+    fail "--no-build cannot be combined with build options."
+fi
+
+existing_app="${SCRIPT_DIR}/.build/app/Butterfly.app"
+if [[ "$build_requested" == false && -x "${existing_app}/Contents/MacOS/Butterfly" ]]; then
+    printf 'Launching existing %s (without rebuilding or signing)\n' "$existing_app"
     open "$existing_app"
     exit 0
+fi
+if [[ "$skip_build" == true ]]; then
+    fail "No built app exists. Run ./run.sh once to build it."
 fi
 
 if ! xcode-select -p >/dev/null 2>&1; then

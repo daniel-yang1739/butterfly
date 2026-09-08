@@ -170,6 +170,38 @@ public enum TestRunner {
             "TC-G3: Active window revision replaces provisional text"
         )
 
+        let overlapCases: [(name: String, old: String, new: String, expected: String, start: Int)] = [
+            ("Split technical name does not replay its prefix", "We need Test Container", "TestContainer supports Kafka", "We need TestContainer supports Kafka", 40000),
+            ("Technical punctuation remains meaningful", "Use C++ tools.", "C tools are ready.", "Use C++ tools.C tools are ready.", 40000),
+            ("Version punctuation remains meaningful", "Use version 1.25", "version 125 is ready", "Use version 1.25\u{FF0C}version 125 is ready", 40000),
+            ("Technical term spacing and case", "We need Test Container, which supports Kafka.", "testcontainer which supports Kafka and Redis.", "We need testcontainer which supports Kafka and Redis.", 40000),
+            ("Sentence punctuation", "We should check the service, then retry.", "check the service then retry tomorrow.", "We should check the service then retry tomorrow.", 40000),
+            ("Interior words are not an overlap", "We use Kafka for events.", "Today Kafka needs monitoring.", "We use Kafka for events.Today Kafka needs monitoring.", 40000),
+            ("Nonoverlapping audio preserves repetition", "Run the test.", "Run the test.", "Run the test.Run the test.", 80000),
+            ("Natural repetition within one window", "Please test test the service.", "Please test test the service.", "Please test test the service.", 0),
+            ("Short overlap remains supported", "We use Go", "Go now", "We use Go now", 40000),
+            ("Unrelated sentences are preserved", "The input is ready.", "Another task begins.", "The input is ready.Another task begins.", 40000)
+        ]
+        for example in overlapCases {
+            let stream = TranscriptAccumulator()
+            _ = stream.appendSlidingWindow(rawText: example.old, windowStartSample: 0, windowEndSample: 80_000)
+            let merged = stream.appendSlidingWindow(rawText: example.new, windowStartSample: example.start, windowEndSample: 120_000)
+            assertEqual(merged, example.expected, "TC-G: " + example.name)
+            var cursor = example.old
+            let action = injector.prepareStreamingDelta(newText: merged, previousText: &cursor)
+            var simulatedText = example.old
+            switch action {
+            case .append(let text): simulatedText += text
+            case .replaceTail(let count, let text):
+                simulatedText.removeLast(count)
+                simulatedText += text
+            case .noChange: break
+            }
+            assertEqual(cursor, simulatedText, "TC-G: Cursor state matches posted changes for " + example.name)
+            assertEqual(injector.prepareStreamingDelta(newText: merged, previousText: &cursor), .noChange,
+                        "TC-G: Replayed snapshot posts no duplicate for " + example.name)
+        }
+
         // MARK: - 8. Smart Polish Orchestration Tests
         print("\n📦 Suite 8: Smart Polish Orchestration")
         let smartPrimary = CLIMockLanguageModelBackend(transform: { "Polished: \($0)" })
