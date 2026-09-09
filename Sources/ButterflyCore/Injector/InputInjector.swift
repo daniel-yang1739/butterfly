@@ -189,18 +189,12 @@ public final class InputInjector: @unchecked Sendable {
 
         let backspaceCount = oldCharacters.count - commonPrefixCount
 
-        if backspaceCount > 0 && backspaceCount <= 25 {
+        if backspaceCount > 0 {
             previousText = currentNewText
             return .replaceTail(
                 backspaces: backspaceCount,
                 replacement: String(newCharacters[commonPrefixCount...])
             )
-        }
-        if backspaceCount > 25 {
-            guard newCharacters.count > oldCharacters.count else { return .noChange }
-            let suffix = String(newCharacters.suffix(newCharacters.count - oldCharacters.count))
-            previousText += suffix
-            return .append(text: suffix)
         }
 
         previousText = currentNewText

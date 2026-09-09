@@ -26,20 +26,20 @@ final class InputInjectorTests: XCTestCase {
         XCTAssertEqual(previous, "你好世界", "In-place corrected text should become new text")
         XCTAssertEqual(action, .replaceTail(backspaces: 2, replacement: "世界"))
     }
-    func testSkippedLargeRevisionPreservesActualCursorState() {
+    func testLargeRevisionCanShortenTheTranscript() {
         let original = String(repeating: "a", count: 30)
         var previous = original
-        XCTAssertEqual(injector.prepareStreamingDelta(newText: "short", previousText: &previous), .noChange)
-        XCTAssertEqual(previous, original)
-        XCTAssertEqual(injector.prepareStreamingDelta(newText: original + "!", previousText: &previous), .append(text: "!"))
+        XCTAssertEqual(injector.prepareStreamingDelta(newText: "short", previousText: &previous), .replaceTail(backspaces: 30, replacement: "short"))
+        XCTAssertEqual(previous, "short")
+        XCTAssertEqual(injector.prepareStreamingDelta(newText: "short!", previousText: &previous), .append(text: "!"))
     }
 
-    func testLargeRevisionTracksOnlyInsertedSuffix() {
+    func testLargeRevisionReplacesTheActualTail() {
         let original = String(repeating: "a", count: 30)
         var previous = original
         let revised = String(repeating: "b", count: 31)
-        XCTAssertEqual(injector.prepareStreamingDelta(newText: revised, previousText: &previous), .append(text: "b"))
-        XCTAssertEqual(previous, original + "b")
+        XCTAssertEqual(injector.prepareStreamingDelta(newText: revised, previousText: &previous), .replaceTail(backspaces: 30, replacement: revised))
+        XCTAssertEqual(previous, revised)
     }
 
     func testFinalTranscriptReconcilesUnpublishedTail() {

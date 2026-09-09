@@ -136,12 +136,11 @@ public enum TestRunner {
         assertEqual(prev3, "第一步第二步", "TC-F5: Idempotent duplicate update (no spurious keystrokes)")
 
         var cursorState = String(repeating: "a", count: 30)
-        let originalCursorState = cursorState
-        assertEqual(injector.prepareStreamingDelta(newText: "short", previousText: &cursorState), .noChange,
-                    "TC-F6: Large rejected revisions do not post deletion events")
-        assertEqual(cursorState, originalCursorState, "TC-F7: Rejected revisions preserve actual cursor state")
-        assertEqual(injector.prepareStreamingDelta(newText: originalCursorState + "!", previousText: &cursorState), .append(text: "!"),
-                    "TC-F8: Updates after rejected revisions append only new text")
+        assertEqual(injector.prepareStreamingDelta(newText: "short", previousText: &cursorState), .replaceTail(backspaces: 30, replacement: "short"),
+                    "TC-F6: Large revisions replace the complete changed tail")
+        assertEqual(cursorState, "short", "TC-F7: Large revisions synchronize cursor state")
+        assertEqual(injector.prepareStreamingDelta(newText: "short!", previousText: &cursorState), .append(text: "!"),
+                    "TC-F8: Updates after large revisions append only new text")
         var finalCursorState = "Hello"
         assertEqual(injector.prepareStreamingDelta(newText: "Hello world.", previousText: &finalCursorState), .append(text: " world."),
                     "TC-F9: Final transcript includes an unpublished tail")

@@ -72,6 +72,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupStatusBarItem()
+        // Request consent once on launch if this build is not trusted. Retry checks
+        // below stay silent because the system prompt completes asynchronously.
+        _ = InputInjector.checkAccessibilityPermission(prompt: true)
         setupGlobalHotkey()
         hotkeyRetryTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
@@ -794,6 +797,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openAccessibilitySettings() {
+        _ = InputInjector.checkAccessibilityPermission(prompt: true)
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
             NSWorkspace.shared.open(url)
         }

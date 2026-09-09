@@ -7,25 +7,11 @@ public final class LocalWhisperStreamEngine: @unchecked Sendable {
     public static let shared = LocalWhisperStreamEngine()
 
     private struct StreamState: Sendable {
-        var samples: [Float] = []
-        var capturedSampleCount = 0
+        var audio = DictationAudioBuffer()
         var isListening = false
         var isTranscribing = false
-        var lastTranscribedSampleCount = 0
-        var lastVoicedSampleCount = 0
-        var lastTranscribedVoicedSampleCount = 0
         var noiseFloor: Float = 0.001
         var latestTranscript = ""
-    }
-
-    private struct AudioSnapshot: Sendable {
-        let samples: [Float]
-        let capturedSampleCount: Int
-        let lastVoicedSampleCount: Int
-
-        var windowStartSample: Int {
-            capturedSampleCount - samples.count
-        }
     }
 
     public var isListening: Bool {
@@ -42,15 +28,6 @@ public final class LocalWhisperStreamEngine: @unchecked Sendable {
     private var audioEngine: AVAudioEngine?
     private var pollingTask: Task<Void, Never>?
 
-    private static let sampleRate = Int(AudioCaptureManager.targetSampleRate)
-    private static let inferenceWindowSampleCount = sampleRate * 5
-    private static let ringBufferSampleCount = sampleRate * 8
-    private static let ringBufferTrimThreshold = ringBufferSampleCount + sampleRate
-    private static let minimumInitialSampleCount = sampleRate
-    private static let inferenceWindowOverlapRatio = 0.5
-    private static let inferenceWindowStepSampleCount = Int(
-        Double(inferenceWindowSampleCount) * (1 - inferenceWindowOverlapRatio)
-    )
     private static let minimumVoiceRMS: Float = 0.004
 
     public init(backend: AppleSiliconInferenceBackend = AppleSiliconInferenceBackend()) {
@@ -82,16 +59,8 @@ public final class LocalWhisperStreamEngine: @unchecked Sendable {
         }
 
         stateLock.withLock { state in
-            state.samples.removeAll(keepingCapacity: true)
-            state.samples.reserveCapacity(Self.ringBufferTrimThreshold)
-            state.capturedSampleCount = 0
+            state = StreamState()
             state.isListening = true
-            state.isTranscribing = false
-            state.lastTranscribedSampleCount = 0
-            state.lastVoicedSampleCount = 0
-            state.lastTranscribedVoicedSampleCount = 0
-            state.noiseFloor = 0.001
-            state.latestTranscript = ""
         }
         accumulator.reset()
 
@@ -110,17 +79,12 @@ public final class LocalWhisperStreamEngine: @unchecked Sendable {
             self.onAudioLevelUpdate?(min(max(rms * 5, 0), 1))
             self.stateLock.withLock { state in
                 guard state.isListening else { return }
-                state.samples.append(contentsOf: samples16k)
-                state.capturedSampleCount += samples16k.count
                 let voiceThreshold = max(Self.minimumVoiceRMS, state.noiseFloor * 3)
-                if rms >= voiceThreshold {
-                    state.lastVoicedSampleCount = state.capturedSampleCount
-                } else {
+                let isVoiced = rms >= voiceThreshold
+                if !isVoiced {
                     state.noiseFloor = (state.noiseFloor * 0.95) + (rms * 0.05)
                 }
-                if state.samples.count > Self.ringBufferTrimThreshold {
-                    state.samples.removeFirst(state.samples.count - Self.ringBufferSampleCount)
-                }
+                state.audio.append(samples16k, isVoiced: isVoiced)
             }
         }
 
@@ -139,7 +103,7 @@ public final class LocalWhisperStreamEngine: @unchecked Sendable {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 500_000_000)
                 guard !Task.isCancelled, let self, self.isListening else { break }
-                await self.transcribeLatestAudio(force: false)
+                _ = await self.transcribeLatestAudio()
             }
         }
     }
@@ -161,45 +125,26 @@ public final class LocalWhisperStreamEngine: @unchecked Sendable {
         await pollingTask?.value
         pollingTask = nil
 
-        await transcribeLatestAudio(force: true)
+        stateLock.withLock { $0.audio.finish() }
+        // Drain every sealed utterance, including audio captured during a slow inference.
+        while await transcribeLatestAudio() {}
         let finalText = stateLock.withLock { state -> String in
             let text = state.latestTranscript
-            state.samples.removeAll(keepingCapacity: false)
-            state.capturedSampleCount = 0
-            state.lastTranscribedSampleCount = 0
-            state.lastVoicedSampleCount = 0
-            state.lastTranscribedVoicedSampleCount = 0
+            state.audio = DictationAudioBuffer()
             return text
         }
         backend.release()
         return finalText
     }
 
-    private func transcribeLatestAudio(force: Bool) async {
-        let snapshot = stateLock.withLock { state -> AudioSnapshot? in
-            let newSampleCount = state.capturedSampleCount - state.lastTranscribedSampleCount
-            let minimumNewSamples: Int
-            if force {
-                minimumNewSamples = 1
-            } else if state.lastTranscribedSampleCount == 0 {
-                minimumNewSamples = Self.minimumInitialSampleCount
-            } else {
-                minimumNewSamples = Self.inferenceWindowStepSampleCount
-            }
-            guard !state.isTranscribing,
-                  (force || state.capturedSampleCount >= Self.minimumInitialSampleCount),
-                  state.lastVoicedSampleCount > state.lastTranscribedVoicedSampleCount,
-                  newSampleCount >= minimumNewSamples else {
-                return nil
-            }
+    /// Returns false when no work remains or inference fails, so finalization cannot spin.
+    private func transcribeLatestAudio() async -> Bool {
+        let snapshot = stateLock.withLock { state -> DictationAudioBuffer.Snapshot? in
+            guard !state.isTranscribing, let snapshot = state.audio.nextSnapshot() else { return nil }
             state.isTranscribing = true
-            return AudioSnapshot(
-                samples: Array(state.samples.suffix(Self.inferenceWindowSampleCount)),
-                capturedSampleCount: state.capturedSampleCount,
-                lastVoicedSampleCount: state.lastVoicedSampleCount
-            )
+            return snapshot
         }
-        guard let snapshot else { return }
+        guard let snapshot else { return false }
 
         defer {
             stateLock.withLock { $0.isTranscribing = false }
@@ -208,26 +153,22 @@ public final class LocalWhisperStreamEngine: @unchecked Sendable {
         do {
             let result = try await backend.transcribe(audioSamples: snapshot.samples)
             let polishedWindow = TextPolisher.shared.polish(result.rawText, mode: .liveStream)
-            let fullTranscript = polishedWindow.isEmpty
-                ? accumulator.getFullText()
-                : accumulator.appendSlidingWindow(
-                    rawText: polishedWindow,
-                    windowStartSample: snapshot.windowStartSample,
-                    windowEndSample: snapshot.capturedSampleCount
-                )
+            let fullTranscript = accumulator.updateSegment(
+                rawText: polishedWindow, segmentStartSample: snapshot.startSample
+            )
             let transcriptChanged = stateLock.withLock { state -> Bool in
-                state.lastTranscribedSampleCount = snapshot.capturedSampleCount
-                state.lastTranscribedVoicedSampleCount = snapshot.lastVoicedSampleCount
-                guard !fullTranscript.isEmpty, fullTranscript != state.latestTranscript else {
+                state.audio.acknowledge(snapshot)
+                guard fullTranscript != state.latestTranscript else {
                     return false
                 }
                 state.latestTranscript = fullTranscript
                 return true
             }
-            guard transcriptChanged else { return }
-            onTranscriptUpdate?(fullTranscript)
+            if transcriptChanged { onTranscriptUpdate?(fullTranscript) }
+            return true
         } catch {
             onError?(error)
+            return false
         }
     }
 

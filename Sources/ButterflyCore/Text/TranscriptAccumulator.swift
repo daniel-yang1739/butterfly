@@ -13,6 +13,37 @@ public final class TranscriptAccumulator: @unchecked Sendable {
     private var slidingWindowEnd: Int?
     
     public init() {}
+
+    /// Replace the current anchored utterance; only a new audio segment commits it.
+    /// Segment identity comes from capture, never from similarity between ASR strings.
+    public func updateSegment(rawText: String, segmentStartSample: Int) -> String {
+        let trimmed = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        lock.lock()
+        defer { lock.unlock() }
+
+        if let previousStart = slidingWindowStart {
+            guard segmentStartSample >= previousStart else { return fullText }
+            if segmentStartSample > previousStart {
+                committedSlidingText += activeSlidingWindow
+                activeSlidingWindow = ""
+            }
+        }
+        slidingWindowStart = segmentStartSample
+        activeSlidingWindow = trimmed
+        let separator: String
+        if let last = committedSlidingText.last, let first = trimmed.first,
+           last.isASCII, first.isASCII, !last.isWhitespace, !first.isWhitespace {
+            separator = " "
+        } else {
+            separator = Self.needsSeparator(between: committedSlidingText, and: trimmed) ? "\u{FF0C}" : ""
+        }
+        // Keep the separator in the active part so an empty revision removes it too.
+        if !committedSlidingText.isEmpty && !trimmed.isEmpty {
+            activeSlidingWindow = separator + trimmed
+        }
+        fullText = committedSlidingText + activeSlidingWindow
+        return fullText
+    }
     
     /// Reset accumulator state for a new recording session
     public func reset() {
