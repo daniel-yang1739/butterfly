@@ -23,7 +23,8 @@ public final class EndpointLanguageModelBackend: LanguageModelBackend, @unchecke
         session: URLSession? = nil,
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) throws {
-        guard let url = URL(string: options.baseURL), let host = url.host,
+        let resolvedBaseURL = try Self.resolve(options.baseURL, environment: environment)
+        guard let url = URL(string: resolvedBaseURL), let host = url.host,
               url.user == nil, url.password == nil, url.query == nil, url.fragment == nil,
               url.scheme == "https" || (url.scheme == "http" && ["localhost", "127.0.0.1", "[::1]", "::1"].contains(host)) else {
             throw LanguageModelBackendError.unavailable("baseURL must use HTTPS (HTTP is allowed for loopback servers only)")
@@ -88,12 +89,28 @@ public final class EndpointLanguageModelBackend: LanguageModelBackend, @unchecke
     }
 
     private static func resolve(_ value: String, environment: [String: String]) throws -> String {
-        guard value.hasPrefix("{env:"), value.hasSuffix("}") else { return value }
-        let name = String(value.dropFirst(5).dropLast())
+        let name: String?
+        if value.hasPrefix("{env:") && value.hasSuffix("}") {
+            name = String(value.dropFirst(5).dropLast())
+        } else if value.hasPrefix("${") && value.hasSuffix("}") {
+            name = String(value.dropFirst(2).dropLast())
+        } else if value.hasPrefix("$") {
+            let candidate = String(value.dropFirst())
+            name = candidate.allSatisfy(Self.isEnvironmentNameCharacter) && !candidate.isEmpty ? candidate : nil
+        } else {
+            name = nil
+        }
+        guard let name, !name.isEmpty, name.allSatisfy(Self.isEnvironmentNameCharacter) else {
+            return value
+        }
         guard let resolved = environment[name], !resolved.isEmpty else {
             throw LanguageModelBackendError.unavailable("A required endpoint environment variable is missing")
         }
         return resolved
+    }
+
+    private static func isEnvironmentNameCharacter(_ character: Character) -> Bool {
+        character.isASCII && (character.isLetter || character.isNumber || character == "_")
     }
 
     public func availability() async -> LanguageModelAvailability {

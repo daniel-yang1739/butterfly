@@ -8,8 +8,8 @@
       "name": "My AI Provider",
       "type": "openai-compatible",
       "options": {
-        "baseURL": "https://ai.example.com/v1",
-        "apiKey": "{env:BUTTERFLY_API_KEY}",
+        "baseURL": "$BUTTERFLY_BASE_URL",
+        "apiKey": "$BUTTERFLY_API_KEY",
         "timeoutMs": 30000
       },
       "models": {
@@ -21,8 +21,13 @@
           "api": "responses",
           "reasoning": true,
           "interleaved": true,
-          "defaultVariant": "xhigh",
+          "defaultVariant": "high",
           "variants": {
+            "high": {
+              "reasoningEffort": "high",
+              "textVerbosity": "low",
+              "reasoningSummary": "auto"
+            },
             "xhigh": {
               "reasoningEffort": "xhigh",
               "textVerbosity": "low",

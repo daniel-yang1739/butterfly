@@ -2,10 +2,10 @@ import XCTest
 @testable import ButterflyCore
 
 final class EndpointLanguageModelTests: XCTestCase {
-    private func configuration(_ options: String = "", model: String = "gateway/team/model") throws -> PolishConfiguration {
+    private func configuration(_ options: String = "", baseURL: String = "https://example.com/v1", model: String = "gateway/team/model") throws -> PolishConfiguration {
         try JSONDecoder().decode(PolishConfiguration.self, from: Data("""
         {"polish":{"model":"\(model)"},"provider":{"gateway":{
-          "type":"openai-compatible","options":{"baseURL":"https://example.com/v1"\(options)},
+          "type":"openai-compatible","options":{"baseURL":"\(baseURL)"\(options)},
           "models":{"team/model":{"name":"Test Model","maxTokens":1000}}
         }}}
         """.utf8))
@@ -28,6 +28,30 @@ final class EndpointLanguageModelTests: XCTestCase {
         ))
         let invalid = try configuration(",\"timeoutMs\":0")
         XCTAssertThrowsError(try invalid.makeEngine())
+    }
+
+    func testPiStyleEnvironmentSyntaxResolvesBaseURLAndAPIKey() throws {
+        let config = try configuration(",\"apiKey\":\"${TEST_KEY}\"", baseURL: "$TEST_BASE_URL")
+        let sessionConfig = URLSessionConfiguration.ephemeral
+        sessionConfig.protocolClasses = [CompletionStub.self]
+        XCTAssertNoThrow(try EndpointLanguageModelBackend(
+            options: XCTUnwrap(config.provider["gateway"]).options,
+            modelID: "team/model",
+            session: URLSession(configuration: sessionConfig),
+            environment: [
+                "TEST_BASE_URL": "https://example.com/v1",
+                "TEST_KEY": "test-token"
+            ]
+        ))
+    }
+
+    func testPiStyleEnvironmentSyntaxRejectsMissingBaseURL() throws {
+        let config = try configuration(baseURL: "$MISSING_BASE_URL")
+        XCTAssertThrowsError(try EndpointLanguageModelBackend(
+            options: XCTUnwrap(config.provider["gateway"]).options,
+            modelID: "team/model",
+            environment: [:]
+        ))
     }
 
     func testRequestAndResponseContract() async throws {

@@ -2,7 +2,7 @@
 
 建立 `~/.config/butterfly/butterfly.json`。沒有設定檔時，維持 Apple Foundation Models 與本機 rules fallback。
 
-Repo 根目錄的 [`butterfly.json`](../butterfly.json) 提供自訂 AI provider 與 Ollama 模型的範本，預設仍使用本機 Apple Foundation Models。App 不會自動讀取 repo 裡的檔案；請將它複製到上述使用者設定路徑，並將 `https://ai.example.com/v1` 換成自己的 endpoint。自訂 endpoint 的金鑰使用 `BUTTERFLY_API_KEY` 環境變數。範本的 `gpt-5.6-terra` 包含 reasoning、variants 與 token limit 設定。
+Repo 根目錄的 [`butterfly.json`](../butterfly.json) 提供自訂 AI provider 與 Ollama 模型的範本，預設仍使用本機 Apple Foundation Models。App 不會自動讀取 repo 裡的檔案；請將它複製到上述使用者設定路徑，並設定自己的 endpoint 與 API key 環境變數。範本的 `gpt-5.6-terra` 包含 reasoning、variants 與 token limit 設定。
 
 ```json
 {
@@ -15,8 +15,8 @@ Repo 根目錄的 [`butterfly.json`](../butterfly.json) 提供自訂 AI provider
       "name": "My AI Gateway",
       "type": "openai-compatible",
       "options": {
-        "baseURL": "https://ai.example.com/v1",
-        "apiKey": "{env:BUTTERFLY_API_KEY}",
+        "baseURL": "$BUTTERFLY_BASE_URL",
+        "apiKey": "$BUTTERFLY_API_KEY",
         "timeoutMs": 30000,
         "headers": { "X-Client": "Butterfly" }
       },
@@ -45,7 +45,7 @@ CLI 使用相同檔案：
 swift run butterfly-cli test-polish --smart --style concise "Please polish this transcript."
 ```
 
-金鑰與 header 值支援完整字串形式的 `{env:VARIABLE_NAME}`，缺少變數會回報設定錯誤。App 從 Finder 啟動時不一定繼承 shell 的環境變數；第一版尚未整合 Keychain。設定也接受直接填入金鑰，請勿把含金鑰的檔案加入版本控制。
+URL、金鑰與 header 值支援完整字串形式的 `$VARIABLE_NAME`、`${VARIABLE_NAME}` 與既有的 `{env:VARIABLE_NAME}`。缺少變數會回報設定錯誤。App 從 Finder 啟動時不一定繼承 shell 的環境變數；第一版尚未整合 Keychain。設定也接受直接填入金鑰，請勿把含金鑰的檔案加入版本控制。
 
 本機相容伺服器可以使用 `http://127.0.0.1:1234/v1` 並省略 `apiKey`；其他主機須使用 HTTPS。HTTP redirect 不會自動跟隨。選擇 endpoint 後，逐字稿與潤飾指令會送往該伺服器，此功能不會上傳音訊。選單的 Configured 只表示本機設定有效，並不代表已成功連線。
 
