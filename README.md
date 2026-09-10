@@ -2,206 +2,258 @@
   <img src="docs/assets/banner.jpg" alt="Butterfly Banner" width="100%" />
 </p>
 
-# 🦋 Butterfly: macOS Native Real-Time Streaming Voice Dictation
+# 🦋 Butterfly
 
-> **Butterfly**: Liberate your hands from the keyboard and let your thoughts fly freely with zero-latency, hands-free local voice dictation on Apple Silicon.
+Butterfly is a native macOS voice dictation tool for Apple Silicon. It transcribes speech locally with Whisper or Apple Speech, types live text into the focused application, and can optionally polish a completed transcript with an on-device model or an explicitly configured OpenAI-compatible endpoint.
 
-A lightweight, privacy-focused speech-to-text system built for macOS (Apple Silicon). Press <kbd>Option</kbd> + <kbd>Space</kbd> for live dictation, or <kbd>Option</kbd> + <kbd>Shift</kbd> + <kbd>Space</kbd> to record first and polish with Apple's on-device Foundation Model or an explicitly configured AI endpoint.
+Butterfly is a menu bar app. The recommended workflow is to build or launch the packaged app with `./run.sh`; this gives the app the resources, app bundle metadata, and signing step required by macOS permissions.
 
-Smart Polish supports four persistent output styles: Faithful Proofread, Concise Polish, Structured Notes, and Summary. Choose the style from the menu bar before recording.
+## Requirements
 
-Configure custom providers and models in `~/.config/butterfly/butterfly.json`, then choose **Smart Polish Model** in the menu bar. The App and CLI share this configuration. See [endpoint configuration](docs/POLISH_ENDPOINTS.md) for the format, authentication, and behavior.
+- Apple Silicon Mac (`arm64`)
+- macOS 13 or later
+- Xcode Command Line Tools and Swift 5.9 or later
+- Homebrew and the `whisper-cpp` package for downloaded local Whisper models
+- macOS 26 or later with Apple Intelligence enabled for the Apple Foundation Models backend
 
-### Smart Polish configuration
+The app can still use the built-in Apple Speech model when no downloaded Whisper model is available. Apple Speech requires the macOS Speech Recognition permission.
 
-The repository includes [`butterfly.sample.json`](butterfly.sample.json) as a safe configuration template. Copy it to the path Butterfly reads:
+## Install, build, and launch
 
-```bash
-mkdir -p ~/.config/butterfly
-cp butterfly.sample.json ~/.config/butterfly/butterfly.json
-```
-
-Butterfly reads `~/.config/butterfly/butterfly.json` when it starts Smart Polish. Set `polish.defaultModel` to the model you want as the startup default, for example `local/foundation` or `my-provider/example-model`. The menu can temporarily select another configured model for the current run. The sample uses `$AI_ENDPOINT_BASE_URL` and `$AI_API_KEY` placeholders; provide those environment variables locally and never replace them with real credentials in a committed file.
-
----
-
-## ✨ Key Features
-
-1. **🎙️ Direct Real-Time Streaming Voice Dictation (`Option + Space`)**:
-   - Downloaded Whisper models use app-owned microphone capture and the local whisper.cpp inference backend; Apple Speech is used only when explicitly selected.
-   - Uses a persistent whisper.cpp context and a bounded rolling audio window instead of reloading the model or retranscribing the full recording.
-   - Updates the active transcript continuously and types only cursor deltas into the focused input.
-   - Preserves natural spoken narrative flow while allowing Whisper to revise the active window.
-2. **📝 Record & Smart Polish (`Option + Shift + Space`)**:
-   - Records without typing into the focused field, then processes the completed transcript once.
-   - Uses Apple Foundation Models on macOS 26+ to improve punctuation, paragraphs, grammar, fillers, and obvious repetition without summarizing or changing facts.
-   - Automatically falls back to the built-in deterministic structured-note rules when Apple Intelligence is unavailable.
-   - Splits long transcripts at sentence boundaries and inserts the final result with a single clipboard-safe paste.
-3. **🛑 Chat-Safe Accidental Send Protection (`Enter` / `Esc`)**:
-   - Press <kbd>Enter</kbd> (or <kbd>Esc</kbd>) to stop voice dictation.
-   - The first <kbd>Enter</kbd> is intercepted and swallowed at the macOS OS level by a low-level `CGEventTap` (`.headInsertEventTap`), ensuring you **never accidentally submit half-finished messages in Slack, Discord, ChatGPT, Claude, or Cursor**!
-   - The second <kbd>Enter</kbd> passes through normally to submit your message.
-4. **🇹🇼 Guaranteed Traditional Chinese Output (Zero Simplified Chinese)**:
-   - Integrates the official `SwiftyOpenCC` package (`s2twp` standard with Taiwan idioms) to convert all recognized Chinese into Taiwan Traditional Chinese standards (`伺服器`, `記憶體`, `程式碼`, `資料庫`, `專案`), while strictly preserving English tokens and case.
-   - Native Apple ICU Hans-to-Hant transliteration fallback.
-5. **📚 Curated Software Engineering, InfoSec & Architecture Lexicon**:
-   - **Bundled Out-of-the-Box**: Ships with over 300+ curated developer, cybersecurity, and service naming keywords in `Sources/ButterflyCore/Resources/dictionary.txt` (`Git`, `Docker`, `Kubernetes`, `CI/CD`, `Threat Model`, `Zero Trust`, `WAF`, `OAuth`, `Translator`, `Manager`, `Sensor`, `Agent`...).
-   - **Dynamic User Config**: Automatically initializes `~/.config/butterfly/dictionary.txt` for personal team jargon and hot-reloads on every recording session without restarting the app.
-   - **Lean Contextual Biasing**: Fast-loading acoustic prior weighting (< 5ms startup delay) that eliminates acoustic model distortion.
-6. **🪄 Automatic Pangu Spacing & Number Formatting**:
-   - Automatically inserts Pangu spacing (standard typographic space between CJK characters and alphanumeric terms, e.g. `800 MB 的空間`).
-   - Formats spoken numbers and digital storage units (`八百 MB` $\rightarrow$ `800 MB`, `兩千行` $\rightarrow$ `2000 行`).
-7. **⚡ Multi-Tiered Whisper ASR Whitelist on Apple Silicon**:
-   - Built-in multi-model support:
-     - 🥇 **Rank 1**: `Whisper Large-v3-Turbo` (1.62 GB / Flagship accuracy, recommended)
-     - 🥈 **Rank 2**: `Whisper Small` (488 MB / High accuracy code-switching)
-     - 🥉 **Rank 3**: `SenseVoice Small` (230 MB / Ultra-low latency)
-     - 🍎 **Rank 4**: `Apple Speech Native` (Built-in / 0 MB)
-   - Hardware accelerated via Apple Neural Engine (ANE) and Metal GPU unified memory.
-8. **🖥️ Sleek Floating Capsule HUD**:
-   - Displays real-time streaming speech transcription in a modern frosted-glass floating capsule HUD (`FloatingHUDWindow`).
-9. **🔒 Local Polish by Default**:
-   - Smart Polish runs locally unless you explicitly select a configured endpoint. Endpoint polishing sends the transcript and editing instructions to that server; the polish backend never uploads audio.
-
----
-
-## 📁 Repository Structure
-
-```text
-butterfly/
-├── SYSTEM_PROMPT.md             # External editable system prompt & cognitive guidelines
-├── Package.swift                # Swift Package Manager configuration (macOS 13+)
-├── AGENTS.md                    # Agent engineering guidelines & architecture specs
-├── README.md                    # Public repository documentation
-├── docs/                        # Architecture & pipeline design documentation
-│   ├── ARCHITECTURE.md          # Pipeline data flow and threading diagrams
-│   ├── TEST_PLAN.md             # Quality assurance and test specs
-│   └── IMPLEMENTATION_PLAN.md   # Implementation roadmap & milestones
-├── Sources/
-│   ├── ButterflyCore/           # Core framework library
-│   │   ├── Audio/               # Audio capture, resampling & VAD detection
-│   │   │   ├── AudioCaptureManager.swift
-│   │   │   └── VADDetector.swift
-│   │   ├── Engine/              # Speech recognition, model whitelist & SystemPrompt
-│   │   │   ├── AppleSiliconInferenceBackend.swift
-│   │   │   ├── LiveSpeechEngine.swift
-│   │   │   ├── ModelManager.swift
-│   │   │   ├── SpeechInferenceBackend.swift
-│   │   │   ├── SystemPrompt.swift
-│   │   │   └── TechDictionary.swift
-│   │   ├── Injector/            # Low-level CGEventTap & direct cursor delta typing
-│   │   │   └── InputInjector.swift
-│   │   ├── Resources/           # Bundled SPM resources
-│   │   │   └── dictionary.txt   # Curated 300+ dev, InfoSec & architecture terms
-│   │   ├── State/               # Core state machine coordinator
-│   │   │   └── ButterflyStateMachine.swift
-│   │   └── Text/                # Official OpenCC s2twp, TextFormatter & TextPolisher
-│   │       ├── OpenCCTranslator.swift
-│   │       ├── TextFormatter.swift
-│   │       ├── TextPolisher.swift
-│   │       └── TranscriptAccumulator.swift
-│   ├── ButterflyCLI/            # Command-line interface for testing & benchmarking
-│   │   ├── TestRunner.swift
-│   │   └── main.swift
-│   └── ButterflyApp/            # Native macOS menu bar application
-│       ├── ButterflyApp.swift   # AppKit status bar coordinator & CGEventTap hotkeys
-│       └── FloatingHUDWindow.swift # Modern floating capsule transcription HUD
-└── Tests/
-    └── ButterflyTests/          # Unit test suites (XCTest compatible)
-        ├── InferenceEngineTests.swift
-        ├── InputInjectorTests.swift
-        ├── ModelManagerTests.swift
-        ├── OpenCCTranslatorTests.swift
-        ├── StateMachineTests.swift
-        ├── SystemPromptTests.swift
-        ├── TextFormatterTests.swift
-        └── TextPolisherTests.swift
-```
-
----
-
-## 🚀 Quick Start
-
-For the local signing incident, certificate fundamentals, permission requirements, and recovery steps, see the [macOS signing and Accessibility guide](docs/MACOS_SIGNING_AND_ACCESSIBILITY.md) (Traditional Chinese).
-
-### One-command setup and launch
-
-On an Apple Silicon Mac running macOS 13 or later:
+From the repository root:
 
 ```bash
 ./run.sh
 ```
 
-When a build is needed, the launcher checks Xcode Command Line Tools, offers to install Homebrew when it is missing, installs `whisper-cpp`, builds a local `Butterfly.app`, and launches it. Enable Accessibility in System Settings when the app reports it is required. macOS requests Microphone and, when Apple Speech is selected, Speech Recognition permission when recording starts. Downloaded speech models remain in `~/.cache/butterfly/models` between builds.
+The first invocation checks the platform and developer tools, installs `whisper-cpp` with Homebrew when needed, builds a release app, and opens it. Later invocations launch the existing app without rebuilding or signing it. This distinction matters: a rebuild can change the ad-hoc code signature and cause macOS to ask for Accessibility again.
 
-`./run.sh` opens the existing app without rebuilding or signing it; the first launch builds a release app if none exists. Use `./run.sh --build` to apply source changes, `./run.sh --debug` for a debug build, or `./run.sh --no-open` to build without launching. The generated app is located at `.build/app/Butterfly.app`.
+Use these options when needed:
 
-### Manual build
+| Command | Behavior |
+| --- | --- |
+| `./run.sh` | Launch the existing `.build/app/Butterfly.app`; build it first if it does not exist. |
+| `./run.sh --build` | Rebuild a release app, sign it, and launch it. |
+| `./run.sh --debug` | Rebuild a debug app, sign it, and launch it. |
+| `./run.sh --release` | Explicit release rebuild. |
+| `./run.sh --clean` | Clean Swift package artifacts, rebuild, and launch. |
+| `./run.sh --no-open` | Build and sign without launching. |
+| `./run.sh --no-build` | Launch an existing app only; fails when no app has been built. |
+| `./run.sh --help` | Show the current launcher help. |
+
+The packaged app is created at:
+
+```text
+.build/app/Butterfly.app
+```
+
+For a library or CLI-only build, use Swift Package Manager directly:
 
 ```bash
 brew install whisper-cpp
 swift build
 ```
 
-Butterfly links directly to the local whisper.cpp library so the model stays resident during dictation. The Homebrew package provides the required headers, native library, and Metal backend.
+`swift run ButterflyApp` is useful for development, but `./run.sh` is preferred for normal use because it creates the complete `.app` bundle and applies the same signing and resource packaging as a user launch.
 
-### 2. Run CLI Commands
+## Permissions and macOS signing
+
+Butterfly needs these permissions for the corresponding features:
+
+| Permission | Required for |
+| --- | --- |
+| **Accessibility** | Global `Option + Space` shortcuts, the low-level event tap, swallowing the first Enter/Esc, and keyboard/clipboard insertion. |
+| **Microphone** | Any recording mode. |
+| **Speech Recognition** | Only when the active speech model is **Apple Speech Native**. Downloaded Whisper models transcribe locally and do not use this permission. |
+
+Open **System Settings → Privacy & Security → Accessibility**, add the current `Butterfly.app`, and enable it. The menu bar status reports `Global Hotkeys: Ready` when the event tap is active. If it reports `Accessibility Permission Required` or `Hotkeys unavailable`, use **Open Accessibility Settings...** from the Butterfly menu and re-enable the exact app bundle being used.
+
+The default build uses an ad-hoc signature (`codesign --sign -`). macOS associates an Accessibility grant with the signed app identity, so replacing the bundle with `./run.sh --build` or `--clean` may require removing the old Butterfly entry and adding the newly built app again. `./run.sh` without a build does not replace the bundle and normally preserves the existing grant. A stable Developer ID signing identity can be supplied with `BUTTERFLY_CODESIGN_IDENTITY`, but a paid Apple Developer membership is not required for local development. See [macOS signing and Accessibility](docs/MACOS_SIGNING_AND_ACCESSIBILITY.md) for the certificate purpose, TCC behavior, and recovery steps.
+
+## Keyboard controls and modes
+
+| Shortcut | Mode | Result |
+| --- | --- | --- |
+| `Option + Space` | **Live Voice Dictation** | Streams transcription into the focused input while recording. The HUD shows the live microphone waveform. |
+| `Option + Shift + Space` | **Record & Smart Polish** | Records without inserting text, polishes the final transcript once, then inserts the result with a clipboard-safe paste. |
+| `Enter` or `Esc` | Stop | Stops recording. The first Enter is swallowed by the event tap so a chat app cannot submit a partial message; the next Enter is passed through normally. |
+
+The same actions are available from the menu bar if a global hotkey cannot be used. While Smart Polish is processing, Enter/Esc remains swallowed until insertion finishes.
+
+## Speech models and model storage
+
+The **Speech Model** menu controls local ASR. The available models are:
+
+- Whisper Large-v3-Turbo (highest accuracy, about 1.6 GB)
+- Whisper Small (about 488 MB)
+- SenseVoice Small (about 230 MB; catalog entry, currently disabled by the bundled runtime)
+- Whisper Base (about 148 MB)
+- Whisper Tiny (about 78 MB)
+- Apple Speech Native (built into macOS)
+
+Downloaded Whisper files are stored in `~/.cache/butterfly/models`. The app selects the highest-ranked downloaded runtime-supported model unless a downloaded model has been selected in the menu. Apple Speech is the fallback when no usable Whisper model is cached. The selected ASR model is stored in the app's UserDefaults and is independent of the Smart Polish model.
+
+The menu also provides model download, deletion, cache cleanup, and **Open Models Folder in Finder**. The CLI exposes the same cache:
+
 ```bash
-# Start Live Streaming Dictation in terminal
-swift run butterfly-cli listen
-
-# Run full 25-assertion automated unit test suite
-swift run butterfly-cli test
-
-# List supported speech recognition models
 swift run butterfly-cli models
-
-# Display hardware acceleration, active model, and dictionary telemetry
+swift run butterfly-cli download whisper-large-v3-turbo
+swift run butterfly-cli delete whisper-small
+swift run butterfly-cli clean
 swift run butterfly-cli info
-
-# Test deferred Smart Polish with Apple Intelligence or the rules fallback
-swift run butterfly-cli test-polish --smart
 ```
 
-### 3. Launch the macOS Menu Bar App
+## Smart Polish configuration
+
+Butterfly reads this exact file when Smart Polish starts:
+
+```text
+~/.config/butterfly/butterfly.json
+```
+
+The repository includes [`butterfly.sample.json`](butterfly.sample.json). It is a safe template with placeholders, not a credential file. Copy it once, then edit the copy:
+
 ```bash
-swift run ButterflyApp
+mkdir -p ~/.config/butterfly
+cp butterfly.sample.json ~/.config/butterfly/butterfly.json
 ```
 
-### 4. Enable Whisper Core ML / Apple Neural Engine Acceleration
+The `polish.defaultModel` value is the model used at startup. A model ID is either a built-in ID or `<provider-id>/<model-id>`:
 
-The local whisper.cpp backend uses Metal by default. Homebrew's standard build does not currently include Core ML encoder support. To run the Whisper encoder on the Apple Neural Engine while keeping the decoder on Metal, both the native library and model asset must support Core ML:
+```json
+{
+  "polish": {
+    "defaultModel": "local/foundation",
+    "fallback": "rules"
+  },
+  "provider": {
+    "my-provider": {
+      "name": "My AI Provider",
+      "type": "openai-compatible",
+      "options": {
+        "baseURL": "$AI_ENDPOINT_BASE_URL",
+        "apiKey": "$AI_API_KEY",
+        "timeoutMs": 30000
+      },
+      "models": {
+        "example-model": {
+          "name": "Example Model"
+        }
+      }
+    }
+  }
+}
+```
 
-1. Build and link whisper.cpp with Core ML support instead of the standard Homebrew library:
+Built-in model IDs are:
 
-   ```bash
-   cmake -B build -DWHISPER_COREML=1
-   cmake --build build -j --config Release
-   ```
+- `local/foundation`: Apple Foundation Models on macOS 26+.
+- `local/rules`: deterministic local rules; it does not call a remote model.
 
-2. Generate and compile the Core ML encoder that matches the GGML model. For `ggml-large-v3-turbo.bin`, the expected sibling directory is:
+For an endpoint, set `polish.defaultModel` to `my-provider/example-model`. Providers currently use `type: "openai-compatible"`; `options.baseURL` accepts HTTPS URLs (HTTP is allowed only for loopback), `apiKey` and custom headers are optional, and the model can select `api: "chat-completions"` or `api: "responses"`. Model entries may also define limits, variants, reasoning options, and chunk sizes; see [endpoint configuration](docs/POLISH_ENDPOINTS.md).
 
-   ```text
-   ggml-large-v3-turbo-encoder.mlmodelc/
-   ```
+The decoder accepts the old `polish.model` key for existing installations, but new files should use `polish.defaultModel`. The **Smart Polish Model** menu can temporarily override the configured default for the current app process. **Reload Polish Configuration** clears that override; restarting the app also returns to `polish.defaultModel`.
 
-3. Place both artifacts in the same model cache directory:
+### Passing endpoint environment variables
 
-   ```text
-   ~/.cache/butterfly/models/
-   ├── ggml-large-v3-turbo.bin
-   └── ggml-large-v3-turbo-encoder.mlmodelc/
-   ```
+Values such as `$AI_ENDPOINT_BASE_URL`, `${AI_ENDPOINT_BASE_URL}`, `$AI_API_KEY`, and the legacy `{env:VARIABLE_NAME}` form are resolved when the configuration is loaded. Do not commit real keys to `butterfly.json` or any repository file.
 
-4. Run `swift run butterfly-cli info` to verify that the encoder asset is detected. The asset alone is not sufficient: Butterfly must also be linked to the Core ML-enabled whisper.cpp build.
+When launching through `./run.sh`, macOS opens the app as a bundle. A shell-only `export` may not be visible to that app, especially when the app is launched by Launch Services. Export the values and publish them to the user launch environment before opening Butterfly:
 
-For the fastest hybrid configuration, keep GPU support enabled so the Core ML encoder can use ANE while the decoder uses Metal.
+```bash
+export AI_ENDPOINT_BASE_URL="https://your-endpoint.example/v1"
+export AI_API_KEY="your-local-key"
+launchctl setenv AI_ENDPOINT_BASE_URL "$AI_ENDPOINT_BASE_URL"
+launchctl setenv AI_API_KEY "$AI_API_KEY"
+./run.sh --no-build
+```
 
-Once launched, the 🦋 icon will appear in your macOS menu bar:
-- Press <kbd>Option</kbd> + <kbd>Space</kbd> to toggle **Live Voice Dictation**.
-- Press <kbd>Option</kbd> + <kbd>Shift</kbd> + <kbd>Space</kbd> to start **Record & Smart Polish**.
-- Press <kbd>Enter</kbd> (or <kbd>Esc</kbd>) to **Stop Dictation** (First Enter safely stops recording; Second Enter submits).
-- Click the menu bar icon to download or switch between Whisper models, manage cached model storage, or open the models directory in Finder.
-- Choose a Smart Polish style from the plain-text `Smart Polish Style` submenu. The selection is remembered between launches.
+Check what Launch Services can see with:
 
-Smart Polish uses Apple Intelligence when it is enabled and available on macOS 26 or later. You can override its editing instructions at `~/.config/butterfly/SMART_POLISH_PROMPT.md`; otherwise Butterfly uses its bundled faithful-editing prompt.
+```bash
+launchctl getenv AI_ENDPOINT_BASE_URL
+launchctl getenv AI_API_KEY
+```
+
+After changing environment variables, quit and relaunch Butterfly. If the selected model is still `local/foundation` or `local/rules`, no endpoint request is expected: local Whisper/Apple Speech produces the transcript first, and only the Smart Polish transcript plus editing instructions are sent to a configured endpoint.
+
+### Smart Polish styles and fallback
+
+Choose **Smart Polish Style** from the menu bar. The selection is stored in UserDefaults and survives relaunches:
+
+| Style | Behavior |
+| --- | --- |
+| **Faithful Proofread** | Correct punctuation and boundaries while preserving wording and detail. |
+| **Concise Polish** | Remove fillers, stutters, abandoned starts, and clearly redundant repetition while preserving substantive points. This is the default. |
+| **Structured Notes** | Keep paragraph-first blocks and add headings or genuine parallel lists when they clarify the transcript. |
+| **Summary** | Keep central ideas, decisions, caveats, and conclusions; omit minor detail. |
+
+If the selected primary backend is unavailable, Butterfly uses the configured `rules` fallback and reports the reason. Rule fallback is deterministic and has less context-sensitive restructuring than an LLM, so selecting **Structured Notes** does not guarantee extensive bullet lists when the fallback is active. A custom editing prompt can be placed at `~/.config/butterfly/SMART_POLISH_PROMPT.md`; the bundled prompt is used when that file is absent.
+
+## CLI commands
+
+The CLI is useful for checking models, formatting, and configuration without launching the menu bar app:
+
+```bash
+swift run butterfly-cli listen
+swift run butterfly-cli test
+swift run butterfly-cli test-polish --smart --style structured
+swift run butterfly-cli test-convert "服务器内存不足"
+swift run butterfly-cli models
+swift run butterfly-cli info
+```
+
+`butterfly-cli test-polish --smart` loads the same `~/.config/butterfly/butterfly.json` and environment variables as the app. The CLI test runner is a zero-dependency logic suite; use `swift test` for XCTest targets.
+
+## User customization and important paths
+
+- `~/.config/butterfly/butterfly.json` — Smart Polish default model and providers.
+- `~/.config/butterfly/dictionary.txt` — optional technical vocabulary; Butterfly initializes it from the bundled dictionary and reloads it at each recording start.
+- `~/.config/butterfly/SMART_POLISH_PROMPT.md` — optional Smart Polish prompt override.
+- `~/.cache/butterfly/models` — downloaded speech models.
+- `.build/app/Butterfly.app` — packaged app produced by `run.sh`.
+- `SYSTEM_PROMPT.md` — editable system prompt used for speech-recognition context biasing.
+
+Keep personal configuration and credentials outside version control. `butterfly.sample.json` intentionally contains only generic names and environment-variable placeholders.
+
+## Architecture
+
+```text
+Microphone
+   │
+   ▼
+Local Whisper / Apple Speech ──► Traditional Chinese + formatting
+   │                                  │
+   ├─ Live Voice Dictation ───────────┴─► streaming cursor deltas
+   │
+   └─ Record & Smart Polish ─► local Foundation / rules / configured endpoint
+                                      │
+                                      └─► one clipboard-safe insertion
+```
+
+The core Swift package is split into audio capture, speech engines, text formatting and polishing, input injection, and state coordination. The AppKit target owns the menu bar item, floating HUD, global event tap, permissions, and lifecycle. See [architecture details](docs/ARCHITECTURE.md) and the [test plan](docs/TEST_PLAN.md).
+
+## Troubleshooting
+
+### `Hotkeys unavailable` or `Accessibility Permission Required`
+
+Confirm that Accessibility is enabled for the exact `.build/app/Butterfly.app` currently running. If you used `./run.sh --build` or `--clean`, macOS may treat the newly signed ad-hoc bundle as a different client: quit Butterfly, remove the old entry, add the current app again, and enable it. `./run.sh` without a build reuses the existing signed bundle.
+
+### `The language model is unavailable`
+
+Check the selected Smart Polish model in the menu. For an endpoint model, validate JSON, confirm `type` is `openai-compatible`, verify `launchctl getenv` for every referenced variable, and relaunch the app. For `local/foundation`, confirm that the OS supports Apple Foundation Models and that Apple Intelligence is available. The app falls back to rules when the primary backend cannot be used.
+
+### Smart Polish does not produce headings or lists
+
+Select **Structured Notes** in **Smart Polish Style**. Check whether the model menu says **(Configured)** or **(Rules Fallback)**; rules fallback intentionally performs conservative deterministic formatting.
+
+### Recording does not start
+
+Grant Microphone permission. If the active ASR model is Apple Speech Native, also grant Speech Recognition. For a Whisper model, download a supported model from the **Speech Model** menu or with `butterfly-cli download`.
+
+### Verify the app and cache state
+
+```bash
+swift run butterfly-cli info
+codesign --verify --deep --strict .build/app/Butterfly.app
+```

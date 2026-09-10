@@ -44,10 +44,10 @@ stateDiagram-v2
 
 ## 🧩 Components
 
-- **[`SlidingWindowBuffer.swift`](file:///Users/daniel_y_yang/Documents/self/butterfly/Sources/ButterflyCore/Text/SlidingWindowBuffer.swift)**:
+- **[`SlidingWindowBuffer.swift`](../Sources/ButterflyCore/Text/SlidingWindowBuffer.swift)**:
   - Manages `frozenText`, `activeTail`, and `injectedTail`.
   - Implements `computeMinimalDelta` to calculate minimum backspaces and replacements.
-- **[`InputInjector.swift`](file:///Users/daniel_y_yang/Documents/self/butterfly/Sources/ButterflyCore/Injector/InputInjector.swift)**:
+- **[`InputInjector.swift`](../Sources/ButterflyCore/Injector/InputInjector.swift)**:
   - Executes atomic `SlidingDeltaAction` (`.append`, `.replaceTail`, `.noChange`).
-- **[`ButterflyApp.swift`](file:///Users/daniel_y_yang/Documents/self/butterfly/Sources/ButterflyApp/ButterflyApp.swift)**:
+- **[`ButterflyApp.swift`](../Sources/ButterflyApp/ButterflyApp.swift)**:
   - Connects `LiveSpeechEngine` to `SlidingWindowBuffer` with a 350ms non-blocking pause timer.
