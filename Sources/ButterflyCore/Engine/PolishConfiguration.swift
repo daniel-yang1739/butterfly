@@ -2,16 +2,20 @@ import Foundation
 
 public struct PolishConfiguration: Decodable, Sendable {
     public struct Selection: Decodable, Sendable {
-        public var model: String = "local/foundation"
+        public var defaultModel: String = "local/foundation"
         public var fallback: String = "rules"
 
+        /// Backward-compatible accessor for callers using the previous property name.
+        public var model: String { defaultModel }
+
         public init() {}
-        private enum CodingKeys: String, CodingKey { case model, fallback }
+        private enum CodingKeys: String, CodingKey { case defaultModel, model, fallback }
         public init(from decoder: Decoder) throws {
             let values = try decoder.container(keyedBy: CodingKeys.self)
-            model = PolishConfiguration.canonicalModelID(
-                try values.decodeIfPresent(String.self, forKey: .model) ?? "local/foundation"
-            )
+            let configuredModel = try values.decodeIfPresent(String.self, forKey: .defaultModel)
+                ?? values.decodeIfPresent(String.self, forKey: .model)
+                ?? "local/foundation"
+            defaultModel = PolishConfiguration.canonicalModelID(configuredModel)
             fallback = try values.decodeIfPresent(String.self, forKey: .fallback) ?? "rules"
         }
     }
@@ -126,7 +130,7 @@ public struct PolishConfiguration: Decodable, Sendable {
         guard polish.fallback == "rules" else {
             throw LanguageModelBackendError.unavailable("Only the rules fallback is supported")
         }
-        let selected = Self.canonicalModelID(override ?? polish.model)
+        let selected = Self.canonicalModelID(override ?? polish.defaultModel)
         switch selected {
         case "local/foundation": return SmartPolishEngine()
         case "local/rules": return SmartPolishEngine(primaryBackend: RuleBasedLanguageModelBackend())

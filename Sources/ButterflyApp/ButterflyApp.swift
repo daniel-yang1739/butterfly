@@ -37,6 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         rawValue: UserDefaults.standard.string(forKey: AppDelegate.smartPolishStyleDefaultsKey) ?? ""
     ) ?? .concise
     private var smartPolishAvailabilityText = "Checking..."
+    // Menu selection is an in-process override; the JSON model remains the startup default.
     private var polishModelOverride: String?
     private var recordingPolishEngine = SmartPolishEngine()
     private var recordingPolishModel = "local/foundation"
@@ -261,7 +262,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Track B: Model selection and availability
         let polishModelsMenu = NSMenu()
         if let configuration = try? PolishConfiguration.load() {
-            let selected = polishModelOverride ?? configuration.polish.model
+            let selected = polishModelOverride ?? configuration.polish.defaultModel
             for model in configuration.models {
                 let item = NSMenuItem(title: model.name, action: #selector(selectPolishModel(_:)), keyEquivalent: "")
                 item.target = self
@@ -377,7 +378,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func selectPolishModel(_ sender: NSMenuItem) {
         guard activity == .idle else { return }
-        polishModelOverride = sender.representedObject as? String
+        guard let modelID = sender.representedObject as? String else { return }
+        polishModelOverride = modelID
         refreshSmartPolishAvailability()
     }
 
@@ -504,7 +506,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         do {
             if mode == .smartPolish {
                 let configuration = try PolishConfiguration.load()
-                recordingPolishModel = polishModelOverride ?? configuration.polish.model
+                recordingPolishModel = polishModelOverride ?? configuration.polish.defaultModel
                 recordingPolishEngine = try configuration.makeEngine(model: recordingPolishModel)
             }
             latestTranscript = ""
@@ -825,7 +827,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { @MainActor in
             do {
                 let configuration = try PolishConfiguration.load()
-                let selected = polishModelOverride ?? configuration.polish.model
+                let selected = polishModelOverride ?? configuration.polish.defaultModel
                 let modelName = configuration.models.first { $0.id == selected }?.name ?? selected
                 let engine = try configuration.makeEngine(model: selected)
                 switch await engine.availability() {

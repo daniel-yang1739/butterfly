@@ -1,6 +1,6 @@
 {
   "polish": {
-    "model": "local/foundation",
+    "defaultModel": "local/foundation",
     "fallback": "rules"
   },
   "provider": {

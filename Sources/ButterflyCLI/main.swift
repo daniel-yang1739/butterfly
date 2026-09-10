@@ -145,7 +145,7 @@ case "test-polish":
                 exit(1)
             }
             let result = await engine.polish(testString, style: smartPolishStyle)
-            let engineName = result.usedFallback ? "Rule-Based Fallback" : configuration.polish.model
+            let engineName = result.usedFallback ? "Rule-Based Fallback" : configuration.polish.defaultModel
             if let reason = result.fallbackReason { print("Fallback reason: \(reason)") }
             print("\n[Smart Polish Output - \(smartPolishStyle.title), \(engineName)]:\n\(result.text)")
             print("--------------------------------------------------")

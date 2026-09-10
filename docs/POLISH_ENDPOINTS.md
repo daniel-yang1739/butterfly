@@ -7,7 +7,7 @@ Repo 根目錄的 [`butterfly.json`](../butterfly.json) 提供自訂 AI provider
 ```json
 {
   "polish": {
-    "model": "my-gateway/team/polish-model",
+    "defaultModel": "my-gateway/team/polish-model",
     "fallback": "rules"
   },
   "provider": {
@@ -35,9 +35,9 @@ Repo 根目錄的 [`butterfly.json`](../butterfly.json) 提供自訂 AI provider
 
 這是仿照 OpenCode 的 Butterfly 設定格式，並非完整相容 OpenCode。`type` 目前只支援 `openai-compatible`；模型的 `api` 預設為 `chat-completions`，使用 `POST <baseURL>/chat/completions`。設定 `api: "responses"` 則使用 `POST <baseURL>/responses`。不支援原生 Anthropic API 或 npm adapter。
 
-`models` 的 key 必須是伺服器接受的 model ID，可以包含 `/`。`polish.model` 第一個 `/` 前為 provider ID，其餘為完整 model ID。內建本機 provider 為 `local`，提供 `local/foundation`（Apple Foundation Models，預設）和 `local/rules`（規則式潤飾，非 AI 模型），不需要填入 endpoint。舊設定的 `apple/foundation`、`builtin/rules` 仍可讀取，會分別對應至這兩個本機選項。請勿將內建模型 ID 用於自訂 endpoint。
+`models` 的 key 必須是伺服器接受的 model ID，可以包含 `/`。`polish.defaultModel` 第一個 `/` 前為 provider ID，其餘為完整 model ID。內建本機 provider 為 `local`，提供 `local/foundation`（Apple Foundation Models，預設）和 `local/rules`（規則式潤飾，非 AI 模型），不需要填入 endpoint。舊設定的 `apple/foundation`、`builtin/rules` 仍可讀取，會分別對應至這兩個本機選項。舊版 `polish.model` 也會相容讀取；新設定請使用 `defaultModel`。請勿將內建模型 ID 用於自訂 endpoint。
 
-App 的 **Smart Polish Model** 選單只列出各 provider 的模型／潤飾選項。啟動時使用 JSON 的 `polish.model`，在選單選取其他模型則暫時覆寫，直到重新啟動或使用 **Reload Polish Configuration** 重新套用設定檔的預設模型。要永久指定模型請修改 JSON。每次開始 Smart Polish 錄音也會重新載入設定，錄音途中修改檔案不會改變該次使用的 endpoint。
+App 的 **Smart Polish Model** 選單只列出各 provider 的模型／潤飾選項。每次啟動使用 JSON 的 `polish.defaultModel` 作為預設；在選單選取其他模型只會暫時覆寫目前執行期間的選擇，不會寫入含有 endpoint 或金鑰的 JSON。重新啟動或使用 **Reload Polish Configuration** 後會回到設定檔的 `polish.defaultModel`。每次開始 Smart Polish 錄音也會重新載入設定，錄音途中修改檔案不會改變該次使用的 endpoint。
 
 CLI 使用相同檔案：
 
