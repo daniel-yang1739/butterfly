@@ -33,16 +33,12 @@
 - **TC-C9**：Mode 2 長篇獨白全句去重複（消除 3 次連續重複錄音句子）
 - **TC-C10**：語意意圖與同音字上下文校正（`"好的認識"` $\rightarrow$ `"好的潤飾"`, `"羽翼"` $\rightarrow$ `"語意"`, `"把蚊子"` $\rightarrow$ `"把文字"`）
 
-### 📦 Suite 4：系統提示詞動態載入測試 (`SystemPrompt`)
-- **TC-D1**：`SYSTEM_PROMPT.md` 磁碟動態載入驗證
-- **TC-D2**：Butterfly 提示詞角色與規則完整性驗證
-
-### 📦 Suite 5：模型白名單與硬體偵測測試 (`ModelManager`)
+### 📦 Suite 4：模型白名單與硬體偵測測試 (`ModelManager`)
 - **TC-E1**：模型白名單排序優先級（Rank 1 為 `Whisper Large-v3-Turbo`）
 - **TC-E2**：模型檔案大小格式化驗證
 - **TC-E3**：本機可用模型自動探測（`getBestAvailableModel()`）
 
-### 📦 Suite 6：游標注入增量計算測試 (`InputInjector`)
+### 📦 Suite 5：游標注入增量計算測試 (`InputInjector`)
 - **TC-F1**：即時串流正向追加增量計算（`"你好"` $\rightarrow$ `"你好世界"`）
 - **TC-F2**：即時串流退格就地微調增量計算（`"你好是界"` $\rightarrow$ `"你好世界"`）
 

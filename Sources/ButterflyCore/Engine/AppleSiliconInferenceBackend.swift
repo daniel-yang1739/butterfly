@@ -91,7 +91,7 @@ public final class AppleSiliconInferenceBackend: SpeechInferenceBackend, @unchec
             return TranscriptionResult(rawText: "", confidence: 1.0, latencySeconds: 0.0, detectedLanguage: "zh", usedHardware: currentHardware)
         }
 
-        let prompt = SystemPrompt.shared.whisperInitialPrompt
+        let prompt = TechDictionary.whisperInitialPrompt
         return try await withCheckedThrowingContinuation { continuation in
             inferenceQueue.async { [self] in
                 guard let context else {

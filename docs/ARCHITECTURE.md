@@ -15,7 +15,7 @@ graph TB
     subgraph UserLayer ["1. 使用者互動層 (User Interaction Layer)"]
         CGTap["macOS 核心事件攔截器<br/>(Low-Level CGEventTap)"]
         MenuBar["狀態選單列<br/>(Status Menu Bar 🦋)"]
-        SystemPromptDoc["智慧潤稿 Prompt<br/>(SMART_POLISH_PROMPT.md)"]
+        SmartPolishPromptDoc["智慧潤稿 Prompt<br/>(SMART_POLISH_PROMPT.md)"]
     end
 
     subgraph AudioPipeline ["2. 音訊採集與會話管理層 (Audio Pipeline)"]
@@ -55,7 +55,7 @@ graph TB
     SingleSourceAccumulator --> OpenCC
     OpenCC --> TextFormatter
     TextFormatter --> CognitivePolisher
-    SystemPromptDoc -.-> CognitivePolisher
+    SmartPolishPromptDoc -.-> CognitivePolisher
     CognitivePolisher -->|"Mode 1 即時打字"| LiveStreamingDelta
     CognitivePolisher -->|"Mode 2 忠實潤稿"| ClipboardProxy
     LiveStreamingDelta --> FocusedApp["前台活動視窗 (Cursor, VS Code, Chrome, Slack, Discord 等)"]
@@ -68,7 +68,7 @@ graph TB
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Idle: 應用程式啟動 (載入 SYSTEM_PROMPT.md)
+    [*] --> Idle: 應用程式啟動
 
     Idle --> Mode1_Streaming: 按下 Option+Space (Mode 1)
     Idle --> Mode2_Recording: 按下 Option+Shift+Space (Mode 2)

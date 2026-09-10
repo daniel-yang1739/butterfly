@@ -20,7 +20,6 @@ Butterfly is structured as a modular Swift Package consisting of three main targ
 
 ```text
 butterfly/
-├── SYSTEM_PROMPT.md             # External editable system prompt & cognitive guidelines
 ├── Package.swift                # Swift Package Manager manifest (macOS 13+)
 ├── AGENTS.md                    # Agent developer guidelines (this file)
 ├── README.md                    # Public repository documentation
@@ -33,12 +32,11 @@ butterfly/
 │   │   ├── Audio/               # Audio capture, resampling & VAD detection
 │   │   │   ├── AudioCaptureManager.swift
 │   │   │   └── VADDetector.swift
-│   │   ├── Engine/              # Speech recognition, model whitelist & SystemPrompt
+│   │   ├── Engine/              # Speech recognition, model whitelist & Smart Polish
 │   │   │   ├── AppleSiliconInferenceBackend.swift
 │   │   │   ├── LiveSpeechEngine.swift
 │   │   │   ├── ModelManager.swift
 │   │   │   ├── SpeechInferenceBackend.swift
-│   │   │   ├── SystemPrompt.swift
 │   │   │   └── TechDictionary.swift
 │   │   ├── Injector/            # Low-level CGEventTap & direct cursor delta typing
 │   │   │   └── InputInjector.swift
@@ -64,7 +62,6 @@ butterfly/
         ├── ModelManagerTests.swift
         ├── OpenCCTranslatorTests.swift
         ├── StateMachineTests.swift
-        ├── SystemPromptTests.swift
         ├── TextFormatterTests.swift
         └── TextPolisherTests.swift
 ```

@@ -96,14 +96,8 @@ public enum TestRunner {
             "TC-C9: Restarted numbering creates a new paragraph and list block"
         )
         
-        // MARK: - 4. SystemPrompt Tests
-        print("\n📦 Suite 4: SystemPrompt (Dynamic Loading & Fallbacks)")
-        let sysPrompt = SystemPrompt.shared
-        assertTrue(!sysPrompt.content.isEmpty, "TC-D1: System Prompt content loaded")
-        assertTrue(sysPrompt.content.contains("Butterfly"), "TC-D2: System Prompt contains Butterfly role definition")
-        
-        // MARK: - 5. ModelManager Speech Recognition (ASR) Whitelist Tests
-        print("\n📦 Suite 5: ModelManager Speech Models (ASR Whitelist)")
+        // MARK: - 4. ModelManager Speech Recognition (ASR) Whitelist Tests
+        print("\n📦 Suite 4: ModelManager Speech Models (ASR Whitelist)")
         let asrModels = ModelManager.defaultASRModels
         assertEqual(asrModels[0].id, "whisper-large-v3-turbo", "TC-E1: ASR whitelist Rank 1 is Whisper Large-v3-Turbo")
         assertEqual(asrModels[0].formattedSize, "1.62 GB", "TC-E2: Whisper Large-v3-Turbo formatted size")
@@ -113,8 +107,8 @@ public enum TestRunner {
         let bestASR = ModelManager.shared.getBestAvailableASRModel()
         assertTrue(!bestASR.id.isEmpty, "TC-E5: Best available speech model auto-discovery")
         
-        // MARK: - 6. InputInjector Direct Streaming Delta Tests
-        print("\n📦 Suite 6: InputInjector (Direct Real-time Streaming Delta)")
+        // MARK: - 5. InputInjector Direct Streaming Delta Tests
+        print("\n📦 Suite 5: InputInjector (Direct Real-time Streaming Delta)")
         let injector = InputInjector.shared
         
         var prev1 = "你好"
@@ -148,8 +142,8 @@ public enum TestRunner {
                     "TC-F10: Repeated final transcript does not duplicate text")
         await injector.waitForPendingInjections()
 
-        // MARK: - 7. Sliding Transcript Reconciliation Tests
-        print("\n📦 Suite 7: Sliding Transcript Reconciliation")
+        // MARK: - 6. Sliding Transcript Reconciliation Tests
+        print("\n📦 Suite 6: Sliding Transcript Reconciliation")
         let accumulator = TranscriptAccumulator()
         assertEqual(
             accumulator.appendSlidingWindow(rawText: "今天要測試語音辨識", windowStartSample: 0),
@@ -201,8 +195,8 @@ public enum TestRunner {
                         "TC-G: Replayed snapshot posts no duplicate for " + example.name)
         }
 
-        // MARK: - 8. Smart Polish Orchestration Tests
-        print("\n📦 Suite 8: Smart Polish Orchestration")
+        // MARK: - 7. Smart Polish Orchestration Tests
+        print("\n📦 Suite 7: Smart Polish Orchestration")
         let smartPrimary = CLIMockLanguageModelBackend(transform: { "Polished: \($0)" })
         let smartEngine = SmartPolishEngine(primaryBackend: smartPrimary)
         let smartResult = await smartEngine.polish("Original transcript")

@@ -212,7 +212,7 @@ swift run butterfly-cli info
 - `~/.config/butterfly/SMART_POLISH_PROMPT.md` — optional Smart Polish prompt override.
 - `~/.cache/butterfly/models` — downloaded speech models.
 - `.build/app/Butterfly.app` — packaged app produced by `run.sh`.
-- `SYSTEM_PROMPT.md` — editable system prompt used for speech-recognition context biasing.
+- `Sources/ButterflyCore/Resources/dictionary.txt` — bundled speech-recognition vocabulary and contextual biasing terms.
 
 Keep personal configuration and credentials outside version control. `butterfly.sample.json` intentionally contains only generic names and environment-variable placeholders.
 
