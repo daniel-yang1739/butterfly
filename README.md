@@ -12,6 +12,17 @@ Smart Polish supports four persistent output styles: Faithful Proofread, Concise
 
 Configure custom providers and models in `~/.config/butterfly/butterfly.json`, then choose **Smart Polish Model** in the menu bar. The App and CLI share this configuration. See [endpoint configuration](docs/POLISH_ENDPOINTS.md) for the format, authentication, and behavior.
 
+### Smart Polish configuration
+
+The repository includes [`butterfly.sample.json`](butterfly.sample.json) as a safe configuration template. Copy it to the path Butterfly reads:
+
+```bash
+mkdir -p ~/.config/butterfly
+cp butterfly.sample.json ~/.config/butterfly/butterfly.json
+```
+
+Butterfly reads `~/.config/butterfly/butterfly.json` when it starts Smart Polish. Set `polish.defaultModel` to the model you want as the startup default, for example `local/foundation` or `my-provider/example-model`. The menu can temporarily select another configured model for the current run. The sample uses `$AI_ENDPOINT_BASE_URL` and `$AI_API_KEY` placeholders; provide those environment variables locally and never replace them with real credentials in a committed file.
+
 ---
 
 ## ✨ Key Features
