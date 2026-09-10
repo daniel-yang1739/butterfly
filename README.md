@@ -154,29 +154,6 @@ For an endpoint, set `polish.defaultModel` to `my-provider/example-model`. Provi
 
 The decoder accepts the old `polish.model` key for existing installations, but new files should use `polish.defaultModel`. The **Smart Polish Model** menu can temporarily override the configured default for the current app process. **Reload Polish Configuration** clears that override; restarting the app also returns to `polish.defaultModel`.
 
-### Passing endpoint environment variables
-
-Values such as `$AI_ENDPOINT_BASE_URL`, `${AI_ENDPOINT_BASE_URL}`, `$AI_API_KEY`, and the legacy `{env:VARIABLE_NAME}` form are resolved when the configuration is loaded. Do not commit real keys to `butterfly.json` or any repository file.
-
-When launching through `./run.sh`, macOS opens the app as a bundle. A shell-only `export` may not be visible to that app, especially when the app is launched by Launch Services. Export the values and publish them to the user launch environment before opening Butterfly:
-
-```bash
-export AI_ENDPOINT_BASE_URL="https://your-endpoint.example/v1"
-export AI_API_KEY="your-local-key"
-launchctl setenv AI_ENDPOINT_BASE_URL "$AI_ENDPOINT_BASE_URL"
-launchctl setenv AI_API_KEY "$AI_API_KEY"
-./run.sh --no-build
-```
-
-Check what Launch Services can see with:
-
-```bash
-launchctl getenv AI_ENDPOINT_BASE_URL
-launchctl getenv AI_API_KEY
-```
-
-After changing environment variables, quit and relaunch Butterfly. If the selected model is still `local/foundation` or `local/rules`, no endpoint request is expected: local Whisper/Apple Speech produces the transcript first, and only the Smart Polish transcript plus editing instructions are sent to a configured endpoint.
-
 ### Smart Polish styles and fallback
 
 Choose **Smart Polish Style** from the menu bar. The selection is stored in UserDefaults and survives relaunches:
@@ -241,7 +218,7 @@ Confirm that Accessibility is enabled for the exact `.build/app/Butterfly.app` c
 
 ### `The language model is unavailable`
 
-Check the selected Smart Polish model in the menu. For an endpoint model, validate JSON, confirm `type` is `openai-compatible`, verify `launchctl getenv` for every referenced variable, and relaunch the app. For `local/foundation`, confirm that the OS supports Apple Foundation Models and that Apple Intelligence is available. The app falls back to rules when the primary backend cannot be used.
+Check the selected Smart Polish model in the menu. For an endpoint model, validate JSON, confirm `type` is `openai-compatible`, ensure any referenced environment variables are available to the launched app, and relaunch it. For `local/foundation`, confirm that the OS supports Apple Foundation Models and that Apple Intelligence is available. The app falls back to rules when the primary backend cannot be used.
 
 ### Smart Polish does not produce headings or lists
 
