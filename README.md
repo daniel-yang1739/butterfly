@@ -4,96 +4,69 @@
 
 # 🦋 Butterfly
 
-Butterfly is a native macOS voice dictation tool for Apple Silicon. It transcribes speech locally with Whisper or Apple Speech, types live text into the focused application, and can optionally polish a completed transcript with an on-device model or an explicitly configured OpenAI-compatible endpoint.
-
-Butterfly is a menu bar app. The recommended workflow is to build or launch the packaged app with `./run.sh`; this gives the app the resources, app bundle metadata, and signing step required by macOS permissions.
+Butterfly is a native macOS voice dictation tool for Apple Silicon. It records speech with downloaded Whisper models or Apple Speech, types live transcription into the focused app, and can optionally polish a completed transcript with an on-device model or a configured OpenAI-compatible endpoint.
 
 ## Requirements
 
 - Apple Silicon Mac (`arm64`)
 - macOS 13 or later
 - Xcode Command Line Tools and Swift 5.9 or later
-- Homebrew and the `whisper-cpp` package for downloaded local Whisper models
-- macOS 26 or later with Apple Intelligence enabled for the Apple Foundation Models backend
+- Homebrew with `whisper-cpp` for local Whisper models
+- macOS 26 or later with Apple Intelligence for Apple Foundation Models
 
-The app can still use the built-in Apple Speech model when no downloaded Whisper model is available. Apple Speech requires the macOS Speech Recognition permission.
+When no downloaded Whisper model is available, Butterfly can use **Apple Speech Native**. That model requires macOS Speech Recognition permission.
 
-## Install, build, and launch
+## Build and launch
 
-From the repository root:
+Run this from the repository root:
 
 ```bash
 ./run.sh
 ```
 
-The first invocation checks the platform and developer tools, installs `whisper-cpp` with Homebrew when needed, builds a release app, and opens it. Later invocations launch the existing app without rebuilding or signing it. This distinction matters: a rebuild can change the ad-hoc code signature and cause macOS to ask for Accessibility again.
-
-Use these options when needed:
+The first run installs missing developer dependencies, builds a release app, and opens it. Later runs open the existing app without rebuilding or signing it. The packaged app is written to `.build/app/Butterfly.app`.
 
 | Command | Behavior |
 | --- | --- |
-| `./run.sh` | Launch the existing `.build/app/Butterfly.app`; build it first if it does not exist. |
-| `./run.sh --build` | Rebuild a release app, sign it, and launch it. |
-| `./run.sh --debug` | Rebuild a debug app, sign it, and launch it. |
-| `./run.sh --release` | Explicit release rebuild. |
-| `./run.sh --clean` | Clean Swift package artifacts, rebuild, and launch. |
-| `./run.sh --no-open` | Build and sign without launching. |
-| `./run.sh --no-build` | Launch an existing app only; fails when no app has been built. |
-| `./run.sh --help` | Show the current launcher help. |
+| `./run.sh` | Open the existing app, or build it first when it does not exist. |
+| `./run.sh --build` | Rebuild a release app and open it. |
+| `./run.sh --debug` | Rebuild a debug app and open it. |
+| `./run.sh --release` | Rebuild a release app and open it. |
+| `./run.sh --clean` | Clean SwiftPM artifacts, rebuild, and open the app. |
+| `./run.sh --no-open` | Build and sign without opening the app. |
+| `./run.sh --no-build` | Open an existing app without rebuilding or signing it. |
 
-The packaged app is created at:
+Use `swift build` for a package build and `swift run ButterflyApp` for development. `./run.sh` is the normal app workflow because it creates the complete bundle and signs it.
 
-```text
-.build/app/Butterfly.app
-```
+## Permissions and signing
 
-For a library or CLI-only build, use Swift Package Manager directly:
-
-```bash
-brew install whisper-cpp
-swift build
-```
-
-`swift run ButterflyApp` is useful for development, but `./run.sh` is preferred for normal use because it creates the complete `.app` bundle and applies the same signing and resource packaging as a user launch.
-
-## Permissions and macOS signing
-
-Butterfly needs these permissions for the corresponding features:
-
-| Permission | Required for |
+| Permission | Used for |
 | --- | --- |
-| **Accessibility** | Global `Option + Space` shortcuts, the low-level event tap, swallowing the first Enter/Esc, and keyboard/clipboard insertion. |
-| **Microphone** | Any recording mode. |
-| **Speech Recognition** | Only when the active speech model is **Apple Speech Native**. Downloaded Whisper models transcribe locally and do not use this permission. |
+| **Accessibility** | Global hotkeys, the event tap, Enter/Esc interception, and text insertion. |
+| **Microphone** | Recording in either mode. |
+| **Speech Recognition** | Apple Speech Native only. Downloaded Whisper models do not use it. |
 
-Open **System Settings → Privacy & Security → Accessibility**, add the current `Butterfly.app`, and enable it. The menu bar status reports `Global Hotkeys: Ready` when the event tap is active. If it reports `Accessibility Permission Required` or `Hotkeys unavailable`, use **Open Accessibility Settings...** from the Butterfly menu and re-enable the exact app bundle being used.
+Enable Accessibility for the exact `.build/app/Butterfly.app` in **System Settings → Privacy & Security → Accessibility**. The menu shows `Global Hotkeys: Ready` when registration succeeds. If it shows `Hotkeys unavailable`, re-enable the current app bundle.
 
-The default build uses an ad-hoc signature (`codesign --sign -`). macOS associates an Accessibility grant with the signed app identity, so replacing the bundle with `./run.sh --build` or `--clean` may require removing the old Butterfly entry and adding the newly built app again. `./run.sh` without a build does not replace the bundle and normally preserves the existing grant. A stable Developer ID signing identity can be supplied with `BUTTERFLY_CODESIGN_IDENTITY`, but a paid Apple Developer membership is not required for local development. See [macOS signing and Accessibility](docs/MACOS_SIGNING_AND_ACCESSIBILITY.md) for the certificate purpose, TCC behavior, and recovery steps.
+Local builds use an ad-hoc signature by default. Rebuilding with `--build`, `--debug`, or `--clean` can give the app a new identity in macOS TCC and require Accessibility to be enabled again. Running `./run.sh` without a build reuses the existing signed bundle. For the certificate and TCC details, see [macOS signing and Accessibility](docs/MACOS_SIGNING_AND_ACCESSIBILITY.md).
 
-## Keyboard controls and modes
+## Controls and modes
 
-| Shortcut | Mode | Result |
+| Shortcut | Mode | Behavior |
 | --- | --- | --- |
-| `Option + Space` | **Live Voice Dictation** | Streams transcription into the focused input while recording. The HUD shows the live microphone waveform. |
-| `Option + Shift + Space` | **Record & Smart Polish** | Records without inserting text, polishes the final transcript once, then inserts the result with a clipboard-safe paste. |
-| `Enter` or `Esc` | Stop | Stops recording. The first Enter is swallowed by the event tap so a chat app cannot submit a partial message; the next Enter is passed through normally. |
+| `Option + Space` | **Live Voice Dictation** | Streams transcription into the focused input. The floating HUD shows the microphone waveform. |
+| `Option + Shift + Space` | **Record & Smart Polish** | Records without insertion, polishes once, then pastes the final result. |
+| `Enter` or `Esc` | Stop | Stops recording. The first Enter is swallowed to prevent accidental submission; the next Enter passes through. |
 
-The same actions are available from the menu bar if a global hotkey cannot be used. While Smart Polish is processing, Enter/Esc remains swallowed until insertion finishes.
+The same actions are available from the menu bar when global hotkeys are unavailable. Enter/Esc remains swallowed while Smart Polish is processing.
 
-## Speech models and model storage
+## Speech models
 
-The **Speech Model** menu controls local ASR. The available models are:
+The **Speech Model** menu manages local ASR. It includes Whisper Large-v3-Turbo, Whisper Small, Whisper Base, Whisper Tiny, and Apple Speech Native. SenseVoice Small remains in the catalog but is disabled because the bundled runtime does not currently support it.
 
-- Whisper Large-v3-Turbo (highest accuracy, about 1.6 GB)
-- Whisper Small (about 488 MB)
-- SenseVoice Small (about 230 MB; catalog entry, currently disabled by the bundled runtime)
-- Whisper Base (about 148 MB)
-- Whisper Tiny (about 78 MB)
-- Apple Speech Native (built into macOS)
+Whisper files are cached in `~/.cache/butterfly/models`. Butterfly chooses the highest-ranked downloaded runtime-supported model unless you select another downloaded model. The ASR choice is stored separately from Smart Polish settings.
 
-Downloaded Whisper files are stored in `~/.cache/butterfly/models`. The app selects the highest-ranked downloaded runtime-supported model unless a downloaded model has been selected in the menu. Apple Speech is the fallback when no usable Whisper model is cached. The selected ASR model is stored in the app's UserDefaults and is independent of the Smart Polish model.
-
-The menu also provides model download, deletion, cache cleanup, and **Open Models Folder in Finder**. The CLI exposes the same cache:
+The menu and CLI can download, delete, and inspect cached models:
 
 ```bash
 swift run butterfly-cli models
@@ -105,20 +78,20 @@ swift run butterfly-cli info
 
 ## Smart Polish configuration
 
-Butterfly reads this exact file when Smart Polish starts:
+Smart Polish reads:
 
 ```text
 ~/.config/butterfly/butterfly.json
 ```
 
-The repository includes [`butterfly.sample.json`](butterfly.sample.json). It is a safe template with placeholders, not a credential file. Copy it once, then edit the copy:
+Copy [`butterfly.sample.json`](butterfly.sample.json) as a starting point:
 
 ```bash
 mkdir -p ~/.config/butterfly
 cp butterfly.sample.json ~/.config/butterfly/butterfly.json
 ```
 
-The `polish.defaultModel` value is the model used at startup. A model ID is either a built-in ID or `<provider-id>/<model-id>`:
+Set `polish.defaultModel` to a built-in model or `<provider-id>/<model-id>`:
 
 ```json
 {
@@ -132,8 +105,7 @@ The `polish.defaultModel` value is the model used at startup. A model ID is eith
       "type": "openai-compatible",
       "options": {
         "baseURL": "$AI_ENDPOINT_BASE_URL",
-        "apiKey": "$AI_API_KEY",
-        "timeoutMs": 30000
+        "apiKey": "$AI_API_KEY"
       },
       "models": {
         "example-model": {
@@ -145,92 +117,57 @@ The `polish.defaultModel` value is the model used at startup. A model ID is eith
 }
 ```
 
-Built-in model IDs are:
+Built-in IDs are `local/foundation` (Apple Foundation Models on macOS 26+) and `local/rules` (deterministic local fallback). Endpoint providers must use `type: "openai-compatible"`; detailed options, API variants, limits, and environment placeholder syntax are documented in [POLISH_ENDPOINTS.md](docs/POLISH_ENDPOINTS.md).
 
-- `local/foundation`: Apple Foundation Models on macOS 26+.
-- `local/rules`: deterministic local rules; it does not call a remote model.
+Existing files using `polish.model` remain supported, but new files should use `polish.defaultModel`. The **Smart Polish Model** menu temporarily overrides the configured default for the current process; **Reload Polish Configuration** or a restart returns to the configured default.
 
-For an endpoint, set `polish.defaultModel` to `my-provider/example-model`. Providers currently use `type: "openai-compatible"`; `options.baseURL` accepts HTTPS URLs (HTTP is allowed only for loopback), `apiKey` and custom headers are optional, and the model can select `api: "chat-completions"` or `api: "responses"`. Model entries may also define limits, variants, reasoning options, and chunk sizes; see [endpoint configuration](docs/POLISH_ENDPOINTS.md).
+## Smart Polish styles
 
-The decoder accepts the old `polish.model` key for existing installations, but new files should use `polish.defaultModel`. The **Smart Polish Model** menu can temporarily override the configured default for the current app process. **Reload Polish Configuration** clears that override; restarting the app also returns to `polish.defaultModel`.
-
-### Smart Polish styles and fallback
-
-Choose **Smart Polish Style** from the menu bar. The selection is stored in UserDefaults and survives relaunches:
+Choose a style from **Smart Polish Style**. The choice persists between launches.
 
 | Style | Behavior |
 | --- | --- |
 | **Faithful Proofread** | Correct punctuation and boundaries while preserving wording and detail. |
-| **Concise Polish** | Remove fillers, stutters, abandoned starts, and clearly redundant repetition while preserving substantive points. This is the default. |
-| **Structured Notes** | Keep paragraph-first blocks and add headings or genuine parallel lists when they clarify the transcript. |
-| **Summary** | Keep central ideas, decisions, caveats, and conclusions; omit minor detail. |
+| **Concise Polish** | Remove fillers, stutters, and clearly redundant repetition. This is the default. |
+| **Structured Notes** | Keep paragraph-first blocks and add headings or genuine parallel lists when useful. |
+| **Summary** | Keep central ideas, decisions, caveats, and conclusions. |
 
-If the selected primary backend is unavailable, Butterfly uses the configured `rules` fallback and reports the reason. Rule fallback is deterministic and has less context-sensitive restructuring than an LLM, so selecting **Structured Notes** does not guarantee extensive bullet lists when the fallback is active. A custom editing prompt can be placed at `~/.config/butterfly/SMART_POLISH_PROMPT.md`; the bundled prompt is used when that file is absent.
+If the primary model is unavailable, Butterfly uses the configured `rules` fallback and reports the reason. The fallback is deterministic and more conservative than an LLM. An optional Smart Polish prompt can be placed at `~/.config/butterfly/SMART_POLISH_PROMPT.md`.
 
-## CLI commands
-
-The CLI is useful for checking models, formatting, and configuration without launching the menu bar app:
+## CLI
 
 ```bash
 swift run butterfly-cli listen
 swift run butterfly-cli test
 swift run butterfly-cli test-polish --smart --style structured
 swift run butterfly-cli test-convert "服务器内存不足"
-swift run butterfly-cli models
-swift run butterfly-cli info
 ```
 
-`butterfly-cli test-polish --smart` loads the same `~/.config/butterfly/butterfly.json` and environment variables as the app. The CLI test runner is a zero-dependency logic suite; use `swift test` for XCTest targets.
+The CLI uses the same Smart Polish configuration as the app. `swift run butterfly-cli test` runs the zero-dependency core regression suite; `swift test` runs XCTest targets.
 
-## User customization and important paths
+## Important paths
 
-- `~/.config/butterfly/butterfly.json` — Smart Polish default model and providers.
-- `~/.config/butterfly/dictionary.txt` — optional technical vocabulary; Butterfly initializes it from the bundled dictionary and reloads it at each recording start.
+- `~/.config/butterfly/butterfly.json` — Smart Polish providers and startup default.
+- `~/.config/butterfly/dictionary.txt` — personal technical vocabulary.
 - `~/.config/butterfly/SMART_POLISH_PROMPT.md` — optional Smart Polish prompt override.
 - `~/.cache/butterfly/models` — downloaded speech models.
-- `.build/app/Butterfly.app` — packaged app produced by `run.sh`.
-- `Sources/ButterflyCore/Resources/dictionary.txt` — bundled speech-recognition vocabulary and contextual biasing terms.
+- `.build/app/Butterfly.app` — packaged application.
+- `Sources/ButterflyCore/Resources/dictionary.txt` — bundled speech vocabulary.
 
-Keep personal configuration and credentials outside version control. `butterfly.sample.json` intentionally contains only generic names and environment-variable placeholders.
-
-## Architecture
-
-```text
-Microphone
-   │
-   ▼
-Local Whisper / Apple Speech ──► Traditional Chinese + formatting
-   │                                  │
-   ├─ Live Voice Dictation ───────────┴─► streaming cursor deltas
-   │
-   └─ Record & Smart Polish ─► local Foundation / rules / configured endpoint
-                                      │
-                                      └─► one clipboard-safe insertion
-```
-
-The core Swift package is split into audio capture, speech engines, text formatting and polishing, input injection, and state coordination. The AppKit target owns the menu bar item, floating HUD, global event tap, permissions, and lifecycle. See [architecture details](docs/ARCHITECTURE.md) and the [test plan](docs/TEST_PLAN.md).
+Keep personal configuration and credentials outside version control. The sample file contains only generic names and placeholders.
 
 ## Troubleshooting
 
-### `Hotkeys unavailable` or `Accessibility Permission Required`
+### `Hotkeys unavailable`
 
-Confirm that Accessibility is enabled for the exact `.build/app/Butterfly.app` currently running. If you used `./run.sh --build` or `--clean`, macOS may treat the newly signed ad-hoc bundle as a different client: quit Butterfly, remove the old entry, add the current app again, and enable it. `./run.sh` without a build reuses the existing signed bundle.
+Enable Accessibility for the exact app bundle currently running. A rebuild can change the ad-hoc signing identity, so remove the old entry and add `.build/app/Butterfly.app` again if necessary.
 
 ### `The language model is unavailable`
 
-Check the selected Smart Polish model in the menu. For an endpoint model, validate JSON, confirm `type` is `openai-compatible`, ensure any referenced environment variables are available to the launched app, and relaunch it. For `local/foundation`, confirm that the OS supports Apple Foundation Models and that Apple Intelligence is available. The app falls back to rules when the primary backend cannot be used.
-
-### Smart Polish does not produce headings or lists
-
-Select **Structured Notes** in **Smart Polish Style**. Check whether the model menu says **(Configured)** or **(Rules Fallback)**; rules fallback intentionally performs conservative deterministic formatting.
+Check the selected Smart Polish model, validate `butterfly.json`, and ensure referenced environment variables are available to the launched app. For `local/foundation`, confirm macOS 26+ and Apple Intelligence. Butterfly falls back to rules when the primary backend is unavailable.
 
 ### Recording does not start
 
-Grant Microphone permission. If the active ASR model is Apple Speech Native, also grant Speech Recognition. For a Whisper model, download a supported model from the **Speech Model** menu or with `butterfly-cli download`.
+Grant Microphone permission. Also grant Speech Recognition when Apple Speech Native is selected. For Whisper, download a supported model from the **Speech Model** menu or with `butterfly-cli download`.
 
-### Verify the app and cache state
-
-```bash
-swift run butterfly-cli info
-codesign --verify --deep --strict .build/app/Butterfly.app
-```
+More design and validation details are in [ARCHITECTURE.md](docs/ARCHITECTURE.md), [POLISH_ENDPOINTS.md](docs/POLISH_ENDPOINTS.md), [TEST_PLAN.md](docs/TEST_PLAN.md), and [MACOS_SIGNING_AND_ACCESSIBILITY.md](docs/MACOS_SIGNING_AND_ACCESSIBILITY.md).
