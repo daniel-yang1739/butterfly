@@ -8,12 +8,12 @@
       "name": "My AI Provider",
       "type": "openai-compatible",
       "options": {
-        "baseURL": "$BUTTERFLY_BASE_URL",
-        "apiKey": "$BUTTERFLY_API_KEY",
+        "baseURL": "$AI_ENDPOINT_BASE_URL",
+        "apiKey": "$AI_API_KEY",
         "timeoutMs": 30000
       },
       "models": {
-        "gpt-5.6-luna": {
+        "<model_code>": {
           "name": "GPT-5.6-luna"
         },
         "gpt-5.6-terra": {
@@ -39,38 +39,13 @@
             "output": 65536
           }
         },
-        "gpt-5.6-luna-aws": {
-          "name": "GPT-5.6-luna AWS"
-        },
-        "gpt-5.6-terra-aws": {
-          "name": "GPT-5.6-terra AWS"
-        },
-        "claude-4.6-sonnet-aws": {
-          "name": "Claude 4.6 Sonnet"
-        },
         "claude-4.8-opus-aws": {
           "name": "Claude 4.8 Opus"
         },
-        "gemini-3.1-pro": {
-          "name": "Gemini 3.1 Pro"
-        },
-        "gemini-3.7-flash": {
-          "name": "Gemini 3.7 Flash"
+        "gemini-3.8-flash": {
+          "name": "Gemini 3.8 Flash"
         }
       }
     },
-    "ollama": {
-      "name": "Ollama",
-      "type": "openai-compatible",
-      "options": {
-        "baseURL": "http://localhost:11434/v1",
-        "timeoutMs": 30000
-      },
-      "models": {
-        "gemma4": {
-          "name": "Gemma 4"
-        }
-      }
-    }
   }
 }
