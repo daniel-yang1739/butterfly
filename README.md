@@ -10,6 +10,8 @@ Butterfly is a native macOS voice dictation tool for Apple Silicon. It records s
 
 **Mode 1 — Live Voice Dictation**
 
+Press `Option + Space` to record and stream the transcript directly into the focused app. The HUD displays the live microphone waveform while you speak.
+
 <p align="center">
   <a href="docs/assets/mode1.mp4">
     <img src="docs/assets/mode1.gif" alt="Mode 1 — Live Voice Dictation" width="640" />
@@ -17,6 +19,8 @@ Butterfly is a native macOS voice dictation tool for Apple Silicon. It records s
 </p>
 
 **Mode 2 — Record &amp; Smart Polish**
+
+Press `Option + Shift + Space` to record without inserting partial text. Butterfly polishes the completed transcript once, then inserts the final result.
 
 <p align="center">
   <a href="docs/assets/Mode2.mp4">
