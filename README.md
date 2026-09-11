@@ -6,6 +6,11 @@
 
 Butterfly is a native macOS voice dictation tool for Apple Silicon. It records speech with downloaded Whisper models or Apple Speech, types live transcription into the focused app, and can optionally polish a completed transcript with an on-device model or a configured OpenAI-compatible endpoint.
 
+## Demos
+
+- [Mode 1 — Live Voice Dictation](docs/assets/mode1.mov)
+- [Mode 2 — Record & Smart Polish](docs/assets/Mode2.mp4)
+
 ## Requirements
 
 - Apple Silicon Mac (`arm64`)
