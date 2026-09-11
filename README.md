@@ -50,7 +50,14 @@ Run this from the repository root:
 
 The first run installs missing developer dependencies, builds a release app, and opens it. Later runs open the existing app without rebuilding or signing it. The packaged app is written to `.build/app/Butterfly.app`.
 
-Building does not grant or require Butterfly's Accessibility, Microphone, or Speech Recognition permissions. The first app launch may request Accessibility; Microphone and Speech Recognition are requested when recording starts. Installing Xcode Command Line Tools or Homebrew may separately require administrator approval.
+Permission timing:
+
+- Building does not grant or require Butterfly's Accessibility, Microphone, or Speech Recognition permissions.
+- The first app launch may request Accessibility.
+- Microphone permission is requested when recording starts.
+- Speech Recognition permission is requested when recording starts with Apple Speech Native.
+- A rebuild may create a new macOS TCC identity. If the old grant no longer works, quit Butterfly, remove the old Accessibility entry, add the current `.build/app/Butterfly.app`, and enable it again.
+- Installing Xcode Command Line Tools or Homebrew may separately require administrator approval.
 
 | Command | Behavior |
 | --- | --- |
@@ -74,7 +81,7 @@ Use `swift build` for a package build and `swift run ButterflyApp` for developme
 
 Enable Accessibility for the exact `.build/app/Butterfly.app` in **System Settings → Privacy & Security → Accessibility**. The menu shows `Global Hotkeys: Ready` when registration succeeds. If it shows `Hotkeys unavailable`, re-enable the current app bundle.
 
-Local builds use an ad-hoc signature by default. Rebuilding with `--build`, `--debug`, or `--clean` can give the app a new identity in macOS TCC and require Accessibility to be enabled again. Running `./run.sh` without a build reuses the existing signed bundle. For the certificate and TCC details, see [macOS signing and Accessibility](docs/MACOS_SIGNING_AND_ACCESSIBILITY.md).
+Local builds use an ad-hoc signature by default. Rebuilding with `--build`, `--debug`, or `--clean` can give the app a new identity in macOS TCC. Running `./run.sh` without a build reuses the existing signed bundle. For the certificate and TCC details, see [macOS signing and Accessibility](docs/MACOS_SIGNING_AND_ACCESSIBILITY.md).
 
 ## Controls and modes
 
