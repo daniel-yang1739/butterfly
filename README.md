@@ -50,6 +50,8 @@ Run this from the repository root:
 
 The first run installs missing developer dependencies, builds a release app, and opens it. Later runs open the existing app without rebuilding or signing it. The packaged app is written to `.build/app/Butterfly.app`.
 
+Building does not grant or require Butterfly's Accessibility, Microphone, or Speech Recognition permissions. The first app launch may request Accessibility; Microphone and Speech Recognition are requested when recording starts. Installing Xcode Command Line Tools or Homebrew may separately require administrator approval.
+
 | Command | Behavior |
 | --- | --- |
 | `./run.sh` | Open the existing app, or build it first when it does not exist. |
