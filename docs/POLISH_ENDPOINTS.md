@@ -2,7 +2,7 @@
 
 建立 `~/.config/butterfly/butterfly.json`。沒有設定檔時，維持 Apple Foundation Models 與本機 rules fallback。
 
-Repo 根目錄的 [`butterfly.json`](../butterfly.json) 提供自訂 AI provider 與 Ollama 模型的範本，預設仍使用本機 Apple Foundation Models。App 不會自動讀取 repo 裡的檔案；請將它複製到上述使用者設定路徑，並設定自己的 endpoint 與 API key 環境變數。範本的 `gpt-5.6-terra` 包含 reasoning、variants 與 token limit 設定。
+Repo 根目錄的 [`butterfly.sample.json`](../butterfly.sample.json) 提供自訂 OpenAI-compatible provider 的範本，預設仍使用本機 Apple Foundation Models。App 不會自動讀取 repo 裡的檔案；請將它複製到上述使用者設定路徑，並設定自己的 endpoint 與 API key 環境變數。範本的 `gpt-5.6-terra` 包含 reasoning、variants 與 token limit 設定。Ollama、Python、Node.js 與其他外部 runtime 不在 Butterfly 的必要依賴中；若要連接本機服務，該服務需由使用者自行安裝並啟動。
 
 ```json
 {

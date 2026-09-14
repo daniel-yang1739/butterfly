@@ -2,6 +2,8 @@
 
 記錄日期：2026-09-09。本文以 macOS 本機開發為主，不把 iOS、App Store 或企業受管理裝置的規則直接套用到這個工具。
 
+若從 repo 建置，使用者只需 Apple Silicon Mac、macOS 13.3 以上與 Xcode Command Line Tools；不需要完整 Xcode、Homebrew 或其他語言 runtime。`./run.sh` 會在首次建置時下載 Swift Package 依賴與 Whisper runtime。若使用已打包的 `.app`，則不需要 Command Line Tools。
+
 **目前決定：Butterfly 保留 ad-hoc 臨時簽章，不自動建立本機憑證。** 使用者接受重建後可能需要重新授權。本文也解釋較完整的簽章方案，但那些方案並未啟用。
 
 ## 閱讀導覽

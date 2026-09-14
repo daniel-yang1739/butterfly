@@ -10,8 +10,13 @@ Speech recognition can run locally with Whisper. Smart Polish can use Apple Foun
 
 ## Quick start
 
-Butterfly requires an Apple Silicon Mac running macOS 13.3 or later. The first build needs internet access to download Swift packages and the bundled Whisper runtime.
-Homebrew is not required.
+Butterfly requires an Apple Silicon Mac running macOS 13.3 or later. To build this repository, install Apple's **Xcode Command Line Tools** first; the full Xcode app is not required. Homebrew, Python, Node.js, Docker, and Ollama are not required.
+
+```bash
+xcode-select --install
+```
+
+If the tools are already installed, the command opens a message saying so. The first build also needs internet access to download Swift packages and the bundled Whisper runtime. Git is only needed if you clone the repository with `git clone`; it is included with the Command Line Tools.
 
 From the repository root, run:
 
@@ -26,6 +31,8 @@ On the first run, the script:
 3. Downloads the pinned official `whisper.cpp` XCFramework through Swift Package Manager.
 4. Builds and signs `.build/app/Butterfly.app`.
 5. Opens Butterfly.
+
+The script does not grant macOS privacy permissions and does not download a speech model. Those are completed after the app opens; see [Permissions](#permissions) and [Speech models](#speech-models).
 
 Whisper model files are downloaded separately from the Butterfly menu. Until then, Butterfly uses **Apple Speech Native**.
 
