@@ -1,4 +1,5 @@
 import AppKit
+import ButterflyCore
 
 /// A nonactivating recording waveform that switches to text during polishing.
 @MainActor

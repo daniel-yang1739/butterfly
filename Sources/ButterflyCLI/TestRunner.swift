@@ -1,5 +1,6 @@
 import Foundation
 import ButterflyCore
+import ButterflyTestSupport
 
 /// Comprehensive Zero-Dependency Unit Test Runner for Butterfly Core Engine
 public enum TestRunner {
@@ -374,6 +375,11 @@ public enum TestRunner {
         } catch {
             assertTrue(false, "Endpoint integration failed: \(error.localizedDescription)")
         }
+
+        let dictationChecks = await DictationRegressionSuite.audio()
+            + DictationRegressionSuite.recognition()
+            + DictationRegressionSuite.coordinator()
+        for check in dictationChecks { assertTrue(check.passed, check.name) }
 
         // MARK: - Final Summary
         print("\n" + String(repeating: "=", count: 60))

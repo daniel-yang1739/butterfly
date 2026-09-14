@@ -2,11 +2,11 @@
 
 ## 1. 測試理念 (Testing Philosophy)
 
-為防止在 Butterfly 新增功能、升級模型或重構架構時造成既有核心邏輯的迴歸損壞（Regression），我們建立了全方位的 26 項核心邏輯測試矩陣。所有繁簡轉換、排版、兩輪認知意圖重構、數字/單位標準化、動態提示詞、白名單與鍵盤注入均有嚴格的自動化斷言保護。
+為防止在 Butterfly 新增功能、升級模型或重構架構時造成既有核心邏輯的迴歸損壞（Regression），我們建立了核心邏輯與錄音生命週期測試矩陣。所有繁簡轉換、排版、兩輪認知意圖重構、數字/單位標準化、動態提示詞、白名單與鍵盤注入均有嚴格的自動化斷言保護。
 
 ---
 
-## 2. 邏輯測試案例矩陣 (26 Core Logic Assertions)
+## 2. 邏輯測試案例矩陣 (Core Logic Assertions)
 
 ### 📦 Suite 1：繁簡轉換與語言過濾測試 (`OpenCCTranslator`)
 - **TC-A1**：純簡體字轉換（`"这是语音识别测试"` $\rightarrow$ `"這是語音識別測試"`）
@@ -47,6 +47,23 @@
 ## 3. 測試執行方式 (How to Run Tests)
 
 ```bash
-# 執行所有 26 項核心邏輯單元測試
+# 執行核心邏輯與共用錄音回歸測試
 swift run butterfly-cli test
 ```
+
+
+## 4. 共用錄音生命週期回歸測試
+
+`Tests/Support/DictationRegressionSuite.swift` 由 CLI 與 XCTest 共用。測試直接驅動 App 使用的 `ButterflyStateMachine`，音訊來源與文字輸出器使用可控制的替身，不開啟麥克風、不發送鍵盤事件，也不呼叫真實模型端點。
+
+- **Whisper 音訊排程**：純靜音、短暫雜音、停頓期間推論完成、停止後沒有新語音、推論期間仍有新語音、尾端靜音裁切、短句與超過 20 秒的音訊保存。
+- **Apple Speech 收尾**：超過原本 200 毫秒仍等待 final、重複 final、空 final、逾時保留 partial、取消等待、錯誤完成，以及舊 request／舊 recording 回呼隔離。
+- **App 協調器**：即時 partial、最終回寫、輸出排空前維持 processing、重複 stop、防止收尾期間啟動下一輪、潤稿只貼上一次、空錄音、啟動失敗與辨識錯誤清理。
+
+```bash
+swift run butterfly-cli test
+# 使用包含 XCTest 的 Xcode 工具鏈時，也可以執行：
+swift test
+```
+
+自動測試驗證音訊排程與生命週期，不代表已驗證真實麥克風或模型辨識品質。人工驗收應包含：說一句話後停頓 5 秒、繼續說話、停頓後結束錄音、實際說出「thank you／and then／waiting for」，以及輕聲短句。確認未增加沒說出口的內容，也沒有誤刪真正說出口的英文或尾音。

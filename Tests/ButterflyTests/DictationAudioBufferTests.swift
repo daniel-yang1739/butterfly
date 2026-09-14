@@ -11,12 +11,11 @@ final class DictationAudioBufferTests: XCTestCase {
         let second = try XCTUnwrap(audio.nextSnapshot())
         XCTAssertEqual(second.startSample, first.startSample)
         XCTAssertEqual(Array(second.samples.prefix(10)), first.samples)
-        audio.acknowledge(second)
         audio.append(Array(repeating: 0, count: 6), isVoiced: false)
         let final = try XCTUnwrap(audio.nextSnapshot())
         XCTAssertTrue(final.isFinal)
         XCTAssertEqual(final.startSample, first.startSample)
-        XCTAssertEqual(final.endSample, 41)
+        XCTAssertEqual(final.endSample, 36)
     }
 
     func testSlowInferenceDoesNotDiscardOrReplayAudio() throws {

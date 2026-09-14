@@ -2,35 +2,14 @@ import AppKit
 import SwiftUI
 import ButterflyCore
 
-/// Operating mode for Butterfly
-public enum ButterflyMode: String, CaseIterable, Sendable {
-    case liveStreaming = "live"
-    case smartPolish = "smart-polish"
-
-    public var title: String {
-        switch self {
-        case .liveStreaming:
-            return "Live Voice Dictation"
-        case .smartPolish:
-            return "Record & Smart Polish"
-        }
-    }
-}
-
-private enum AppActivity: Equatable {
-    case idle
-    case starting(ButterflyMode)
-    case recording(ButterflyMode)
-    case processing(ButterflyMode)
-}
-
 @main
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let smartPolishStyleDefaultsKey = "smartPolishStyle"
 
     private var statusItem: NSStatusItem!
-    private var activity: AppActivity = .idle
+    private let stateMachine = ButterflyStateMachine(output: CursorDictationOutput())
+    private var activity: ButterflyState { stateMachine.currentState }
     private var isDownloadingModel: Bool = false
     private var activeMode: ButterflyMode = .liveStreaming
     private var smartPolishStyle = SmartPolishStyle(
@@ -39,14 +18,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var smartPolishAvailabilityText = "Checking..."
     // Menu selection is an in-process override; the JSON model remains the startup default.
     private var polishModelOverride: String?
-    private var recordingPolishEngine = SmartPolishEngine()
     private var recordingPolishModel = "local/foundation"
 
-    private var streamingInjectedText: String = ""
-    private var latestTranscript: String = ""
+    private var latestTranscript: String { stateMachine.latestTranscript }
     private let liveEngine = LiveSpeechEngine.shared
     private let localWhisperEngine = LocalWhisperStreamEngine.shared
-    private var isUsingLocalWhisper = false
     private var localEventMonitor: Any?
     private var hotkeyRetryTimer: Timer?
     private var hotkeyStatus = "Checking global hotkeys..."
@@ -84,42 +60,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         refreshSmartPolishAvailability()
 
-        // Listen for live speech recognition updates
-        liveEngine.onTranscriptUpdate = { [weak self] formattedText in
-            Task { @MainActor in
-                self?.handleTranscriptUpdate(formattedText)
-            }
-        }
-        localWhisperEngine.onTranscriptUpdate = { [weak self] formattedText in
-            Task { @MainActor in
-                self?.handleTranscriptUpdate(formattedText)
-            }
-        }
-
-        liveEngine.onAudioLevelUpdate = { [weak self] level in
-            Task { @MainActor in
-                guard let self, self.isRecording, !self.isUsingLocalWhisper else { return }
-                FloatingHUDWindow.shared.updateAudioLevel(level)
-            }
-        }
-        localWhisperEngine.onAudioLevelUpdate = { [weak self] level in
-            Task { @MainActor in
-                guard let self, self.isRecording, self.isUsingLocalWhisper else { return }
-                FloatingHUDWindow.shared.updateAudioLevel(level)
-            }
-        }
-
-        liveEngine.onError = { error in
-            Task { @MainActor in
-                print("Recognition Engine Info: \(error.localizedDescription)")
-            }
-        }
-        localWhisperEngine.onError = { error in
-            Task { @MainActor [weak self] in
-                print("Local Whisper Engine Error: \(error.localizedDescription)")
-                if let self, self.isRecording, self.isUsingLocalWhisper {
-                    await self.stopAndInject()
+        stateMachine.onStateChange = { [weak self] state in self?.updateRecordingState(state) }
+        stateMachine.onTranscript = { [weak self] text in self?.handleTranscriptUpdate(text) }
+        stateMachine.onAudioLevel = { level in FloatingHUDWindow.shared.updateAudioLevel(level) }
+        stateMachine.onError = { [weak self] error in self?.showRecordingError(error.localizedDescription) }
+        stateMachine.onProcessingStage = { [weak self] stage in
+            guard let self else { return }
+            switch stage {
+            case .finalizing:
+                self.statusItem.button?.title = " Finalizing..."
+                if self.activeMode == .smartPolish {
+                    FloatingHUDWindow.shared.updateStatus(title: "Smart Polish", detail: "Finalizing transcript...")
                 }
+            case .polishing:
+                self.statusItem.button?.title = " Polishing..."
+                FloatingHUDWindow.shared.updateStatus(title: "Smart Polish", detail: "Polishing with \(self.recordingPolishModel)...")
+            case .inserting:
+                self.statusItem.button?.title = " Inserting..."
+                FloatingHUDWindow.shared.updateStatus(title: "Smart Polish", detail: "Inserting polished text...")
+            }
+        }
+        stateMachine.onPolishResult = { result in
+            if result.usedFallback {
+                print("Butterfly: Used local rules fallback: \(result.fallbackReason ?? "unknown reason")")
             }
         }
 
@@ -482,179 +445,82 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Start either live dictation or deferred smart polishing.
+    /// Configure dependencies; the Core state machine owns recording and output ordering.
     private func startListening(mode: ButterflyMode = .liveStreaming) async {
         guard activity == .idle else { return }
-        activity = .starting(mode)
-        statusItem.button?.title = " Starting..."
-        updateMenu()
-
         let activeModel = ModelManager.shared.activeASRModel
-        isUsingLocalWhisper = activeModel.id.hasPrefix("whisper-")
-        let granted: Bool
-        if isUsingLocalWhisper {
-            granted = await localWhisperEngine.requestMicrophonePermission()
+        let source: any DictationSpeechSource
+        if activeModel.id.hasPrefix("whisper-") {
+            source = WhisperDictationSource(
+                engine: localWhisperEngine,
+                modelPath: ModelManager.shared.localPath(for: activeModel).path
+            )
         } else {
-            granted = await liveEngine.requestPermissions()
+            source = AppleDictationSource(engine: liveEngine)
         }
-        guard granted else {
-            finishProcessing()
-            showRecordingError("Enable Microphone permission for Butterfly in System Settings > Privacy & Security. The Apple Speech model also requires Speech Recognition permission.")
-            return
-        }
-
         do {
+            let engine: SmartPolishEngine
             if mode == .smartPolish {
                 let configuration = try PolishConfiguration.load()
                 recordingPolishModel = polishModelOverride ?? configuration.polish.defaultModel
-                recordingPolishEngine = try configuration.makeEngine(model: recordingPolishModel)
-            }
-            latestTranscript = ""
-            streamingInjectedText = ""
-            activeMode = mode
-            recordingStartTime = nil
-            animationIndex = 0
-
-            self.statusItem.button?.title = " Starting \(mode.title)..."
-            self.updateMenu()
-
-            recordingTimer?.invalidate()
-            recordingTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    guard let self = self, self.isRecording else { return }
-                    self.animationIndex = (self.animationIndex + 1) % 4
-                    let dots = String(repeating: "·", count: self.animationIndex + 1)
-                    let elapsed = Int(Date().timeIntervalSince(self.recordingStartTime ?? Date()))
-                    let timeStr = String(format: "[%02d:%02d]", elapsed / 60, elapsed % 60)
-
-                    if self.activeMode == .smartPolish {
-                        self.statusItem.button?.title = " 📝 \(timeStr) Recording \(dots)"
-                    } else if self.latestTranscript.isEmpty {
-                        self.statusItem.button?.title = " 🎙️ \(timeStr) Streaming \(dots)"
-                    }
-                    FloatingHUDWindow.shared.updateRecordingTime(timeStr, mode: self.activeMode)
-                }
-            }
-
-            if isUsingLocalWhisper {
-                let modelPath = ModelManager.shared.localPath(for: activeModel).path
-                try await localWhisperEngine.startListening(modelPath: modelPath)
+                engine = try configuration.makeEngine(model: recordingPolishModel)
             } else {
-                try liveEngine.startLiveListening()
+                engine = SmartPolishEngine()
             }
-            activity = .recording(mode)
-            recordingStartTime = Date()
-            updateMenu()
-            FloatingHUDWindow.shared.show(mode: mode)
-            print("Butterfly: Started \(mode.title) [ASR: \(activeModel.displayName)]...")
+            let style = smartPolishStyle
+            await stateMachine.start(mode: mode, source: source) { text in
+                await engine.polish(text, style: style)
+            }
         } catch {
-            print("Failed to start recording: \(error.localizedDescription)")
-            activity = .idle
-            FloatingHUDWindow.shared.hide()
-            recordingTimer?.invalidate()
-            recordingTimer = nil
-            self.statusItem.button?.title = ""
-            self.updateMenu()
             showRecordingError(error.localizedDescription)
         }
     }
 
-    /// Stop listening and finalize text
-    private func stopAndInject() async {
-        guard case .recording(let mode) = activity else { return }
-        activity = .processing(mode)
-        if mode == .liveStreaming {
+    private func stopAndInject() async { await stateMachine.stop() }
+
+    /// UI rendering follows the same state transitions exercised by Core tests.
+    private func updateRecordingState(_ state: ButterflyState) {
+        switch state {
+        case .idle:
+            recordingTimer?.invalidate()
+            recordingTimer = nil
+            recordingStartTime = nil
             FloatingHUDWindow.shared.hide()
-        } else {
-            FloatingHUDWindow.shared.updateStatus(
-                title: "⏳ Smart Polish",
-                detail: "Finalizing transcript..."
-            )
+            statusItem.button?.title = ""
+        case .starting(let mode):
+            activeMode = mode
+            animationIndex = 0
+            statusItem.button?.title = " Starting \(mode.title)..."
+        case .recording(let mode):
+            recordingStartTime = Date()
+            FloatingHUDWindow.shared.show(mode: mode)
+            recordingTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self, self.isRecording else { return }
+                    self.animationIndex = (self.animationIndex + 1) % 4
+                    let dots = String(repeating: "·", count: self.animationIndex + 1)
+                    let elapsed = Int(Date().timeIntervalSince(self.recordingStartTime ?? Date()))
+                    let time = String(format: "[%02d:%02d]", elapsed / 60, elapsed % 60)
+                    if mode == .smartPolish || self.latestTranscript.isEmpty {
+                        self.statusItem.button?.title = " \(time) Recording \(dots)"
+                    }
+                    FloatingHUDWindow.shared.updateRecordingTime(time, mode: mode)
+                }
+            }
+        case .processing(let mode):
+            recordingTimer?.invalidate()
+            recordingTimer = nil
+            if mode == .liveStreaming { FloatingHUDWindow.shared.hide() }
         }
-        recordingTimer?.invalidate()
-        recordingTimer = nil
-
-        self.statusItem.button?.title = " ⏳ Finalizing..."
-        self.updateMenu()
-
-        // Asynchronously flush audio buffers and retrieve full finalized transcript
-        let fullRawTranscript = isUsingLocalWhisper
-            ? await localWhisperEngine.stopListening()
-            : await liveEngine.stopLiveListening()
-
-        print("\n[Butterfly: \(mode.title) Transcription Completed]: \(fullRawTranscript)")
-
-        guard mode == .smartPolish else {
-            let finalAction = InputInjector.shared.prepareStreamingDelta(
-                newText: fullRawTranscript,
-                previousText: &streamingInjectedText
-            )
-            InputInjector.shared.enqueueSlidingDelta(finalAction)
-            await InputInjector.shared.waitForPendingInjections()
-            finishProcessing()
-            return
-        }
-
-        guard !fullRawTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            print("Butterfly: Smart Polish skipped because no speech was detected")
-            finishProcessing()
-            return
-        }
-
-        self.statusItem.button?.title = " ✨ Polishing..."
-        FloatingHUDWindow.shared.updateStatus(title: "✨ Smart Polish", detail: "Polishing with \(recordingPolishModel)...")
-        let style = smartPolishStyle
-        let result = await recordingPolishEngine.polish(fullRawTranscript, style: style)
-        if result.usedFallback {
-            print("Butterfly: Used rule-based Smart Polish fallback: \(result.fallbackReason ?? "unknown reason")")
-        }
-
-        guard !Task.isCancelled, !result.text.isEmpty else {
-            finishProcessing()
-            return
-        }
-
-        self.statusItem.button?.title = " 📋 Inserting..."
-        FloatingHUDWindow.shared.updateStatus(title: "📋 Smart Polish", detail: "Inserting polished text...")
-        let inserted = await InputInjector.shared.injectByPaste(text: result.text, restoreClipboard: true)
-        if !inserted {
-            print("Butterfly: Smart Polish output was not inserted because the clipboard changed")
-        }
-        print("\n[Butterfly: Smart Polish Output - \(style.title)]: \(result.text)")
-        finishProcessing()
-    }
-
-    private func finishProcessing() {
-        activity = .idle
-        streamingInjectedText = ""
-        latestTranscript = ""
-        recordingStartTime = nil
-        FloatingHUDWindow.shared.hide()
-        statusItem.button?.title = ""
         updateMenu()
     }
 
     private func handleTranscriptUpdate(_ formattedText: String) {
-        guard isRecording else { return }
-        latestTranscript = formattedText
-
-        if activeMode == .smartPolish {
-            return
-        }
-
+        guard isRecording, activeMode == .liveStreaming else { return }
         let elapsed = Int(Date().timeIntervalSince(recordingStartTime ?? Date()))
-        let timeStr = String(format: "[%02d:%02d]", elapsed / 60, elapsed % 60)
-
-        let injectionAction = InputInjector.shared.prepareStreamingDelta(
-            newText: formattedText,
-            previousText: &streamingInjectedText
-        )
-
-        let preview = formattedText.count > 10
-            ? "..." + String(formattedText.suffix(10))
-            : formattedText
-        statusItem.button?.title = " 🎙️ \(timeStr) \(preview)"
-        InputInjector.shared.enqueueSlidingDelta(injectionAction)
+        let time = String(format: "[%02d:%02d]", elapsed / 60, elapsed % 60)
+        let preview = formattedText.count > 10 ? "..." + String(formattedText.suffix(10)) : formattedText
+        statusItem.button?.title = " 🎙️ \(time) \(preview)"
     }
 
     private var eventTapPort: CFMachPort?
@@ -807,7 +673,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showRecordingError(_ message: String) {
         let alert = NSAlert()
-        alert.messageText = "Unable to Start Recording"
+        alert.messageText = "Dictation Error"
         alert.informativeText = message
         alert.alertStyle = .warning
         alert.addButton(withTitle: "OK")

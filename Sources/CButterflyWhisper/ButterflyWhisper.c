@@ -81,6 +81,10 @@ char *butterfly_whisper_transcribe(
     parameters.print_realtime = false;
     parameters.print_timestamps = false;
     parameters.suppress_blank = true;
+    parameters.suppress_nst = true;
+    // Dictation must not invent a continuation through higher-temperature retries.
+    parameters.temperature = 0.0f;
+    parameters.temperature_inc = 0.0f;
 
     int result = whisper_full(context->whisper, parameters, samples, sample_count);
     if (result != 0) {
@@ -93,6 +97,11 @@ char *butterfly_whisper_transcribe(
     int segment_count = whisper_full_n_segments(context->whisper);
     size_t total_length = 1;
     for (int index = 0; index < segment_count; index++) {
+        // The runtime can retain confident text even when no-speech probability is high.
+        // Dictation rejects those segments without blacklisting legitimate spoken phrases.
+        if (whisper_full_get_segment_no_speech_prob(context->whisper, index) > parameters.no_speech_thold) {
+            continue;
+        }
         const char *text = whisper_full_get_segment_text(context->whisper, index);
         if (text != NULL) {
             total_length += strlen(text);
@@ -106,6 +115,9 @@ char *butterfly_whisper_transcribe(
     }
 
     for (int index = 0; index < segment_count; index++) {
+        if (whisper_full_get_segment_no_speech_prob(context->whisper, index) > parameters.no_speech_thold) {
+            continue;
+        }
         const char *text = whisper_full_get_segment_text(context->whisper, index);
         if (text != NULL) {
             strcat(output, text);

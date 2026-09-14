@@ -161,9 +161,8 @@ case "test-polish":
 
 case "listen":
     print("\nStarting Butterfly Real-Time Voice Dictation...")
-    let liveEngine = LiveSpeechEngine.shared
-    
-    Task {
+    Task { @MainActor in
+        let liveEngine = LiveSpeechEngine.shared
         let granted = await liveEngine.requestPermissions()
         if !granted {
             print("Warning: Please ensure Microphone and Speech Recognition permissions are granted in macOS System Settings.")
@@ -184,7 +183,7 @@ case "listen":
             print("Microphone active! Speak into your computer (supports continuous multi-sentence speech)...")
             print("Press [Enter] to finish and inject into active cursor, or [Ctrl+C] to exit:\n")
             
-            _ = readLine()
+            _ = await Task.detached { readLine() }.value
             
             let fullTranscript = await liveEngine.stopLiveListening()
             

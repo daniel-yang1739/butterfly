@@ -1,5 +1,17 @@
 # Butterfly 系統架構設計文件 (System Architecture)
 
+## 目前錄音協調流程
+
+App 的 `AppDelegate` 負責選單、快捷鍵與 HUD；`ButterflyCore.ButterflyStateMachine` 負責實際錄音生命週期：`idle → starting → recording → processing → idle`。它透過 `DictationSpeechSource` 啟停 Apple Speech 或 Whisper，透過 `DictationTextOutput` 執行即時回寫或單次貼上。CLI 與 XCTest 使用同一份回歸測試驅動此協調器。
+
+Apple Speech 的引擎與 `SpeechRecognitionSession` 由 MainActor 隔離；音訊執行緒透過鎖保護的 request sink 傳入 buffer。停止時先結束音訊，再等待 final／錯誤訊號，最長等待 2 秒；逾時使用已有逐字稿。每次 request 都有識別碼，取消或循環辨識後的舊回呼不會修改新會話。
+
+Whisper 每 500 毫秒檢查工作，初次累積約 1 秒音訊，後續更新門檻為 2.5 秒；停頓 600 毫秒或片段達 20 秒時封存。音量分類使用 20 毫秒小片段，至少累積 120 毫秒有聲音訊才送推論。送入模型的尾端靜音最多保留 100 毫秒；只增加靜音、不增加語音時不重新推論。這是能量式篩選，不是語意級 VAD，仍需以真實環境驗證輕聲與背景噪音。
+
+Whisper 使用固定溫度解碼，停用升溫重試，並捨棄模型判定無語音機率超過門檻的片段。不以特定英文詞句黑名單刪除辨識結果。
+
+以下為產品功能概覽；精確的會話管理與音訊排程以本節及實作為準。
+
 ## 1. 專案概念與使命 (Concept & Mission)
 
 > **Butterfly（蝴蝶）**  

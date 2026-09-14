@@ -43,7 +43,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "ButterflyCLI",
-            dependencies: ["ButterflyCore"],
+            dependencies: ["ButterflyCore", "ButterflyTestSupport"],
             path: "Sources/ButterflyCLI"
         ),
         .executableTarget(
@@ -53,8 +53,13 @@ let package = Package(
         ),
         .testTarget(
             name: "ButterflyTests",
-            dependencies: ["ButterflyCore"],
+            dependencies: ["ButterflyCore", "ButterflyTestSupport"],
             path: "Tests/ButterflyTests"
+        ),
+        .target(
+            name: "ButterflyTestSupport",
+            dependencies: ["ButterflyCore"],
+            path: "Tests/Support"
         ),
         .binaryTarget(
             name: "WhisperFramework",

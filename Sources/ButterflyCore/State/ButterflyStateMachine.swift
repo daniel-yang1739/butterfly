@@ -1,140 +1,181 @@
 import Foundation
-import Combine
 
-/// Butterfly core state definitions
-public enum ButterflyState: Equatable {
+public enum ButterflyMode: String, CaseIterable, Sendable {
+    case liveStreaming = "live"
+    case smartPolish = "smart-polish"
+
+    public var title: String {
+        switch self {
+        case .liveStreaming: return "Live Voice Dictation"
+        case .smartPolish: return "Record & Smart Polish"
+        }
+    }
+}
+
+public enum ButterflyState: Equatable, Sendable {
     case idle
-    case listening(audioLevel: Float)
-    case processing
-    case injecting(text: String)
-    case completed(text: String)
-    case error(String)
+    case starting(ButterflyMode)
+    case recording(ButterflyMode)
+    case processing(ButterflyMode)
 }
 
-public protocol ButterflyStateMachineDelegate: AnyObject {
-    func stateMachine(_ stateMachine: ButterflyStateMachine, didTransitionTo state: ButterflyState)
-    func stateMachine(_ stateMachine: ButterflyStateMachine, didProduceTranscription text: String)
+public enum DictationProcessingStage: Sendable {
+    case finalizing, polishing, inserting
 }
 
-/// Butterfly main state machine coordinator
-public final class ButterflyStateMachine: AudioCaptureDelegate, VADDetectorDelegate {
-    public weak var delegate: ButterflyStateMachineDelegate?
-    
+@MainActor
+public protocol DictationSpeechSource: AnyObject {
+    func start(
+        onTranscript: @escaping @Sendable (String) -> Void,
+        onAudioLevel: @escaping @Sendable (Float) -> Void,
+        onError: @escaping @Sendable (Error) -> Void
+    ) async throws
+    func stop() async -> String
+}
+
+@MainActor
+public protocol DictationTextOutput: AnyObject {
+    func update(_ text: String, previousText: inout String)
+    func drain() async
+    func insert(_ text: String) async -> Bool
+}
+
+/// The production recording coordinator, shared by the App and hardware-free tests.
+@MainActor
+public final class ButterflyStateMachine {
     public private(set) var currentState: ButterflyState = .idle {
-        didSet {
-            delegate?.stateMachine(self, didTransitionTo: currentState)
+        didSet { onStateChange?(currentState) }
+    }
+    public private(set) var latestTranscript = ""
+    public var onStateChange: ((ButterflyState) -> Void)?
+    public var onTranscript: ((String) -> Void)?
+    public var onAudioLevel: ((Float) -> Void)?
+    public var onProcessingStage: ((DictationProcessingStage) -> Void)?
+    public var onError: ((Error) -> Void)?
+    public var onPolishResult: ((SmartPolishResult) -> Void)?
+
+    private let output: any DictationTextOutput
+    private var source: (any DictationSpeechSource)?
+    private var generation: UUID?
+    private var injectedText = ""
+    private var sessionError: Error?
+    private var polish: (@MainActor (String) async -> SmartPolishResult)?
+
+    public init(output: any DictationTextOutput) { self.output = output }
+
+    public func start(
+        mode: ButterflyMode,
+        source: any DictationSpeechSource,
+        polish: @escaping @MainActor (String) async -> SmartPolishResult = {
+            SmartPolishResult(text: $0, usedFallback: false)
         }
-    }
-    
-    public let backend: SpeechInferenceBackend
-    public let translator: OpenCCTranslator
-    public let formatter: TextFormatter
-    public let audioCapture: AudioCaptureManager
-    public let vad: VADDetector
-    public let injector: InputInjector
-    
-    public init(
-        backend: SpeechInferenceBackend = AppleSiliconInferenceBackend(),
-        translator: OpenCCTranslator = .shared,
-        formatter: TextFormatter = .shared,
-        audioCapture: AudioCaptureManager = AudioCaptureManager(),
-        vad: VADDetector = VADDetector(),
-        injector: InputInjector = .shared
-    ) {
-        self.backend = backend
-        self.translator = translator
-        self.formatter = formatter
-        self.audioCapture = audioCapture
-        self.vad = vad
-        self.injector = injector
-        
-        self.audioCapture.delegate = self
-        self.vad.delegate = self
-    }
-    
-    /// Toggle listening state
-    public func toggleListening() async {
-        switch currentState {
-        case .idle, .completed, .error:
-            await startListening()
-        case .listening:
-            await stopAndProcess()
-        case .processing, .injecting:
-            break
-        }
-    }
-    
-    /// Start microphone audio capture
-    public func startListening() async {
+    ) async {
+        guard currentState == .idle else { return }
+        let id = UUID()
+        generation = id
+        self.source = source
+        self.polish = polish
+        latestTranscript = ""
+        injectedText = ""
+        sessionError = nil
+        currentState = .starting(mode)
         do {
-            vad.reset()
-            try audioCapture.startRecording()
-            currentState = .listening(audioLevel: 0.0)
-        } catch {
-            currentState = .error(error.localizedDescription)
-        }
-    }
-    
-    /// Stop listening and execute inference, translation, and injection pipeline
-    public func stopAndProcess() async {
-        guard case .listening = currentState else { return }
-        
-        let samples = audioCapture.stopRecording()
-        currentState = .processing
-        
-        do {
-            // 1. Local AI inference (Apple Silicon / NPU)
-            let result = try await backend.transcribe(audioSamples: samples)
-            
-            // 2. OpenCC Traditional Chinese conversion (s2twp standard)
-            let traditionalText = translator.convert(result.rawText)
-            
-            // 3. Spacing and text formatting
-            let finalText = formatter.format(traditionalText)
-            
-            guard !finalText.isEmpty else {
-                currentState = .idle
+            try await source.start(
+                onTranscript: { [weak self] text in
+                    Task { @MainActor in self?.receive(text, generation: id) }
+                },
+                onAudioLevel: { [weak self] level in
+                    Task { @MainActor in
+                        guard let self, self.generation == id,
+                              case .recording = self.currentState else { return }
+                        self.onAudioLevel?(level)
+                    }
+                },
+                onError: { [weak self] error in
+                    Task { @MainActor in
+                        guard let self, self.generation == id else { return }
+                        self.sessionError = self.sessionError ?? error
+                        await self.stop()
+                    }
+                }
+            )
+            if let sessionError { throw sessionError }
+            guard !Task.isCancelled else {
+                _ = await source.stop()
+                finish()
                 return
             }
-            
-            // 4. Inject into active focused input
-            currentState = .injecting(text: finalText)
-            delegate?.stateMachine(self, didProduceTranscription: finalText)
-            await injector.inject(text: finalText)
-            
-            currentState = .completed(text: finalText)
-            
-            // Return to idle after short delay
-            try? await Task.sleep(nanoseconds: 300_000_000)
-            currentState = .idle
+            currentState = .recording(mode)
+            // A source can publish while its asynchronous startup is still completing.
+            receive(latestTranscript, generation: id)
         } catch {
-            currentState = .error(error.localizedDescription)
+            _ = await source.stop()
+            sessionError = error
+            finish()
         }
     }
-    
-    // MARK: - AudioCaptureDelegate
-    public func audioCaptureManager(_ manager: AudioCaptureManager, didCaptureSamples samples: [Float]) {}
-    
-    public func audioCaptureManager(_ manager: AudioCaptureManager, didUpdateAudioLevel level: Float) {
-        if case .listening = currentState {
-            currentState = .listening(audioLevel: level)
-            vad.processAudioLevel(level)
-        }
-    }
-    
-    public func audioCaptureManager(_ manager: AudioCaptureManager, didFailWithError error: Error) {
-        currentState = .error(error.localizedDescription)
-    }
-    
-    // MARK: - VADDetectorDelegate
-    public func vadDetector(_ detector: VADDetector, didEmitEvent event: VADEvent) {
-        switch event {
-        case .speechEnded, .silenceTimeout:
-            Task {
-                await stopAndProcess()
+
+    public func stop() async {
+        guard case .recording(let mode) = currentState, let source else { return }
+        currentState = .processing(mode)
+        onProcessingStage?(.finalizing)
+        let finalTranscript = await source.stop()
+        latestTranscript = finalTranscript
+        if mode == .liveStreaming {
+            // Final callbacks can arrive during processing; reconcile the returned result once.
+            output.update(finalTranscript, previousText: &injectedText)
+            await output.drain()
+        } else if !Task.isCancelled, !finalTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  let polish {
+            onProcessingStage?(.polishing)
+            let result = await polish(finalTranscript)
+            onPolishResult?(result)
+            if !Task.isCancelled, !result.text.isEmpty {
+                onProcessingStage?(.inserting)
+                if !(await output.insert(result.text)) { sessionError = ButterflyError.injectionFailed }
             }
-        default:
+        }
+        finish()
+    }
+
+    private func receive(_ text: String, generation id: UUID) {
+        guard generation == id else { return }
+        switch currentState {
+        case .starting:
+            latestTranscript = text
+        case .recording(let mode):
+            latestTranscript = text
+            onTranscript?(text)
+            if mode == .liveStreaming { output.update(text, previousText: &injectedText) }
+        case .idle, .processing:
             break
         }
+    }
+
+    private func finish() {
+        let error = sessionError
+        sessionError = nil
+        generation = nil
+        source = nil
+        polish = nil
+        injectedText = ""
+        currentState = .idle
+        // Report only after capture stops and output drains. A UI alert can change focus.
+        if let error { onError?(error) }
+    }
+}
+
+/// Only this production adapter posts keyboard events; tests inject a recording sink.
+@MainActor
+public final class CursorDictationOutput: DictationTextOutput {
+    private let injector: InputInjector
+    public init(injector: InputInjector = .shared) { self.injector = injector }
+    public func update(_ text: String, previousText: inout String) {
+        let action = injector.prepareStreamingDelta(newText: text, previousText: &previousText)
+        injector.enqueueSlidingDelta(action)
+    }
+    public func drain() async { await injector.waitForPendingInjections() }
+    public func insert(_ text: String) async -> Bool {
+        await injector.injectByPaste(text: text, restoreClipboard: true)
     }
 }

@@ -3,7 +3,8 @@ import os
 @preconcurrency import AVFoundation
 
 /// Local microphone transcription using app-owned audio capture and whisper.cpp inference.
-public final class LocalWhisperStreamEngine: @unchecked Sendable {
+@MainActor
+public final class LocalWhisperStreamEngine {
     public static let shared = LocalWhisperStreamEngine()
 
     private struct StreamState: Sendable {
@@ -28,7 +29,7 @@ public final class LocalWhisperStreamEngine: @unchecked Sendable {
     private var audioEngine: AVAudioEngine?
     private var pollingTask: Task<Void, Never>?
 
-    private static let minimumVoiceRMS: Float = 0.004
+    nonisolated private static let minimumVoiceRMS: Float = 0.004
 
     public init(backend: AppleSiliconInferenceBackend = AppleSiliconInferenceBackend()) {
         self.backend = backend
@@ -64,8 +65,10 @@ public final class LocalWhisperStreamEngine: @unchecked Sendable {
         }
         accumulator.reset()
 
-        inputNode.installTap(onBus: 0, bufferSize: 4096, format: recordingFormat) { [weak self] buffer, _ in
-            guard let self, let channelData = buffer.floatChannelData?[0] else { return }
+        let stateLock = self.stateLock
+        let levelCallback = onAudioLevelUpdate
+        inputNode.installTap(onBus: 0, bufferSize: 4096, format: recordingFormat) { buffer, _ in
+            guard let channelData = buffer.floatChannelData?[0] else { return }
             let frameLength = Int(buffer.frameLength)
             guard frameLength > 0 else { return }
 
@@ -76,15 +79,20 @@ public final class LocalWhisperStreamEngine: @unchecked Sendable {
                 toSampleRate: AudioCaptureManager.targetSampleRate
             )
             let rms = Self.calculateRMS(samples16k)
-            self.onAudioLevelUpdate?(min(max(rms * 5, 0), 1))
-            self.stateLock.withLock { state in
+            levelCallback?(min(max(rms * 5, 0), 1))
+            stateLock.withLock { state in
                 guard state.isListening else { return }
-                let voiceThreshold = max(Self.minimumVoiceRMS, state.noiseFloor * 3)
-                let isVoiced = rms >= voiceThreshold
-                if !isVoiced {
-                    state.noiseFloor = (state.noiseFloor * 0.95) + (rms * 0.05)
+                // Classify 20ms frames, so a short click cannot mark an entire tap as speech.
+                for offset in stride(from: 0, to: samples16k.count, by: 320) {
+                    let frame = Array(samples16k[offset..<min(offset + 320, samples16k.count)])
+                    let frameRMS = Self.calculateRMS(frame)
+                    let voiceThreshold = max(Self.minimumVoiceRMS, state.noiseFloor * 3)
+                    let isVoiced = frameRMS >= voiceThreshold
+                    if !isVoiced {
+                        state.noiseFloor = (state.noiseFloor * 0.95) + (frameRMS * 0.05)
+                    }
+                    state.audio.append(frame, isVoiced: isVoiced)
                 }
-                state.audio.append(samples16k, isVoiced: isVoiced)
             }
         }
 
@@ -99,7 +107,7 @@ public final class LocalWhisperStreamEngine: @unchecked Sendable {
             throw ButterflyError.audioCaptureFailed(error.localizedDescription)
         }
 
-        pollingTask = Task.detached(priority: .userInitiated) { [weak self] in
+        pollingTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 500_000_000)
                 guard !Task.isCancelled, let self, self.isListening else { break }
@@ -172,7 +180,7 @@ public final class LocalWhisperStreamEngine: @unchecked Sendable {
         }
     }
 
-    private static func calculateRMS(_ samples: [Float]) -> Float {
+    nonisolated private static func calculateRMS(_ samples: [Float]) -> Float {
         guard !samples.isEmpty else { return 0 }
         let sum = samples.reduce(Float.zero) { $0 + ($1 * $1) }
         return sqrt(sum / Float(samples.count))

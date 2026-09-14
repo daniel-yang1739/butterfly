@@ -169,7 +169,7 @@ swift run butterfly-cli test-polish --smart --style structured
 swift run butterfly-cli test-convert "服务器内存不足"
 ```
 
-The CLI uses the same model cache and Smart Polish configuration as the app. `butterfly-cli test` runs the zero-dependency core regression suite; `swift test` runs XCTest targets.
+The CLI uses the same model cache and Smart Polish configuration as the app. `butterfly-cli test` runs core regressions, including the same recording lifecycle checks used by XCTest, without requiring XCTest. `swift test` runs the XCTest targets with a compatible Xcode toolchain. Recording tests use fake audio and text outputs and do not type into the focused app.
 
 </details>
 
