@@ -4,6 +4,7 @@ set -euo pipefail
 
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly MINIMUM_MACOS_MAJOR=13
+readonly MINIMUM_MACOS_MINOR=3
 
 configuration="release"
 open_app=true
@@ -106,7 +107,11 @@ done
 
 macos_version="$(sw_vers -productVersion)"
 macos_major="${macos_version%%.*}"
-(( macos_major >= MINIMUM_MACOS_MAJOR )) || fail "macOS ${MINIMUM_MACOS_MAJOR} or later is required; found ${macos_version}."
+macos_minor="$(cut -d. -f2 <<< "$macos_version")"
+if (( macos_major < MINIMUM_MACOS_MAJOR )) || \
+    (( macos_major == MINIMUM_MACOS_MAJOR && macos_minor < MINIMUM_MACOS_MINOR )); then
+    fail "macOS ${MINIMUM_MACOS_MAJOR}.${MINIMUM_MACOS_MINOR} or later is required; found ${macos_version}."
+fi
 
 if [[ "$skip_build" == true && "$build_requested" == true ]]; then
     fail "--no-build cannot be combined with build options."
@@ -131,32 +136,6 @@ if ! xcode-select -p >/dev/null 2>&1; then
 fi
 
 command -v swift >/dev/null 2>&1 || fail "Swift is unavailable after installing Xcode Command Line Tools."
-
-if ! command -v brew >/dev/null 2>&1; then
-    if [[ -x /opt/homebrew/bin/brew ]]; then
-        export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:${PATH}"
-    else
-        printf 'Homebrew is required to install whisper.cpp.\n'
-        printf 'Install Homebrew now using its official installer? [y/N] '
-        read -r install_homebrew
-        case "$install_homebrew" in
-            y|Y|yes|YES)
-                command -v curl >/dev/null 2>&1 || fail "curl is required to download the Homebrew installer."
-                /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-                [[ -x /opt/homebrew/bin/brew ]] || fail "Homebrew installation did not create /opt/homebrew/bin/brew."
-                export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:${PATH}"
-                ;;
-            *)
-                fail "Homebrew installation was declined. Install it from https://brew.sh and run ./run.sh again."
-                ;;
-        esac
-    fi
-fi
-
-if ! brew list --versions whisper-cpp >/dev/null 2>&1; then
-    printf 'Installing the whisper.cpp native runtime with Homebrew...\n'
-    brew install whisper-cpp
-fi
 
 build_arguments=("--${configuration}")
 if [[ "$clean_build" == true ]]; then

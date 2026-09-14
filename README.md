@@ -10,7 +10,8 @@ Speech recognition can run locally with Whisper. Smart Polish can use Apple Foun
 
 ## Quick start
 
-Butterfly requires an Apple Silicon Mac running macOS 13 or later. Internet access and administrator approval may be needed during the first setup.
+Butterfly requires an Apple Silicon Mac running macOS 13.3 or later. The first build needs internet access to download Swift packages and the bundled Whisper runtime.
+Homebrew is not required.
 
 From the repository root, run:
 
@@ -21,8 +22,8 @@ From the repository root, run:
 On the first run, the script:
 
 1. Checks your Mac and developer tools.
-2. Helps install Xcode Command Line Tools and Homebrew when missing.
-3. Installs the `whisper-cpp` runtime with Homebrew.
+2. Opens Apple's Xcode Command Line Tools installer when needed.
+3. Downloads the pinned official `whisper.cpp` XCFramework through Swift Package Manager.
 4. Builds and signs `.build/app/Butterfly.app`.
 5. Opens Butterfly.
 
@@ -96,7 +97,7 @@ Choose and download models from **Speech Model** in the Butterfly menu.
 - **Whisper Small**, **Base**, and **Tiny** trade accuracy for smaller downloads and faster startup.
 - **Apple Speech Native** is built into macOS and requires Speech Recognition permission.
 
-Downloaded models are stored in `~/.cache/butterfly/models`. Butterfly chooses the highest-ranked downloaded model unless you select another one. SenseVoice Small appears in the catalog but remains disabled because the bundled runtime does not support it.
+Downloaded models are stored in `~/.cache/butterfly/models`. Rebuilding Butterfly or cleaning SwiftPM artifacts does not remove them. Butterfly chooses the highest-ranked downloaded model unless you select another one. SenseVoice Small appears in the catalog but remains disabled because the bundled runtime does not support it.
 
 ## Smart Polish
 
@@ -208,3 +209,4 @@ Grant Microphone permission. Also grant Speech Recognition when Apple Speech Nat
 - [Smart Polish endpoints](docs/POLISH_ENDPOINTS.md)
 - [Test plan](docs/TEST_PLAN.md)
 - [macOS signing and Accessibility](docs/MACOS_SIGNING_AND_ACCESSIBILITY.md)
+- [Third-party notices](THIRD_PARTY_NOTICES.md)

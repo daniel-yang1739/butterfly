@@ -1,7 +1,7 @@
 #include "ButterflyWhisper.h"
 
-#include <ggml-backend.h>
-#include <whisper.h>
+#include <whisper/ggml-backend.h>
+#include <whisper/whisper.h>
 
 #include <stdio.h>
 #include <stdlib.h>

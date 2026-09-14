@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
     name: "Butterfly",
     platforms: [
-        .macOS(.v13)
+        .macOS("13.3")
     ],
     products: [
         .library(
@@ -21,28 +21,14 @@ let package = Package(
         )
     ],
     dependencies: [
-        .package(url: "https://github.com/ddddxxx/SwiftyOpenCC.git", from: "1.0.0")
+        .package(url: "https://github.com/ddddxxx/SwiftyOpenCC.git", exact: "1.0.1")
     ],
     targets: [
         .target(
             name: "CButterflyWhisper",
+            dependencies: ["WhisperFramework"],
             path: "Sources/CButterflyWhisper",
-            publicHeadersPath: "include",
-            cSettings: [
-                .unsafeFlags([
-                    "-I/opt/homebrew/include",
-                    "-I/usr/local/include"
-                ])
-            ],
-            linkerSettings: [
-                .unsafeFlags([
-                    "-L/opt/homebrew/lib",
-                    "-L/usr/local/lib"
-                ]),
-                .linkedLibrary("whisper"),
-                .linkedLibrary("ggml"),
-                .linkedLibrary("ggml-base")
-            ]
+            publicHeadersPath: "include"
         ),
         .target(
             name: "ButterflyCore",
@@ -69,6 +55,11 @@ let package = Package(
             name: "ButterflyTests",
             dependencies: ["ButterflyCore"],
             path: "Tests/ButterflyTests"
+        ),
+        .binaryTarget(
+            name: "WhisperFramework",
+            url: "https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.2/whisper-v1.9.2-xcframework.zip",
+            checksum: "af74fed13ea7f2d5ca2a39d9f58ec177713fafd7cab63aef4e27b79f3ceca80b"
         )
     ]
 )

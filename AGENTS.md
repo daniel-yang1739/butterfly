@@ -20,7 +20,7 @@ Butterfly is structured as a modular Swift Package consisting of three main targ
 
 ```text
 butterfly/
-├── Package.swift                # Swift Package Manager manifest (macOS 13+)
+├── Package.swift                # Swift Package Manager manifest (macOS 13.3+)
 ├── AGENTS.md                    # Agent developer guidelines (this file)
 ├── README.md                    # Public repository documentation
 ├── docs/                        # System documentation and architecture guides
